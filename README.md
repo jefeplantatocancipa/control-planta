@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Control de Planta — Lácteos
 
-## Getting Started
+App de control de procesos para planta de lácteos: captura de datos desde el celular (preparación de baches, envasado, vasos enmangados), programa de producción semanal, cumplimiento y estadísticas.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js 16 (App Router) + TypeScript + Tailwind CSS + shadcn/ui
+- Supabase (Postgres + Auth + RLS)
+- Recharts para los dashboards
+
+## Puesta en marcha
+
+### 1. Crear el proyecto en Supabase
+
+1. Crea una cuenta y un proyecto en [supabase.com](https://supabase.com).
+2. En **Project Settings → API**, copia la `Project URL` y la `anon public key`.
+3. Copia `.env.local.example` a `.env.local` y pega esos valores:
+
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+### 2. Aplicar las migraciones
+
+En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `supabase/migrations/`:
+
+1. `0001_init.sql` — esquema, catálogos y seed de las 8 etapas de bache.
+2. `0002_rls.sql` — políticas de seguridad por rol.
+3. `0003_views.sql` — vistas para los dashboards.
+
+(Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
+
+### 3. Crear el primer usuario (jefe de planta)
+
+En **Authentication → Users → Add user**, crea tu usuario. Luego en el SQL Editor, actualiza su rol:
+
+```sql
+update profiles set role = 'jefe_planta', full_name = 'Tu Nombre'
+where id = '<uuid del usuario creado>';
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Los siguientes usuarios (supervisores, operarios) se pueden invitar igual y luego administrar sus roles desde el módulo de Administración (una vez construido en la Fase 2) o por SQL mientras tanto.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. Correr localmente
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+npm install
+npm run dev
+```
 
-## Learn More
+Abre `http://localhost:3000` — te pedirá iniciar sesión con el usuario creado en el paso 3.
 
-To learn more about Next.js, take a look at the following resources:
+## Estado actual
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Fase 1 (Fundación) completada: scaffold, esquema de base de datos, autenticación con roles (`jefe_planta`, `supervisor`, `operario`) y navegación mobile-first. Los módulos de captura y dashboards están planteados como pantallas placeholder, a construir en las siguientes fases.

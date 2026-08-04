@@ -1,0 +1,12 @@
+{
+  "name": "Control de Planta",
+  "short_name": "Ctrl Planta",
+  "description": "Control de procesos de planta de lácteos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
+  ]
+}
