@@ -42,14 +42,20 @@ export async function proxy(request: NextRequest) {
   if (!user && !isPublicPath) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
+    loginUrl.search = "";
     loginUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
   }
 
   if (user && request.nextUrl.pathname === "/login") {
     const homeUrl = request.nextUrl.clone();
     homeUrl.pathname = "/";
-    return NextResponse.redirect(homeUrl);
+    homeUrl.search = "";
+    const redirectResponse = NextResponse.redirect(homeUrl);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
   }
 
   return response;

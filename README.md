@@ -28,6 +28,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 1. `0001_init.sql` — esquema, catálogos y seed de las 8 etapas de bache.
 2. `0002_rls.sql` — políticas de seguridad por rol.
 3. `0003_views.sql` — vistas para los dashboards.
+4. `0004_grants.sql` — permisos de tabla para el rol `authenticated` (Supabase ya no auto-expone tablas nuevas a la API; sin este paso, cualquier consulta falla con "permission denied" aunque las políticas de RLS sean correctas).
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 
