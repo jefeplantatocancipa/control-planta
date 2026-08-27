@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import type { UserRole } from "@/lib/supabase/types";
+import type { StageCaptureMode, UserRole } from "@/lib/supabase/types";
 import { ALL_PRODUCTS_VALUE } from "./constants";
 
 export interface ActionState {
@@ -68,7 +68,7 @@ export async function upsertProduct(
 const StageParameterSchema = z.object({
   key: z.string().trim().min(1),
   label: z.string().trim().min(1),
-  type: z.enum(["number", "text"]),
+  type: z.enum(["number", "text", "time"]),
 });
 
 const StageTemplateSchema = z.object({
@@ -79,6 +79,7 @@ const StageTemplateSchema = z.object({
     .number()
     .int()
     .positive("El orden debe ser mayor a 0."),
+  capture_mode: z.enum(["parametros", "insumos"] satisfies StageCaptureMode[]),
   parameter_schema: z
     .string()
     .transform((raw, ctx) => {
@@ -103,6 +104,7 @@ export async function upsertStageTemplate(
     product_id: productId && productId !== ALL_PRODUCTS_VALUE ? productId : null,
     name: formData.get("name"),
     sequence_order: formData.get("sequence_order"),
+    capture_mode: formData.get("capture_mode") || "parametros",
     parameter_schema: formData.get("parameter_schema") || "[]",
   });
   if (!parsed.success) {
@@ -175,6 +177,89 @@ export async function updateProfile(
 
   if (error) {
     return { error: "No se pudo actualizar el usuario." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Insumos y receta por producto
+// ---------------------------------------------------------------------------
+const InsumoSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "El nombre es obligatorio."),
+});
+
+export async function upsertInsumo(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = InsumoSchema.safeParse({
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const active = formData.get("active") === "on";
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("insumos").update({ ...values, active }).eq("id", id)
+    : await supabase.from("insumos").insert({ ...values, active });
+
+  if (error) {
+    return { error: "No se pudo guardar el insumo." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+const RecipeSchema = z.object({
+  product_id: z.string().uuid({ message: "Elegí un producto." }),
+  insumo_ids: z.array(z.string().uuid()),
+});
+
+export async function saveProductRecipe(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = RecipeSchema.safeParse({
+    product_id: formData.get("product_id"),
+    insumo_ids: formData.getAll("insumo_ids"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { error: deleteError } = await supabase
+    .from("product_insumos")
+    .delete()
+    .eq("product_id", parsed.data.product_id);
+  if (deleteError) {
+    return { error: "No se pudo guardar la receta." };
+  }
+
+  if (parsed.data.insumo_ids.length > 0) {
+    const { error: insertError } = await supabase.from("product_insumos").insert(
+      parsed.data.insumo_ids.map((insumo_id) => ({
+        product_id: parsed.data.product_id,
+        insumo_id,
+      })),
+    );
+    if (insertError) {
+      return { error: "No se pudo guardar la receta." };
+    }
   }
 
   revalidatePath("/admin");

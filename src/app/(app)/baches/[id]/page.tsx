@@ -29,18 +29,34 @@ export default async function BacheDetailPage({
 
   if (!bache) notFound();
 
-  const [{ data: product }, ownTemplates, { data: records }, { data: operarios }] =
-    await Promise.all([
-      supabase.from("products").select("*").eq("id", bache.product_id).single(),
-      supabase
-        .from("process_stage_templates")
-        .select("*")
-        .eq("product_id", bache.product_id)
-        .eq("active", true)
-        .order("sequence_order"),
-      supabase.from("bache_stage_records").select("*").eq("bache_id", bache.id),
-      supabase.from("profiles").select("*").eq("active", true).order("full_name"),
-    ]);
+  const [
+    { data: product },
+    ownTemplates,
+    { data: records },
+    { data: operarios },
+    { data: productInsumos },
+    { data: insumos },
+  ] = await Promise.all([
+    supabase.from("products").select("*").eq("id", bache.product_id).single(),
+    supabase
+      .from("process_stage_templates")
+      .select("*")
+      .eq("product_id", bache.product_id)
+      .eq("active", true)
+      .order("sequence_order"),
+    supabase.from("bache_stage_records").select("*").eq("bache_id", bache.id),
+    supabase.from("profiles").select("*").eq("active", true).order("full_name"),
+    supabase
+      .from("product_insumos")
+      .select("*")
+      .eq("product_id", bache.product_id),
+    supabase.from("insumos").select("*").eq("active", true),
+  ]);
+
+  const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
+  const recipeInsumos = (productInsumos ?? [])
+    .map((row) => ({ id: row.insumo_id, name: insumoNames.get(row.insumo_id) }))
+    .filter((insumo): insumo is { id: string; name: string } => Boolean(insumo.name));
 
   let stages = ownTemplates.data ?? [];
   if (stages.length === 0) {
@@ -106,6 +122,7 @@ export default async function BacheDetailPage({
               stage={stage}
               record={record}
               operarios={operarios ?? []}
+              recipeInsumos={recipeInsumos}
               canAct={canAct}
               unlocked={unlocked}
             />

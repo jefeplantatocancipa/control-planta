@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
+import type { StageRecordParameters } from "@/lib/supabase/types";
 
 export interface ActionState {
   error?: string;
@@ -150,6 +151,18 @@ const FinishStageSchema = z.object({
   notes: z.string().trim().optional(),
 });
 
+const InsumosSchema = z
+  .array(
+    z.object({
+      insumo_id: z.string().uuid(),
+      nombre: z.string().trim().min(1),
+      lote: z.string().trim().min(1, "El lote es obligatorio."),
+      peso: z.coerce.number().positive("El peso debe ser mayor a 0."),
+      marca: z.string().trim().min(1, "La marca es obligatoria."),
+    }),
+  )
+  .min(1, "Marcá al menos un insumo.");
+
 export async function finishStage(
   _prevState: ActionState,
   formData: FormData,
@@ -168,19 +181,34 @@ export async function finishStage(
 
   const supabase = await createClient();
 
-  // El esquema de parámetros es la fuente de verdad server-side: evita
-  // confiar en claves arbitrarias enviadas desde el cliente.
+  // El esquema de parámetros (o el modo de captura) es la fuente de verdad
+  // server-side: evita confiar en datos arbitrarios enviados desde el cliente.
   const { data: template } = await supabase
     .from("process_stage_templates")
-    .select("parameter_schema")
+    .select("parameter_schema, capture_mode")
     .eq("id", parsed.data.stage_template_id)
     .single();
 
-  const parameters: Record<string, string | number> = {};
-  for (const param of template?.parameter_schema ?? []) {
-    const raw = formData.get(`param__${param.key}`);
-    if (raw === null || raw === "") continue;
-    parameters[param.key] = param.type === "number" ? Number(raw) : String(raw);
+  let parameters: StageRecordParameters;
+
+  if (template?.capture_mode === "insumos") {
+    const insumosParsed = InsumosSchema.safeParse(
+      JSON.parse(String(formData.get("insumos") || "[]")),
+    );
+    if (!insumosParsed.success) {
+      return {
+        error: insumosParsed.error.issues[0]?.message ?? "Insumos inválidos.",
+      };
+    }
+    parameters = { insumos: insumosParsed.data };
+  } else {
+    const values: Record<string, string | number> = {};
+    for (const param of template?.parameter_schema ?? []) {
+      const raw = formData.get(`param__${param.key}`);
+      if (raw === null || raw === "") continue;
+      values[param.key] = param.type === "number" ? Number(raw) : String(raw);
+    }
+    parameters = values;
   }
 
   const { error } = await supabase

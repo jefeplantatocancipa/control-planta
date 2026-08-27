@@ -31,7 +31,16 @@ import {
 } from "@/components/ui/select";
 import { upsertStageTemplate, type ActionState } from "./actions";
 import { ALL_PRODUCTS_VALUE } from "./constants";
-import type { Database, StageParameterDef } from "@/lib/supabase/types";
+import type {
+  Database,
+  StageCaptureMode,
+  StageParameterDef,
+} from "@/lib/supabase/types";
+
+const CAPTURE_MODE_LABELS: Record<StageCaptureMode, string> = {
+  parametros: "Parámetros",
+  insumos: "Insumos (lote, peso, marca)",
+};
 
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
@@ -70,12 +79,15 @@ function ParameterEditor({
           <select
             value={param.type}
             onChange={(e) =>
-              updateAt(index, { type: e.target.value as "number" | "text" })
+              updateAt(index, {
+                type: e.target.value as "number" | "text" | "time",
+              })
             }
             className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
           >
             <option value="number">Número</option>
             <option value="text">Texto</option>
+            <option value="time">Hora</option>
           </select>
           <Button
             type="button"
@@ -116,6 +128,9 @@ function StageForm({
   );
   const [parameters, setParameters] = useState<StageParameterDef[]>(
     stage?.parameter_schema ?? [],
+  );
+  const [captureMode, setCaptureMode] = useState<StageCaptureMode>(
+    stage?.capture_mode ?? "parametros",
   );
 
   useEffect(() => {
@@ -166,7 +181,31 @@ function StageForm({
         </Select>
       </div>
 
-      <ParameterEditor parameters={parameters} onChange={setParameters} />
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="capture_mode">Modo de captura</Label>
+        <select
+          id="capture_mode"
+          name="capture_mode"
+          value={captureMode}
+          onChange={(e) => setCaptureMode(e.target.value as StageCaptureMode)}
+          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+        >
+          {Object.entries(CAPTURE_MODE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {captureMode === "insumos" ? (
+        <p className="text-sm text-muted-foreground">
+          Esta etapa captura una lista de insumos (lote, peso y marca); no usa
+          parámetros personalizados.
+        </p>
+      ) : (
+        <ParameterEditor parameters={parameters} onChange={setParameters} />
+      )}
 
       <Label className="flex items-center gap-2">
         <input
@@ -223,6 +262,7 @@ export function StagesPanel({
             <TableHead>Orden</TableHead>
             <TableHead>Nombre</TableHead>
             <TableHead>Producto</TableHead>
+            <TableHead>Modo</TableHead>
             <TableHead>Parámetros</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
@@ -241,7 +281,10 @@ export function StagesPanel({
                     ? productNames.get(stage.product_id) ?? "—"
                     : "Todos"}
                 </TableCell>
-                <TableCell>{stage.parameter_schema.length}</TableCell>
+                <TableCell>{CAPTURE_MODE_LABELS[stage.capture_mode]}</TableCell>
+                <TableCell>
+                  {stage.capture_mode === "insumos" ? "—" : stage.parameter_schema.length}
+                </TableCell>
                 <TableCell>
                   <Badge variant={stage.active ? "default" : "outline"}>
                     {stage.active ? "Activa" : "Inactiva"}
@@ -263,7 +306,7 @@ export function StagesPanel({
             ))}
           {stages.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 Sin etapas todavía.
               </TableCell>
             </TableRow>
