@@ -8,11 +8,25 @@ export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
 export type BacheStatus = "en_proceso" | "completado" | "cancelado";
 
+export type StageCaptureMode = "parametros" | "insumos";
+
 export interface StageParameterDef {
   key: string;
   label: string;
-  type: "number" | "text";
+  type: "number" | "text" | "time";
 }
+
+export interface InsumoEntry {
+  insumo_id: string;
+  nombre: string;
+  lote: string;
+  peso: number;
+  marca: string;
+}
+
+export type StageRecordParameters =
+  | Record<string, string | number>
+  | { insumos: InsumoEntry[] };
 
 export interface Database {
   public: {
@@ -56,6 +70,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["products"]["Insert"]>;
         Relationships: [];
       };
+      insumos: {
+        Row: {
+          id: string;
+          name: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          active?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["insumos"]["Insert"]>;
+        Relationships: [];
+      };
+      product_insumos: {
+        Row: {
+          product_id: string;
+          insumo_id: string;
+        };
+        Insert: {
+          product_id: string;
+          insumo_id: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["product_insumos"]["Insert"]
+        >;
+        Relationships: [];
+      };
       process_stage_templates: {
         Row: {
           id: string;
@@ -64,6 +106,7 @@ export interface Database {
           name: string;
           sequence_order: number;
           parameter_schema: StageParameterDef[];
+          capture_mode: StageCaptureMode;
           active: boolean;
           created_at: string;
         };
@@ -73,6 +116,7 @@ export interface Database {
           name: string;
           sequence_order: number;
           parameter_schema?: StageParameterDef[];
+          capture_mode?: StageCaptureMode;
           active?: boolean;
         };
         Update: Partial<
@@ -124,6 +168,106 @@ export interface Database {
         >;
         Relationships: [];
       };
+      enmangado_programs: {
+        Row: {
+          id: string;
+          week_start_date: string;
+          status: ProgramStatus;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          week_start_date: string;
+          status?: ProgramStatus;
+          notes?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["enmangado_programs"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      enmangado_orders: {
+        Row: {
+          id: string;
+          program_id: string;
+          referencia_id: string;
+          scheduled_date: string;
+          planned_quantity: number;
+          unit: string;
+          status: OrderStatus;
+          created_at: string;
+        };
+        Insert: {
+          program_id: string;
+          referencia_id: string;
+          scheduled_date: string;
+          planned_quantity: number;
+          unit?: string;
+          status?: OrderStatus;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["enmangado_orders"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      vasos_blancos: {
+        Row: {
+          id: string;
+          name: string;
+          unit: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          unit?: string;
+          active?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["vasos_blancos"]["Insert"]>;
+        Relationships: [];
+      };
+      vasos_blancos_entradas: {
+        Row: {
+          id: string;
+          vaso_blanco_id: string;
+          cantidad: number;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          vaso_blanco_id: string;
+          cantidad: number;
+          notes?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["vasos_blancos_entradas"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      enmangado_referencias: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          vaso_blanco_id: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          code: string;
+          name: string;
+          vaso_blanco_id: string;
+          active?: boolean;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["enmangado_referencias"]["Insert"]
+        >;
+        Relationships: [];
+      };
       baches: {
         Row: {
           id: string;
@@ -158,7 +302,7 @@ export interface Database {
           operario_id: string;
           started_at: string;
           ended_at: string | null;
-          parameters: Record<string, string | number>;
+          parameters: StageRecordParameters;
           notes: string | null;
           created_by: string;
           created_at: string;
@@ -169,7 +313,7 @@ export interface Database {
           operario_id: string;
           started_at?: string;
           ended_at?: string | null;
-          parameters?: Record<string, string | number>;
+          parameters?: StageRecordParameters;
           notes?: string | null;
           created_by: string;
         };
@@ -209,7 +353,8 @@ export interface Database {
       vasos_enmangados: {
         Row: {
           id: string;
-          envasado_id: string;
+          referencia_id: string;
+          enmangado_order_id: string | null;
           operario_id: string;
           lote_etiqueta: string | null;
           cantidad_unidades: number;
@@ -221,7 +366,8 @@ export interface Database {
           created_at: string;
         };
         Insert: {
-          envasado_id: string;
+          referencia_id: string;
+          enmangado_order_id?: string | null;
           operario_id: string;
           lote_etiqueta?: string | null;
           cantidad_unidades: number;
@@ -254,7 +400,7 @@ export interface Database {
           operario_name: string | null;
           stage_started_at: string | null;
           stage_ended_at: string | null;
-          parameters: Record<string, string | number> | null;
+          parameters: StageRecordParameters | null;
         };
         Relationships: [];
       };
