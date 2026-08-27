@@ -29,6 +29,10 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 2. `0002_rls.sql` — políticas de seguridad por rol.
 3. `0003_views.sql` — vistas para los dashboards.
 4. `0004_grants.sql` — permisos de tabla para el rol `authenticated` (Supabase ya no auto-expone tablas nuevas a la API; sin este paso, cualquier consulta falla con "permission denied" aunque las políticas de RLS sean correctas).
+5. `0005_enmangado_independiente.sql` — programa y órdenes propias de enmangado, desacoplado de envasado_id.
+6. `0006_enmangado_vasos_blancos.sql` — catálogo de vasos blancos (con stock) y de referencias de enmangado; el enmangado queda totalmente desligado del catálogo de productos de baches.
+7. `0007_alistamiento_insumos.sql` — nueva etapa "Alistamiento de insumos" (pesaje) al inicio de la preparación de bache, con captura de una lista de insumos (lote, peso, marca) en vez de parámetros fijos.
+8. `0008_insumos_receta.sql` — catálogo de insumos y receta por producto (qué insumos le corresponden a cada producto), para que el alistamiento de insumos sea un checklist en vez de texto libre.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 
