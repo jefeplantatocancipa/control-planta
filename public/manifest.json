@@ -4,8 +4,8 @@
   "description": "Control de procesos de planta de lácteos",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fefefb",
-  "theme_color": "#184735",
+  "background_color": "#f0eee9",
+  "theme_color": "#005240",
   "icons": [
     { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
   ]
