@@ -1,4 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage({
@@ -12,9 +13,10 @@ export default async function LoginPage({
     <div className="flex min-h-svh items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">Control de Planta</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Ingresa con tu cuenta para registrar y consultar el proceso.
+          <FasalactWordmark size="lg" />
+          <p className="mt-2 text-sm text-muted-foreground">
+            Control de Planta — ingresa con tu cuenta para registrar y
+            consultar el proceso.
           </p>
         </CardHeader>
         <CardContent>

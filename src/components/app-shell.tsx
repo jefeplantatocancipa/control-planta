@@ -10,7 +10,6 @@ import {
   LineChart,
   LogOut,
   Package,
-  Settings,
   Tags,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,7 @@ import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
+import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import type { CurrentProfile } from "@/lib/auth/dal";
 import type { UserRole } from "@/lib/supabase/types";
 import { logout } from "@/app/login/actions";
@@ -66,9 +66,11 @@ export function AppShell({
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
       <aside className="hidden w-60 shrink-0 border-r bg-muted/20 md:flex md:flex-col">
-        <div className="flex items-center gap-2 border-b px-4 py-4">
-          <Settings className="size-5 text-primary" />
-          <span className="font-semibold">Control de Planta</span>
+        <div className="flex flex-col gap-1 border-b px-4 py-4">
+          <FasalactWordmark />
+          <span className="text-xs text-muted-foreground">
+            Control de Planta
+          </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {items.map((item) => {
@@ -110,7 +112,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b px-4 py-3 md:hidden">
-          <span className="font-semibold">Control de Planta</span>
+          <FasalactWordmark />
           <form action={logout}>
             <Button variant="ghost" size="icon" type="submit" title="Salir">
               <LogOut className="size-4" />
