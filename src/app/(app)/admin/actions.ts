@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { StageCaptureMode, UserRole } from "@/lib/supabase/types";
 import { ALL_PRODUCTS_VALUE } from "./constants";
 
@@ -177,6 +178,54 @@ export async function updateProfile(
 
   if (error) {
     return { error: "No se pudo actualizar el usuario." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+const CreateUserSchema = z.object({
+  full_name: z.string().trim().min(1, "El nombre es obligatorio."),
+  email: z.string().trim().email({ message: "Ingresá un correo válido." }),
+  password: z
+    .string()
+    .min(6, "La contraseña debe tener al menos 6 caracteres."),
+  role: z.enum(["jefe_planta", "supervisor", "operario"] satisfies UserRole[]),
+});
+
+export async function createUser(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = CreateUserSchema.safeParse({
+    full_name: formData.get("full_name"),
+    email: formData.get("email"),
+    password: formData.get("password"),
+    role: formData.get("role"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.createUser({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    email_confirm: true,
+    user_metadata: {
+      full_name: parsed.data.full_name,
+      role: parsed.data.role,
+    },
+  });
+
+  if (error) {
+    return {
+      error: error.message.toLowerCase().includes("already been registered")
+        ? "Ya existe un usuario con ese correo."
+        : "No se pudo crear el usuario.",
+    };
   }
 
   revalidatePath("/admin");

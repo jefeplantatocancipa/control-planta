@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateProfile, type ActionState } from "./actions";
+import { updateProfile, createUser, type ActionState } from "./actions";
 import type { Database, UserRole } from "@/lib/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -109,6 +109,69 @@ function UserForm({
   );
 }
 
+function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    createUser,
+    {},
+  );
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="new_full_name">Nombre</Label>
+        <Input id="new_full_name" name="full_name" required />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="new_email">Correo</Label>
+        <Input id="new_email" name="email" type="email" required />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="new_password">Contraseña</Label>
+        <Input
+          id="new_password"
+          name="password"
+          type="password"
+          minLength={6}
+          required
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="new_role">Rol</Label>
+        <Select name="role" defaultValue="operario">
+          <SelectTrigger id="new_role" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(ROLE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+      <DialogFooter>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Creando..." : "Crear usuario"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export function UsersPanel({
   profiles,
   currentUserId,
@@ -116,15 +179,20 @@ export function UsersPanel({
   profiles: Profile[];
   currentUserId: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        Los usuarios se crean desde Authentication → Users en Supabase; acá se
-        administra su rol y estado.
-      </p>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+        >
+          Nuevo usuario
+        </Button>
+      </div>
 
       <Table>
         <TableHeader>
@@ -156,7 +224,7 @@ export function UsersPanel({
                   size="sm"
                   onClick={() => {
                     setEditing(profile);
-                    setOpen(true);
+                    setEditOpen(true);
                   }}
                 >
                   Editar
@@ -174,7 +242,7 @@ export function UsersPanel({
         </TableBody>
       </Table>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Editar usuario</DialogTitle>
@@ -183,9 +251,18 @@ export function UsersPanel({
             <UserForm
               key={editing.id}
               profile={editing}
-              onSuccess={() => setOpen(false)}
+              onSuccess={() => setEditOpen(false)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nuevo usuario</DialogTitle>
+          </DialogHeader>
+          <CreateUserForm onSuccess={() => setCreateOpen(false)} />
         </DialogContent>
       </Dialog>
     </div>
