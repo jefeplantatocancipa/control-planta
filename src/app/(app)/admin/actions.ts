@@ -137,6 +137,63 @@ export async function upsertStageTemplate(
   return { success: true };
 }
 
+const CloneStagesSchema = z.object({
+  product_id: z.string().uuid({ message: "Elegí un producto." }),
+});
+
+export async function cloneDefaultStagesForProduct(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = CloneStagesSchema.safeParse({
+    product_id: formData.get("product_id"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("process_stage_templates")
+    .select("id")
+    .eq("product_id", parsed.data.product_id)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { error: "Este producto ya tiene etapas propias." };
+  }
+
+  const { data: defaults } = await supabase
+    .from("process_stage_templates")
+    .select("*")
+    .is("product_id", null)
+    .order("sequence_order");
+  if (!defaults || defaults.length === 0) {
+    return { error: "No hay etapas por defecto para copiar." };
+  }
+
+  const { error } = await supabase.from("process_stage_templates").insert(
+    defaults.map((stage) => ({
+      product_id: parsed.data.product_id,
+      process_type: stage.process_type,
+      name: stage.name,
+      sequence_order: stage.sequence_order,
+      parameter_schema: stage.parameter_schema,
+      capture_mode: stage.capture_mode,
+      active: stage.active,
+    })),
+  );
+
+  if (error) {
+    return { error: "No se pudieron copiar las etapas." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Usuarios (perfiles)
 // ---------------------------------------------------------------------------

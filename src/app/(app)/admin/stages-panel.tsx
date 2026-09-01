@@ -29,7 +29,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { upsertStageTemplate, type ActionState } from "./actions";
+import {
+  upsertStageTemplate,
+  cloneDefaultStagesForProduct,
+  type ActionState,
+} from "./actions";
 import { ALL_PRODUCTS_VALUE } from "./constants";
 import type {
   Database,
@@ -231,37 +235,67 @@ function StageForm({
   );
 }
 
-export function StagesPanel({
-  stages,
-  products,
-}: {
-  stages: StageTemplate[];
-  products: Product[];
-}) {
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<StageTemplate | null>(null);
-  const productNames = new Map(products.map((p) => [p.id, p.name]));
+function CloneStagesForm({ eligibleProducts }: { eligibleProducts: Product[] }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    cloneDefaultStagesForProduct,
+    {},
+  );
+  const [productId, setProductId] = useState("");
+
+  if (eligibleProducts.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
+    <form action={action} className="flex flex-wrap items-end gap-2 rounded-lg border p-3">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="clone_product_id">
+          Copiar las etapas por defecto a un producto (para que sean independientes)
+        </Label>
+        <Select
+          name="product_id"
+          value={productId}
+          onValueChange={(value) => setProductId(value ?? "")}
         >
-          Nueva etapa
-        </Button>
+          <SelectTrigger id="clone_product_id" className="w-64">
+            <SelectValue placeholder="Elegí un producto" />
+          </SelectTrigger>
+          <SelectContent>
+            {eligibleProducts.map((product) => (
+              <SelectItem key={product.id} value={product.id}>
+                {product.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+      <Button type="submit" variant="outline" size="sm" disabled={!productId || pending}>
+        {pending ? "Copiando..." : "Copiar"}
+      </Button>
+      {state.error && (
+        <p className="w-full text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
 
+function StagesTable({
+  title,
+  stages,
+  onEdit,
+}: {
+  title: string;
+  stages: StageTemplate[];
+  onEdit: (stage: StageTemplate) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">{title}</h3>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Orden</TableHead>
             <TableHead>Nombre</TableHead>
-            <TableHead>Producto</TableHead>
             <TableHead>Modo</TableHead>
             <TableHead>Parámetros</TableHead>
             <TableHead>Estado</TableHead>
@@ -276,11 +310,6 @@ export function StagesPanel({
               <TableRow key={stage.id}>
                 <TableCell>{stage.sequence_order}</TableCell>
                 <TableCell className="font-medium">{stage.name}</TableCell>
-                <TableCell>
-                  {stage.product_id
-                    ? productNames.get(stage.product_id) ?? "—"
-                    : "Todos"}
-                </TableCell>
                 <TableCell>{CAPTURE_MODE_LABELS[stage.capture_mode]}</TableCell>
                 <TableCell>
                   {stage.capture_mode === "insumos" ? "—" : stage.parameter_schema.length}
@@ -291,28 +320,80 @@ export function StagesPanel({
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditing(stage);
-                      setOpen(true);
-                    }}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(stage)}>
                     Editar
                   </Button>
                 </TableCell>
               </TableRow>
             ))}
-          {stages.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
-                Sin etapas todavía.
-              </TableCell>
-            </TableRow>
-          )}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+export function StagesPanel({
+  stages,
+  products,
+}: {
+  stages: StageTemplate[];
+  products: Product[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<StageTemplate | null>(null);
+  const groups = new Map<string, StageTemplate[]>();
+  for (const stage of stages) {
+    const key = stage.product_id ?? "all";
+    const list = groups.get(key) ?? [];
+    list.push(stage);
+    groups.set(key, list);
+  }
+
+  const eligibleProducts = products.filter((p) => !groups.has(p.id));
+
+  function openEdit(stage: StageTemplate) {
+    setEditing(stage);
+    setOpen(true);
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          onClick={() => {
+            setEditing(null);
+            setOpen(true);
+          }}
+        >
+          Nueva etapa
+        </Button>
+      </div>
+
+      <CloneStagesForm eligibleProducts={eligibleProducts} />
+
+      {groups.has("all") && (
+        <StagesTable
+          title="Todos los productos (secuencia compartida)"
+          stages={groups.get("all")!}
+          onEdit={openEdit}
+        />
+      )}
+
+      {products
+        .filter((product) => groups.has(product.id))
+        .map((product) => (
+          <StagesTable
+            key={product.id}
+            title={product.name}
+            stages={groups.get(product.id)!}
+            onEdit={openEdit}
+          />
+        ))}
+
+      {stages.length === 0 && (
+        <p className="text-center text-muted-foreground">Sin etapas todavía.</p>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
