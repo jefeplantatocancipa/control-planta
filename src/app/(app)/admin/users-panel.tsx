@@ -119,6 +119,9 @@ function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
 
+  const [role, setRole] = useState<UserRole>("operario");
+  const needsLogin = role !== "operario";
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -127,24 +130,12 @@ function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="new_email">Correo</Label>
-        <Input id="new_email" name="email" type="email" required />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="new_password">Contraseña</Label>
-        <Input
-          id="new_password"
-          name="password"
-          type="password"
-          minLength={6}
-          required
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
         <Label htmlFor="new_role">Rol</Label>
-        <Select name="role" defaultValue="operario">
+        <Select
+          name="role"
+          value={role}
+          onValueChange={(value) => setRole((value as UserRole) ?? "operario")}
+        >
           <SelectTrigger id="new_role" className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -157,6 +148,30 @@ function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
           </SelectContent>
         </Select>
       </div>
+
+      {needsLogin ? (
+        <>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new_email">Correo</Label>
+            <Input id="new_email" name="email" type="email" required />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new_password">Contraseña</Label>
+            <Input
+              id="new_password"
+              name="password"
+              type="password"
+              minLength={6}
+              required
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Los operarios no inician sesión: alcanza con el nombre para que
+          aparezcan en los selectores de captura.
+        </p>
+      )}
 
       {state.error && (
         <p className="text-sm text-destructive" role="alert">

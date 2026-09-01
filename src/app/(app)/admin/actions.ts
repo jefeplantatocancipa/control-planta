@@ -184,14 +184,40 @@ export async function updateProfile(
   return { success: true };
 }
 
-const CreateUserSchema = z.object({
-  full_name: z.string().trim().min(1, "El nombre es obligatorio."),
-  email: z.string().trim().email({ message: "Ingresá un correo válido." }),
-  password: z
-    .string()
-    .min(6, "La contraseña debe tener al menos 6 caracteres."),
-  role: z.enum(["jefe_planta", "supervisor", "operario"] satisfies UserRole[]),
-});
+function slugify(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function randomToken() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+const CreateUserSchema = z
+  .object({
+    full_name: z.string().trim().min(1, "El nombre es obligatorio."),
+    email: z
+      .string()
+      .trim()
+      .email({ message: "Ingresá un correo válido." })
+      .optional()
+      .or(z.literal("")),
+    password: z
+      .string()
+      .min(6, "La contraseña debe tener al menos 6 caracteres.")
+      .optional()
+      .or(z.literal("")),
+    role: z.enum(["jefe_planta", "supervisor", "operario"] satisfies UserRole[]),
+  })
+  .refine((data) => data.role === "operario" || (data.email && data.password), {
+    message: "Correo y contraseña son obligatorios para ese rol.",
+    path: ["email"],
+  });
 
 export async function createUser(
   _prevState: ActionState,
@@ -209,10 +235,17 @@ export async function createUser(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  // Los operarios no inician sesión: alcanza con que existan como perfil
+  // para aparecer en los selectores de captura, así que se les genera un
+  // correo y contraseña internos que nunca van a usar.
+  const email =
+    parsed.data.email || `${slugify(parsed.data.full_name)}-${randomToken()}@planta.local`;
+  const password = parsed.data.password || `${randomToken()}${randomToken()}`;
+
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.createUser({
-    email: parsed.data.email,
-    password: parsed.data.password,
+    email,
+    password,
     email_confirm: true,
     user_metadata: {
       full_name: parsed.data.full_name,
