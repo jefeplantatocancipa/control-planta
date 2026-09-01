@@ -227,8 +227,8 @@ export async function createUser(
 
   const parsed = CreateUserSchema.safeParse({
     full_name: formData.get("full_name"),
-    email: formData.get("email"),
-    password: formData.get("password"),
+    email: formData.get("email") || undefined,
+    password: formData.get("password") || undefined,
     role: formData.get("role"),
   });
   if (!parsed.success) {
