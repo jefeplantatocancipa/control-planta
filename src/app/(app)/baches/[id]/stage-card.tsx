@@ -172,8 +172,18 @@ function InsumosChecklist({
   return (
     <div className="flex flex-col gap-3">
       <Label>Insumos (receta del producto)</Label>
-      {drafts.map((draft, index) => (
-        <div key={draft.insumo_id} className="flex flex-col gap-2 rounded-lg border p-3">
+      {drafts.map((draft, index) => {
+        const incomplete =
+          draft.checked && !(draft.lote.trim() && draft.peso.trim() && draft.marca.trim());
+        return (
+        <div
+          key={draft.insumo_id}
+          className={
+            incomplete
+              ? "flex flex-col gap-2 rounded-lg border border-destructive/50 p-3"
+              : "flex flex-col gap-2 rounded-lg border p-3"
+          }
+        >
           <label className="flex items-center gap-2 text-sm font-medium">
             <input
               type="checkbox"
@@ -209,7 +219,8 @@ function InsumosChecklist({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
       {drafts.length === 0 && (
         <p className="text-sm text-muted-foreground">
           Este producto no tiene insumos configurados en Administración →
@@ -358,6 +369,13 @@ function FinishStageForm({
         />
       </div>
 
+      {isInsumos && !canSubmit && (
+        <p className="text-sm text-muted-foreground">
+          {checkedInsumos.length === 0
+            ? "Marcá al menos un insumo."
+            : "Completá lote, peso y marca de cada insumo marcado."}
+        </p>
+      )}
       <Button
         type="button"
         size="sm"
