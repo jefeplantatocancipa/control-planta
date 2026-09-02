@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
 import { EnvasadoCard } from "./envasado-card";
+import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnvasadoPage() {
   await requireRole(["jefe_planta", "supervisor"]);
@@ -102,8 +103,7 @@ export default async function EnvasadoPage() {
                 <TableCell>{envasado.cantidad_mermas}</TableCell>
                 <TableCell>{operarioNames.get(envasado.operario_id) ?? "—"}</TableCell>
                 <TableCell>
-                  {envasado.ended_at &&
-                    new Date(envasado.ended_at).toLocaleString("es-AR")}
+                  {envasado.ended_at && formatDateTime(envasado.ended_at)}
                 </TableCell>
               </TableRow>
             ))}

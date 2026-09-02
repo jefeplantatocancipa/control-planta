@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { NewBacheDialog } from "./new-bache-dialog";
+import { formatDate } from "@/lib/format-date";
 import type { BacheStatus } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -79,7 +80,7 @@ export default async function BachesPage() {
                   : "—"}
               </TableCell>
               <TableCell>
-                {new Date(bache.started_at).toLocaleDateString("es-AR")}
+                {formatDate(bache.started_at)}
               </TableCell>
               <TableCell>
                 <Badge variant={STATUS_VARIANTS[bache.status]}>

@@ -14,6 +14,7 @@ import { NewEnmangadoProgramDialog } from "./new-enmangado-program-dialog";
 import { EnmangadoProgramCard } from "./enmangado-program-card";
 import { VasosBlancosPanel } from "./vasos-blancos-panel";
 import { ReferenciasPanel } from "./referencias-panel";
+import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnmangadoPage() {
   const profile = await requireRole(["jefe_planta", "supervisor"]);
@@ -120,7 +121,7 @@ export default async function EnmangadoPage() {
                   <TableCell>{vaso.cantidad_mermas}</TableCell>
                   <TableCell>{operarioNames.get(vaso.operario_id) ?? "—"}</TableCell>
                   <TableCell>
-                    {new Date(vaso.started_at).toLocaleString("es-AR")}
+                    {formatDateTime(vaso.started_at)}
                   </TableCell>
                 </TableRow>
               ))}

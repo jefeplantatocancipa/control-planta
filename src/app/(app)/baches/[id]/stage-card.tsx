@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { startStage, finishStage, type ActionState } from "../actions";
+import { formatTime } from "@/lib/format-date";
 import type { Database } from "@/lib/supabase/types";
 
 type StageTemplate =
@@ -46,12 +47,6 @@ function durationLabel(startedAt: string, endedAt: string) {
   return `${minutes} min`;
 }
 
-function timeLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString("es-CO", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Iniciar etapa
@@ -485,8 +480,8 @@ export function StageCard({
         {status === "done" && record?.ended_at && (
           <div className="flex flex-col gap-1 text-sm text-muted-foreground">
             <p>
-              {operarioName ?? "—"} · {timeLabel(record.started_at)}–
-              {timeLabel(record.ended_at)} ({durationLabel(record.started_at, record.ended_at)})
+              {operarioName ?? "—"} · {formatTime(record.started_at)}–
+              {formatTime(record.ended_at)} ({durationLabel(record.started_at, record.ended_at)})
             </p>
             {paramEntries.length > 0 && (
               <ul className="list-inside list-disc">
@@ -515,7 +510,7 @@ export function StageCard({
         {status === "in_progress" && (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              Iniciada por {operarioName ?? "—"} a las {timeLabel(record!.started_at)}
+              Iniciada por {operarioName ?? "—"} a las {formatTime(record!.started_at)}
             </p>
             {canAct ? (
               <FinishStageForm

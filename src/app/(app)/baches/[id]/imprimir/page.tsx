@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { FasalactWordmark } from "@/components/fasalact-wordmark";
+import { formatTime, formatDateTime } from "@/lib/format-date";
 import { PrintButton } from "./print-button";
 import type { BacheStatus, Database } from "@/lib/supabase/types";
 
@@ -16,13 +15,6 @@ const STATUS_LABELS: Record<BacheStatus, string> = {
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
 type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
-
-function timeLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString("es-CO", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function durationLabel(startedAt: string, endedAt: string) {
   const minutes = Math.round(
@@ -151,7 +143,7 @@ export default async function BacheReportPage({
             INFORME DE PROCESO DE PRODUCCIÓN
           </p>
           <p className="text-[10px] text-muted-foreground">
-            Generado el {format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })}
+            Generado el {formatDateTime(new Date().toISOString())}
           </p>
         </div>
       </div>
@@ -213,10 +205,10 @@ export default async function BacheReportPage({
                   {record ? operarioNames.get(record.operario_id) ?? "—" : "—"}
                 </td>
                 <td className="py-1 pr-2 align-top">
-                  {record ? timeLabel(record.started_at) : "—"}
+                  {record ? formatTime(record.started_at) : "—"}
                 </td>
                 <td className="py-1 pr-2 align-top">
-                  {record?.ended_at ? timeLabel(record.ended_at) : "—"}
+                  {record?.ended_at ? formatTime(record.ended_at) : "—"}
                 </td>
                 <td className="py-1 pr-2 align-top">
                   {record?.ended_at
