@@ -141,7 +141,7 @@ export default async function BacheReportPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 rounded-md bg-muted p-2">
+      <div className="grid grid-cols-4 gap-3 rounded-md border p-2">
         <div>
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Lote</p>
           <p className="font-semibold">{bache.batch_code}</p>
