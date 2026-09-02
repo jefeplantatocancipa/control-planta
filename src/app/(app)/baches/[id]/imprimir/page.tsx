@@ -25,18 +25,13 @@ function durationLabel(startedAt: string, endedAt: string) {
   return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
 }
 
-function stageDetailText(stage: StageTemplate, record: StageRecord | undefined) {
+function stageParametersText(stage: StageTemplate, record: StageRecord | undefined) {
   if (!record) return "—";
   const parts: string[] = [];
   for (const [key, value] of Object.entries(record.parameters)) {
     if (key === "insumos") continue;
     const label = stage.parameter_schema.find((p) => p.key === key)?.label ?? key;
     parts.push(`${label}: ${value}`);
-  }
-  if (Array.isArray(record.parameters.insumos)) {
-    for (const insumo of record.parameters.insumos) {
-      parts.push(`${insumo.nombre} (lote ${insumo.lote}, ${insumo.peso}kg, ${insumo.marca})`);
-    }
   }
   if (record.notes) parts.push(`Notas: ${record.notes}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
@@ -120,6 +115,15 @@ export default async function BacheReportPage({
       ? Math.round((totalMermas / (totalUnidades + totalMermas)) * 1000) / 10
       : 0;
 
+  const insumosUsados = stages.flatMap((stage) => {
+    const record = recordsByStage.get(stage.id);
+    if (!record || !Array.isArray(record.parameters.insumos)) return [];
+    return record.parameters.insumos.map((insumo) => ({
+      etapa: stage.name,
+      ...insumo,
+    }));
+  });
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4 text-xs print:p-0">
       <style>{`
@@ -191,7 +195,7 @@ export default async function BacheReportPage({
             <th className="py-1 pr-2">Inicio</th>
             <th className="py-1 pr-2">Fin</th>
             <th className="py-1 pr-2">Dur.</th>
-            <th className="py-1">Detalle capturado</th>
+            <th className="py-1">Parámetros</th>
           </tr>
         </thead>
         <tbody>
@@ -215,12 +219,40 @@ export default async function BacheReportPage({
                     ? durationLabel(record.started_at, record.ended_at)
                     : "—"}
                 </td>
-                <td className="py-1 align-top">{stageDetailText(stage, record)}</td>
+                <td className="py-1 align-top">{stageParametersText(stage, record)}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
+
+      {insumosUsados.length > 0 && (
+        <table className="w-full border-collapse text-[10px]">
+          <caption className="mb-1 text-left text-[10px] font-semibold text-primary">
+            Insumos utilizados
+          </caption>
+          <thead>
+            <tr className="border-b border-primary/40 text-left">
+              <th className="py-1 pr-2">Etapa</th>
+              <th className="py-1 pr-2">Insumo</th>
+              <th className="py-1 pr-2">Lote</th>
+              <th className="py-1 pr-2">Marca</th>
+              <th className="py-1">Cantidad (kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {insumosUsados.map((insumo, idx) => (
+              <tr key={idx} className="border-b">
+                <td className="py-1 pr-2 align-top">{insumo.etapa}</td>
+                <td className="py-1 pr-2 align-top font-medium">{insumo.nombre}</td>
+                <td className="py-1 pr-2 align-top">{insumo.lote}</td>
+                <td className="py-1 pr-2 align-top">{insumo.marca}</td>
+                <td className="py-1 align-top">{insumo.peso}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <div className="mt-4 flex items-end justify-between border-t pt-2 text-[10px] text-muted-foreground">
         <p>Firma responsable: ______________________________</p>
