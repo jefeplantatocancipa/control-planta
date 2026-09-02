@@ -203,20 +203,40 @@ export default async function BacheReportPage({
               key={stage.id}
               className="break-inside-avoid-page border-b pb-1.5 text-[10px]"
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-primary">
-                  {stage.sequence_order}. {stage.name}
-                </p>
-                <p className="text-muted-foreground">
-                  {record
-                    ? `${operarioNames.get(record.operario_id) ?? "—"} · ${formatTime(record.started_at)}${
-                        record.ended_at
-                          ? `–${formatTime(record.ended_at)} (${durationLabel(record.started_at, record.ended_at)})`
-                          : ""
-                      }`
-                    : "Sin iniciar"}
-                </p>
-              </div>
+              <p className="font-semibold text-primary">
+                {stage.sequence_order}. {stage.name}
+              </p>
+
+              {record ? (
+                <table className="mt-1 w-full border-collapse">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-0.5 pr-2 font-normal">Operario</th>
+                      <th className="py-0.5 pr-2 font-normal">Inicio</th>
+                      <th className="py-0.5 pr-2 font-normal">Final</th>
+                      <th className="py-0.5 font-normal">Tiempo total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-dashed">
+                      <td className="py-0.5 pr-2 font-medium">
+                        {operarioNames.get(record.operario_id) ?? "—"}
+                      </td>
+                      <td className="py-0.5 pr-2">{formatTime(record.started_at)}</td>
+                      <td className="py-0.5 pr-2">
+                        {record.ended_at ? formatTime(record.ended_at) : "—"}
+                      </td>
+                      <td className="py-0.5">
+                        {record.ended_at
+                          ? durationLabel(record.started_at, record.ended_at)
+                          : "En curso"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-1 text-muted-foreground">Sin iniciar</p>
+              )}
 
               {paramEntries.length > 0 && (
                 <table className="mt-1 w-full border-collapse">
