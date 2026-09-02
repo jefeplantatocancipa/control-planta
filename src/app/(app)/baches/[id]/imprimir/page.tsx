@@ -3,14 +3,19 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { PrintButton } from "./print-button";
-import type { BacheStatus } from "@/lib/supabase/types";
+import type { BacheStatus, Database } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
   en_proceso: "En proceso",
   completado: "Completado",
   cancelado: "Cancelado",
 };
+
+type StageTemplate =
+  Database["public"]["Tables"]["process_stage_templates"]["Row"];
+type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
 
 function timeLabel(iso: string) {
   return new Date(iso).toLocaleTimeString("es-CO", {
@@ -23,7 +28,35 @@ function durationLabel(startedAt: string, endedAt: string) {
   const minutes = Math.round(
     (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000,
   );
-  return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
+}
+
+function stageDetailText(stage: StageTemplate, record: StageRecord | undefined) {
+  if (!record) return "—";
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(record.parameters)) {
+    if (key === "insumos") continue;
+    const label = stage.parameter_schema.find((p) => p.key === key)?.label ?? key;
+    parts.push(`${label}: ${value}`);
+  }
+  if (Array.isArray(record.parameters.insumos)) {
+    for (const insumo of record.parameters.insumos) {
+      parts.push(`${insumo.nombre} (lote ${insumo.lote}, ${insumo.peso}kg, ${insumo.marca})`);
+    }
+  }
+  if (record.notes) parts.push(`Notas: ${record.notes}`);
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border p-2">
+      <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-sm font-bold text-primary">{value}</p>
+    </div>
+  );
 }
 
 export default async function BacheReportPage({
@@ -43,17 +76,23 @@ export default async function BacheReportPage({
 
   if (!bache) notFound();
 
-  const [{ data: product }, ownTemplates, { data: records }, { data: operarios }] =
-    await Promise.all([
-      supabase.from("products").select("*").eq("id", bache.product_id).single(),
-      supabase
-        .from("process_stage_templates")
-        .select("*")
-        .eq("product_id", bache.product_id)
-        .order("sequence_order"),
-      supabase.from("bache_stage_records").select("*").eq("bache_id", bache.id),
-      supabase.from("profiles").select("*"),
-    ]);
+  const [
+    { data: product },
+    ownTemplates,
+    { data: records },
+    { data: operarios },
+    { data: envasados },
+  ] = await Promise.all([
+    supabase.from("products").select("*").eq("id", bache.product_id).single(),
+    supabase
+      .from("process_stage_templates")
+      .select("*")
+      .eq("product_id", bache.product_id)
+      .order("sequence_order"),
+    supabase.from("bache_stage_records").select("*").eq("bache_id", bache.id),
+    supabase.from("profiles").select("*"),
+    supabase.from("envasados").select("*").eq("bache_id", bache.id),
+  ]);
 
   let stages = ownTemplates.data ?? [];
   if (stages.length === 0) {
@@ -70,8 +109,34 @@ export default async function BacheReportPage({
   );
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
 
+  const lastEndedAt = (records ?? []).reduce<string | null>((latest, r) => {
+    if (!r.ended_at) return latest;
+    return !latest || r.ended_at > latest ? r.ended_at : latest;
+  }, null);
+  const processEnd = bache.completed_at ?? lastEndedAt;
+  const totalTimeLabel = processEnd
+    ? durationLabel(bache.started_at, processEnd)
+    : "En curso";
+
+  const totalUnidades = (envasados ?? []).reduce(
+    (sum, e) => sum + e.cantidad_unidades,
+    0,
+  );
+  const totalMermas = (envasados ?? []).reduce((sum, e) => sum + e.cantidad_mermas, 0);
+  const tasaMermas =
+    totalUnidades + totalMermas > 0
+      ? Math.round((totalMermas / (totalUnidades + totalMermas)) * 1000) / 10
+      : 0;
+
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4 print:p-0">
+    <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4 text-xs print:p-0">
+      <style>{`
+        @page { size: A4; margin: 10mm; }
+        @media print {
+          html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
       <div className="flex items-start justify-between gap-4 print:hidden">
         <p className="text-sm text-muted-foreground">
           Vista de impresión — usá el botón para imprimir o guardar como PDF.
@@ -79,103 +144,96 @@ export default async function BacheReportPage({
         <PrintButton />
       </div>
 
-      <div className="flex items-start justify-between gap-4 border-b pb-4">
+      <div className="flex items-center justify-between gap-4 border-b-2 border-primary pb-2">
+        <FasalactWordmark size="sm" />
+        <div className="text-right">
+          <p className="text-sm font-bold text-primary">
+            INFORME DE PROCESO DE PRODUCCIÓN
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            Generado el {format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3 rounded-md bg-muted p-2">
         <div>
-          <h1 className="text-2xl font-bold">Informe de proceso — {bache.batch_code}</h1>
-          <p className="text-muted-foreground">
-            {product?.name ?? "—"}
-            {bache.volumen_total_litros ? ` · ${bache.volumen_total_litros} L` : ""}
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Lote</p>
+          <p className="font-semibold">{bache.batch_code}</p>
+        </div>
+        <div>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
+            Producto
+          </p>
+          <p className="font-semibold">{product?.name ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
+            Volumen
+          </p>
+          <p className="font-semibold">
+            {bache.volumen_total_litros ? `${bache.volumen_total_litros} L` : "—"}
           </p>
         </div>
-        <div className="text-right text-sm">
-          <p className="font-medium">{STATUS_LABELS[bache.status]}</p>
-          <p className="text-muted-foreground">
-            Inicio: {format(new Date(bache.started_at), "dd/MM/yyyy HH:mm", { locale: es })}
+        <div>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
+            Estado
           </p>
-          {bache.completed_at && (
-            <p className="text-muted-foreground">
-              Cierre: {format(new Date(bache.completed_at), "dd/MM/yyyy HH:mm", { locale: es })}
-            </p>
-          )}
+          <p className="font-semibold">{STATUS_LABELS[bache.status]}</p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-4">
-        {stages.map((stage) => {
-          const record = recordsByStage.get(stage.id);
-          const paramEntries = record
-            ? (Object.entries(record.parameters).filter(
-                ([key]) => key !== "insumos",
-              ) as [string, string | number][])
-            : [];
-          const insumos =
-            record && Array.isArray(record.parameters.insumos)
-              ? record.parameters.insumos
-              : null;
+      <div className="grid grid-cols-4 gap-3">
+        <StatTile label="Tiempo total del proceso" value={totalTimeLabel} />
+        <StatTile label="Unidades envasadas" value={String(totalUnidades)} />
+        <StatTile label="Mermas" value={String(totalMermas)} />
+        <StatTile label="Tasa de mermas" value={`${tasaMermas}%`} />
+      </div>
 
-          return (
-            <div
-              key={stage.id}
-              className="break-inside-avoid-page rounded-lg border p-4"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-semibold">
-                  {stage.sequence_order}. {stage.name}
-                </h2>
-                <span className="text-xs text-muted-foreground">
+      <table className="w-full border-collapse text-[10px]">
+        <thead>
+          <tr className="border-b border-primary/40 text-left">
+            <th className="py-1 pr-2">#</th>
+            <th className="py-1 pr-2">Etapa</th>
+            <th className="py-1 pr-2">Operario</th>
+            <th className="py-1 pr-2">Inicio</th>
+            <th className="py-1 pr-2">Fin</th>
+            <th className="py-1 pr-2">Dur.</th>
+            <th className="py-1">Detalle capturado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stages.map((stage) => {
+            const record = recordsByStage.get(stage.id);
+            return (
+              <tr key={stage.id} className="break-inside-avoid-page border-b">
+                <td className="py-1 pr-2 align-top">{stage.sequence_order}</td>
+                <td className="py-1 pr-2 align-top font-medium">{stage.name}</td>
+                <td className="py-1 pr-2 align-top">
+                  {record ? operarioNames.get(record.operario_id) ?? "—" : "—"}
+                </td>
+                <td className="py-1 pr-2 align-top">
+                  {record ? timeLabel(record.started_at) : "—"}
+                </td>
+                <td className="py-1 pr-2 align-top">
+                  {record?.ended_at ? timeLabel(record.ended_at) : "—"}
+                </td>
+                <td className="py-1 pr-2 align-top">
                   {record?.ended_at
-                    ? "Completada"
-                    : record
-                      ? "En curso"
-                      : "Sin iniciar"}
-                </span>
-              </div>
+                    ? durationLabel(record.started_at, record.ended_at)
+                    : "—"}
+                </td>
+                <td className="py-1 align-top">{stageDetailText(stage, record)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
 
-              {record ? (
-                <div className="mt-2 flex flex-col gap-1 text-sm">
-                  <p className="text-muted-foreground">
-                    {operarioNames.get(record.operario_id) ?? "—"} ·{" "}
-                    {timeLabel(record.started_at)}
-                    {record.ended_at
-                      ? `–${timeLabel(record.ended_at)} (${durationLabel(record.started_at, record.ended_at)})`
-                      : ""}
-                  </p>
-                  {paramEntries.length > 0 && (
-                    <ul className="list-inside list-disc">
-                      {paramEntries.map(([key, value]) => (
-                        <li key={key}>
-                          {stage.parameter_schema.find((p) => p.key === key)?.label ??
-                            key}
-                          : {value}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {insumos && (
-                    <ul className="list-inside list-disc">
-                      {insumos.map((insumo, idx) => (
-                        <li key={idx}>
-                          {insumo.nombre}: Lote {insumo.lote} · {insumo.peso} kg ·{" "}
-                          {insumo.marca}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {record.notes && <p>Notas: {record.notes}</p>}
-                </div>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Esta etapa no se llegó a iniciar.
-                </p>
-              )}
-            </div>
-          );
-        })}
+      <div className="mt-4 flex items-end justify-between border-t pt-2 text-[10px] text-muted-foreground">
+        <p>Firma responsable: ______________________________</p>
+        <p>fasalact food innovation</p>
       </div>
-
-      <p className="border-t pt-4 text-xs text-muted-foreground">
-        Generado el {format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })}
-      </p>
     </div>
   );
 }
