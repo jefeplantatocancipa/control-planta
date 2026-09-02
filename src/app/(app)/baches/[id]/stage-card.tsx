@@ -31,6 +31,14 @@ type StageTemplate =
 type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
+interface RecipeInsumo {
+  id: string;
+  name: string;
+  lote?: string;
+  peso?: number;
+  marca?: string;
+}
+
 interface InsumoDraft {
   insumo_id: string;
   nombre: string;
@@ -38,6 +46,10 @@ interface InsumoDraft {
   lote: string;
   peso: string;
   marca: string;
+  // true si lote/peso/marca ya vienen confirmados de una etapa de insumos
+  // anterior (encadenada): acá solo hace falta marcar el checkbox, no
+  // volver a tipearlos.
+  prefilled: boolean;
 }
 
 function durationLabel(startedAt: string, endedAt: string) {
@@ -188,31 +200,37 @@ function InsumosChecklist({
             />
             {draft.nombre}
           </label>
-          {draft.checked && (
-            <div className="flex items-center gap-2 pl-6">
-              <Input
-                placeholder="Lote"
-                value={draft.lote}
-                onChange={(e) => updateAt(index, { lote: e.target.value })}
-                className="flex-1"
-              />
-              <Input
-                placeholder="Peso (kg)"
-                type="number"
-                step="0.01"
-                min="0"
-                value={draft.peso}
-                onChange={(e) => updateAt(index, { peso: e.target.value })}
-                className="w-24"
-              />
-              <Input
-                placeholder="Marca"
-                value={draft.marca}
-                onChange={(e) => updateAt(index, { marca: e.target.value })}
-                className="flex-1"
-              />
-            </div>
-          )}
+          {draft.checked &&
+            (draft.prefilled ? (
+              <p className="pl-6 text-sm text-muted-foreground">
+                Lote {draft.lote || "—"} · {draft.peso || "0"} kg ·{" "}
+                {draft.marca || "—"}
+              </p>
+            ) : (
+              <div className="flex items-center gap-2 pl-6">
+                <Input
+                  placeholder="Lote"
+                  value={draft.lote}
+                  onChange={(e) => updateAt(index, { lote: e.target.value })}
+                  className="flex-1"
+                />
+                <Input
+                  placeholder="Peso (kg)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={draft.peso}
+                  onChange={(e) => updateAt(index, { peso: e.target.value })}
+                  className="w-24"
+                />
+                <Input
+                  placeholder="Marca"
+                  value={draft.marca}
+                  onChange={(e) => updateAt(index, { marca: e.target.value })}
+                  className="flex-1"
+                />
+              </div>
+            ))}
         </div>
         );
       })}
@@ -454,7 +472,7 @@ function FinishStageForm({
   bacheId: string;
   stage: StageTemplate;
   record: StageRecord;
-  recipeInsumos: { id: string; name: string }[];
+  recipeInsumos: RecipeInsumo[];
 }) {
   const capturesInsumos = stage.captures_insumos;
   const capturesReadings = stage.captures_readings;
@@ -464,9 +482,10 @@ function FinishStageForm({
       insumo_id: r.id,
       nombre: r.name,
       checked: false,
-      lote: "",
-      peso: "",
-      marca: "",
+      lote: r.lote ?? "",
+      peso: r.peso !== undefined ? String(r.peso) : "",
+      marca: r.marca ?? "",
+      prefilled: r.lote !== undefined,
     })),
   );
   const [notes, setNotes] = useState("");
@@ -601,7 +620,7 @@ export function StageCard({
   stage: StageTemplate;
   record: StageRecord | null;
   operarios: Profile[];
-  recipeInsumos: { id: string; name: string }[];
+  recipeInsumos: RecipeInsumo[];
   canAct: boolean;
   unlocked: boolean;
 }) {

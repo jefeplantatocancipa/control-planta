@@ -94,9 +94,14 @@ export default async function BacheDetailPage({
     if (!priorStage) return productRecipeInsumos;
     const priorRecord = recordsByStage.get(priorStage.id);
     if (priorRecord?.ended_at && Array.isArray(priorRecord.parameters.insumos)) {
+      // Se arrastran lote/peso/marca ya confirmados en la etapa anterior:
+      // acá solo hace falta marcar cuáles se usan, no volver a tipearlos.
       return priorRecord.parameters.insumos.map((insumo) => ({
         id: insumo.insumo_id,
         name: insumo.nombre,
+        lote: insumo.lote,
+        peso: insumo.peso,
+        marca: insumo.marca,
       }));
     }
     return [];
