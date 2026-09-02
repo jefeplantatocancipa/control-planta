@@ -28,7 +28,7 @@ function durationLabel(startedAt: string, endedAt: string) {
 function stageParameterEntries(stage: StageTemplate, record: StageRecord | undefined) {
   if (!record) return [];
   return Object.entries(record.parameters)
-    .filter(([key]) => key !== "insumos")
+    .filter(([key]) => key !== "insumos" && key !== "lecturas")
     .map(([key, value]) => [
       stage.parameter_schema.find((p) => p.key === key)?.label ?? key,
       value,
@@ -187,6 +187,10 @@ export default async function BacheReportPage({
             record && Array.isArray(record.parameters.insumos)
               ? record.parameters.insumos
               : null;
+          const lecturas =
+            record && Array.isArray(record.parameters.lecturas)
+              ? record.parameters.lecturas
+              : null;
 
           return (
             <div
@@ -240,6 +244,35 @@ export default async function BacheReportPage({
                         <td className="py-0.5 pr-2">{insumo.lote}</td>
                         <td className="py-0.5 pr-2">{insumo.marca}</td>
                         <td className="py-0.5">{insumo.peso}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {lecturas && lecturas.length > 0 && (
+                <table className="mt-1 w-full border-collapse">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-0.5 pr-2 font-normal">Hora</th>
+                      {stage.parameter_schema.map((param) => (
+                        <th key={param.key} className="py-0.5 pr-2 font-normal">
+                          {param.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lecturas.map((reading, idx) => (
+                      <tr key={idx} className="border-b border-dashed">
+                        <td className="py-0.5 pr-2 font-medium">
+                          {formatTime(reading.timestamp)}
+                        </td>
+                        {stage.parameter_schema.map((param) => (
+                          <td key={param.key} className="py-0.5 pr-2">
+                            {reading[param.key] ?? "—"}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>

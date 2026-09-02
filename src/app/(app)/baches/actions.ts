@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
-import type { StageRecordParameters } from "@/lib/supabase/types";
+import type { StageRecordParameters, StageReading } from "@/lib/supabase/types";
 
 export interface ActionState {
   error?: string;
@@ -184,13 +184,23 @@ export async function finishStage(
   // El esquema de parámetros (y si incluye checklist de insumos) es la
   // fuente de verdad server-side: evita confiar en datos arbitrarios
   // enviados desde el cliente.
-  const { data: template } = await supabase
-    .from("process_stage_templates")
-    .select("parameter_schema, captures_insumos")
-    .eq("id", parsed.data.stage_template_id)
-    .single();
+  const [{ data: template }, { data: existingRecord }] = await Promise.all([
+    supabase
+      .from("process_stage_templates")
+      .select("parameter_schema, captures_insumos")
+      .eq("id", parsed.data.stage_template_id)
+      .single(),
+    supabase
+      .from("bache_stage_records")
+      .select("parameters")
+      .eq("id", parsed.data.record_id)
+      .single(),
+  ]);
 
-  const parameters: StageRecordParameters = {};
+  // Se parte de lo que ya había (preserva "lecturas" si la etapa las usa,
+  // ya que esas se van agregando aparte con addReading mientras está en
+  // curso, no en este formulario).
+  const parameters: StageRecordParameters = { ...(existingRecord?.parameters ?? {}) };
 
   for (const param of template?.parameter_schema ?? []) {
     const raw = formData.get(`param__${param.key}`);
@@ -221,6 +231,76 @@ export async function finishStage(
 
   if (error) {
     return { error: "No se pudo finalizar la etapa." };
+  }
+
+  revalidatePath(`/baches/${parsed.data.bache_id}`);
+  return { success: true };
+}
+
+const AddReadingSchema = z.object({
+  record_id: z.string().uuid(),
+  bache_id: z.string().uuid(),
+  stage_template_id: z.string().uuid(),
+});
+
+export async function addReading(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = AddReadingSchema.safeParse({
+    record_id: formData.get("record_id"),
+    bache_id: formData.get("bache_id"),
+    stage_template_id: formData.get("stage_template_id"),
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const [{ data: template }, { data: record }] = await Promise.all([
+    supabase
+      .from("process_stage_templates")
+      .select("parameter_schema")
+      .eq("id", parsed.data.stage_template_id)
+      .single(),
+    supabase
+      .from("bache_stage_records")
+      .select("parameters, ended_at")
+      .eq("id", parsed.data.record_id)
+      .single(),
+  ]);
+
+  if (!record || record.ended_at) {
+    return { error: "Esta etapa ya fue finalizada." };
+  }
+
+  const reading: StageReading = {
+    timestamp: new Date().toISOString(),
+  };
+  for (const param of template?.parameter_schema ?? []) {
+    const raw = formData.get(`param__${param.key}`);
+    if (raw === null || raw === "") continue;
+    reading[param.key] = param.type === "number" ? Number(raw) : String(raw);
+  }
+
+  const existingReadings = Array.isArray(record.parameters.lecturas)
+    ? record.parameters.lecturas
+    : [];
+  const parameters: StageRecordParameters = {
+    ...record.parameters,
+    lecturas: [...existingReadings, reading],
+  };
+
+  const { error: readingError } = await supabase
+    .from("bache_stage_records")
+    .update({ parameters })
+    .eq("id", parsed.data.record_id);
+
+  if (readingError) {
+    return { error: "No se pudo guardar la lectura." };
   }
 
   revalidatePath(`/baches/${parsed.data.bache_id}`);

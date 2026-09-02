@@ -113,16 +113,17 @@ export async function upsertStageTemplate(
   const { id, ...values } = parsed.data;
   const active = formData.get("active") === "on";
   const captures_insumos = formData.get("captures_insumos") === "on";
+  const captures_readings = formData.get("captures_readings") === "on";
   const supabase = await createClient();
 
   const { error } = id
     ? await supabase
         .from("process_stage_templates")
-        .update({ ...values, active, captures_insumos })
+        .update({ ...values, active, captures_insumos, captures_readings })
         .eq("id", id)
     : await supabase
         .from("process_stage_templates")
-        .insert({ ...values, active, captures_insumos });
+        .insert({ ...values, active, captures_insumos, captures_readings });
 
   if (error) {
     return {
@@ -181,6 +182,7 @@ export async function cloneDefaultStagesForProduct(
       sequence_order: stage.sequence_order,
       parameter_schema: stage.parameter_schema,
       captures_insumos: stage.captures_insumos,
+      captures_readings: stage.captures_readings,
       active: stage.active,
     })),
   );

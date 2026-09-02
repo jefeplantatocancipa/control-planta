@@ -22,9 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { startStage, finishStage, type ActionState } from "../actions";
+import { startStage, finishStage, addReading, type ActionState } from "../actions";
 import { formatTime } from "@/lib/format-date";
-import type { Database } from "@/lib/supabase/types";
+import type { Database, StageReading } from "@/lib/supabase/types";
 
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
@@ -226,6 +226,157 @@ function InsumosChecklist({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Lecturas periódicas (curva)
+// ---------------------------------------------------------------------------
+function ReadingsTable({
+  stage,
+  readings,
+}: {
+  stage: StageTemplate;
+  readings: StageReading[];
+}) {
+  if (readings.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">Todavía no hay lecturas.</p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            <th className="py-1 pr-3 font-normal">Hora</th>
+            {stage.parameter_schema.map((param) => (
+              <th key={param.key} className="py-1 pr-3 font-normal">
+                {param.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {readings.map((reading, idx) => (
+            <tr key={idx} className="border-b last:border-0">
+              <td className="py-1 pr-3">{formatTime(reading.timestamp)}</td>
+              {stage.parameter_schema.map((param) => (
+                <td key={param.key} className="py-1 pr-3">
+                  {reading[param.key] ?? "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReadingSubmitForm({
+  bacheId,
+  stageTemplateId,
+  recordId,
+  values,
+  onSuccess,
+}: {
+  bacheId: string;
+  stageTemplateId: string;
+  recordId: string;
+  values: Record<string, string>;
+  onSuccess: () => void;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    addReading,
+    {},
+  );
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="record_id" value={recordId} />
+      <input type="hidden" name="bache_id" value={bacheId} />
+      <input type="hidden" name="stage_template_id" value={stageTemplateId} />
+      {Object.entries(values).map(([key, value]) => (
+        <input key={key} type="hidden" name={`param__${key}`} value={value} />
+      ))}
+      <Button type="submit" size="sm" disabled={pending} className="self-start">
+        {pending ? "Guardando..." : "Agregar lectura"}
+      </Button>
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function AddReadingSection({
+  bacheId,
+  stage,
+  record,
+}: {
+  bacheId: string;
+  stage: StageTemplate;
+  record: StageRecord;
+}) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [formKey, setFormKey] = useState(0);
+  const readings = Array.isArray(record.parameters.lecturas)
+    ? record.parameters.lecturas
+    : [];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ReadingsTable stage={stage} readings={readings} />
+      <div className="flex flex-col gap-2 rounded-lg border p-3">
+        <Label>Nueva lectura</Label>
+        <div className="flex flex-wrap gap-2">
+          {stage.parameter_schema.map((param) => (
+            <div key={param.key} className="flex flex-col gap-1">
+              <Label
+                htmlFor={`reading-${record.id}-${param.key}`}
+                className="text-xs font-normal"
+              >
+                {param.label}
+              </Label>
+              <Input
+                id={`reading-${record.id}-${param.key}`}
+                type={
+                  param.type === "number"
+                    ? "number"
+                    : param.type === "time"
+                      ? "time"
+                      : "text"
+                }
+                step={param.type === "number" ? "0.01" : undefined}
+                value={values[param.key] ?? ""}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [param.key]: e.target.value }))
+                }
+                className="w-32"
+              />
+            </div>
+          ))}
+        </div>
+        <ReadingSubmitForm
+          key={formKey}
+          bacheId={bacheId}
+          stageTemplateId={stage.id}
+          recordId={record.id}
+          values={values}
+          onSuccess={() => {
+            setValues({});
+            setFormKey((k) => k + 1);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ConfirmFinishForm({
   recordId,
   bacheId,
@@ -306,6 +457,7 @@ function FinishStageForm({
   recipeInsumos: { id: string; name: string }[];
 }) {
   const capturesInsumos = stage.captures_insumos;
+  const capturesReadings = stage.captures_readings;
   const [values, setValues] = useState<Record<string, string>>({});
   const [insumos, setInsumos] = useState<InsumoDraft[]>(
     recipeInsumos.map((r) => ({
@@ -321,33 +473,43 @@ function FinishStageForm({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const checkedInsumos = insumos.filter((i) => i.checked);
-  const canSubmit = capturesInsumos
+  const readings = Array.isArray(record.parameters.lecturas)
+    ? record.parameters.lecturas
+    : [];
+  const insumosOk = capturesInsumos
     ? checkedInsumos.length > 0 &&
       checkedInsumos.every((i) => i.lote.trim() && i.peso.trim() && i.marca.trim())
     : true;
+  const readingsOk = capturesReadings ? readings.length > 0 : true;
+  const canSubmit = insumosOk && readingsOk;
 
   return (
     <div className="flex flex-col gap-3">
-      {stage.parameter_schema.map((param) => (
-        <div key={param.key} className="flex flex-col gap-2">
-          <Label htmlFor={`param-${record.id}-${param.key}`}>{param.label}</Label>
-          <Input
-            id={`param-${record.id}-${param.key}`}
-            type={
-              param.type === "number"
-                ? "number"
-                : param.type === "time"
-                  ? "time"
-                  : "text"
-            }
-            step={param.type === "number" ? "0.01" : undefined}
-            value={values[param.key] ?? ""}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, [param.key]: e.target.value }))
-            }
-          />
-        </div>
-      ))}
+      {!capturesReadings &&
+        stage.parameter_schema.map((param) => (
+          <div key={param.key} className="flex flex-col gap-2">
+            <Label htmlFor={`param-${record.id}-${param.key}`}>{param.label}</Label>
+            <Input
+              id={`param-${record.id}-${param.key}`}
+              type={
+                param.type === "number"
+                  ? "number"
+                  : param.type === "time"
+                    ? "time"
+                    : "text"
+              }
+              step={param.type === "number" ? "0.01" : undefined}
+              value={values[param.key] ?? ""}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, [param.key]: e.target.value }))
+              }
+            />
+          </div>
+        ))}
+
+      {capturesReadings && (
+        <AddReadingSection bacheId={bacheId} stage={stage} record={record} />
+      )}
 
       {capturesInsumos && (
         <InsumosChecklist drafts={insumos} onChange={setInsumos} />
@@ -363,7 +525,12 @@ function FinishStageForm({
         />
       </div>
 
-      {capturesInsumos && !canSubmit && (
+      {capturesReadings && !readingsOk && (
+        <p className="text-sm text-muted-foreground">
+          Agregá al menos una lectura antes de finalizar.
+        </p>
+      )}
+      {capturesInsumos && !insumosOk && (
         <p className="text-sm text-muted-foreground">
           {checkedInsumos.length === 0
             ? "Marcá al menos un insumo."
@@ -446,9 +613,13 @@ export function StageCard({
     record && stage.captures_insumos && Array.isArray(record.parameters.insumos)
       ? record.parameters.insumos
       : null;
+  const readings =
+    record && stage.captures_readings && Array.isArray(record.parameters.lecturas)
+      ? record.parameters.lecturas
+      : null;
   const paramEntries = record
     ? (Object.entries(record.parameters).filter(
-        ([key]) => key !== "insumos",
+        ([key]) => key !== "insumos" && key !== "lecturas",
       ) as [string, string | number][])
     : [];
 
@@ -502,6 +673,11 @@ export function StageCard({
                   </li>
                 ))}
               </ul>
+            )}
+            {readings && (
+              <div className="pt-1">
+                <ReadingsTable stage={stage} readings={readings} />
+              </div>
             )}
             {record.notes && <p>Notas: {record.notes}</p>}
           </div>

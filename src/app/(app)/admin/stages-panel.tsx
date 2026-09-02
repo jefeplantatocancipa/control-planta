@@ -193,6 +193,21 @@ function StageForm({
       <Label className="flex items-center gap-2">
         <input
           type="checkbox"
+          name="captures_readings"
+          defaultChecked={stage?.captures_readings ?? false}
+          className="size-4"
+        />
+        Incluye lecturas periódicas (curva)
+      </Label>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        En vez de capturar los parámetros una sola vez al finalizar, permite
+        agregar varias lecturas mientras la etapa está en curso (cada una con
+        su hora automática) — por ejemplo una curva de fermentación.
+      </p>
+
+      <Label className="flex items-center gap-2">
+        <input
+          type="checkbox"
           name="active"
           defaultChecked={stage?.active ?? true}
           className="size-4"
@@ -277,6 +292,7 @@ function StagesTable({
             <TableHead>Nombre</TableHead>
             <TableHead>Parámetros</TableHead>
             <TableHead>Insumos</TableHead>
+            <TableHead>Lecturas</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
           </TableRow>
@@ -291,6 +307,7 @@ function StagesTable({
                 <TableCell className="font-medium">{stage.name}</TableCell>
                 <TableCell>{stage.parameter_schema.length}</TableCell>
                 <TableCell>{stage.captures_insumos ? "Sí" : "—"}</TableCell>
+                <TableCell>{stage.captures_readings ? "Sí" : "—"}</TableCell>
                 <TableCell>
                   <Badge variant={stage.active ? "default" : "outline"}>
                     {stage.active ? "Activa" : "Inactiva"}

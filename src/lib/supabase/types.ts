@@ -22,11 +22,21 @@ export interface InsumoEntry {
   marca: string;
 }
 
-// Los parámetros propios (definidos en parameter_schema) conviven con la
-// clave "insumos" (cuando la etapa tiene captures_insumos = true).
+// Una lectura periódica (etapas con captures_readings = true): la hora
+// queda en "timestamp" (automática, no editable), el resto de las claves
+// son las del parameter_schema de la etapa (ej. pH, Temperatura).
+export interface StageReading {
+  timestamp: string;
+  [key: string]: string | number;
+}
+
+// Los parámetros propios (definidos en parameter_schema) conviven con
+// "insumos" (captures_insumos = true) y "lecturas" (captures_readings =
+// true).
 export interface StageRecordParameters {
   insumos?: InsumoEntry[];
-  [key: string]: string | number | InsumoEntry[] | undefined;
+  lecturas?: StageReading[];
+  [key: string]: string | number | InsumoEntry[] | StageReading[] | undefined;
 }
 
 export interface Database {
@@ -108,6 +118,7 @@ export interface Database {
           sequence_order: number;
           parameter_schema: StageParameterDef[];
           captures_insumos: boolean;
+          captures_readings: boolean;
           active: boolean;
           created_at: string;
         };
@@ -118,6 +129,7 @@ export interface Database {
           sequence_order: number;
           parameter_schema?: StageParameterDef[];
           captures_insumos?: boolean;
+          captures_readings?: boolean;
           active?: boolean;
         };
         Update: Partial<
