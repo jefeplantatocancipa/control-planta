@@ -25,16 +25,14 @@ function durationLabel(startedAt: string, endedAt: string) {
   return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
 }
 
-function stageParametersText(stage: StageTemplate, record: StageRecord | undefined) {
-  if (!record) return "—";
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(record.parameters)) {
-    if (key === "insumos") continue;
-    const label = stage.parameter_schema.find((p) => p.key === key)?.label ?? key;
-    parts.push(`${label}: ${value}`);
-  }
-  if (record.notes) parts.push(`Notas: ${record.notes}`);
-  return parts.length > 0 ? parts.join(" · ") : "—";
+function stageParameterEntries(stage: StageTemplate, record: StageRecord | undefined) {
+  if (!record) return [];
+  return Object.entries(record.parameters)
+    .filter(([key]) => key !== "insumos")
+    .map(([key, value]) => [
+      stage.parameter_schema.find((p) => p.key === key)?.label ?? key,
+      value,
+    ]) as [string, string | number][];
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -115,15 +113,6 @@ export default async function BacheReportPage({
       ? Math.round((totalMermas / (totalUnidades + totalMermas)) * 1000) / 10
       : 0;
 
-  const insumosUsados = stages.flatMap((stage) => {
-    const record = recordsByStage.get(stage.id);
-    if (!record || !Array.isArray(record.parameters.insumos)) return [];
-    return record.parameters.insumos.map((insumo) => ({
-      etapa: stage.name,
-      ...insumo,
-    }));
-  });
-
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4 text-xs print:p-0">
       <style>{`
@@ -186,73 +175,80 @@ export default async function BacheReportPage({
         <StatTile label="Tasa de mermas" value={`${tasaMermas}%`} />
       </div>
 
-      <table className="w-full border-collapse text-[10px]">
-        <thead>
-          <tr className="border-b border-primary/40 text-left">
-            <th className="py-1 pr-2">#</th>
-            <th className="py-1 pr-2">Etapa</th>
-            <th className="py-1 pr-2">Operario</th>
-            <th className="py-1 pr-2">Inicio</th>
-            <th className="py-1 pr-2">Fin</th>
-            <th className="py-1 pr-2">Dur.</th>
-            <th className="py-1">Parámetros</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stages.map((stage) => {
-            const record = recordsByStage.get(stage.id);
-            return (
-              <tr key={stage.id} className="break-inside-avoid-page border-b">
-                <td className="py-1 pr-2 align-top">{stage.sequence_order}</td>
-                <td className="py-1 pr-2 align-top font-medium">{stage.name}</td>
-                <td className="py-1 pr-2 align-top">
-                  {record ? operarioNames.get(record.operario_id) ?? "—" : "—"}
-                </td>
-                <td className="py-1 pr-2 align-top">
-                  {record ? formatTime(record.started_at) : "—"}
-                </td>
-                <td className="py-1 pr-2 align-top">
-                  {record?.ended_at ? formatTime(record.ended_at) : "—"}
-                </td>
-                <td className="py-1 pr-2 align-top">
-                  {record?.ended_at
-                    ? durationLabel(record.started_at, record.ended_at)
-                    : "—"}
-                </td>
-                <td className="py-1 align-top">{stageParametersText(stage, record)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="flex flex-col gap-1.5">
+        {stages.map((stage) => {
+          const record = recordsByStage.get(stage.id);
+          const paramEntries = stageParameterEntries(stage, record);
+          const insumos =
+            record && Array.isArray(record.parameters.insumos)
+              ? record.parameters.insumos
+              : null;
 
-      {insumosUsados.length > 0 && (
-        <table className="w-full border-collapse text-[10px]">
-          <caption className="mb-1 text-left text-[10px] font-semibold text-primary">
-            Insumos utilizados
-          </caption>
-          <thead>
-            <tr className="border-b border-primary/40 text-left">
-              <th className="py-1 pr-2">Etapa</th>
-              <th className="py-1 pr-2">Insumo</th>
-              <th className="py-1 pr-2">Lote</th>
-              <th className="py-1 pr-2">Marca</th>
-              <th className="py-1">Cantidad (kg)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {insumosUsados.map((insumo, idx) => (
-              <tr key={idx} className="border-b">
-                <td className="py-1 pr-2 align-top">{insumo.etapa}</td>
-                <td className="py-1 pr-2 align-top font-medium">{insumo.nombre}</td>
-                <td className="py-1 pr-2 align-top">{insumo.lote}</td>
-                <td className="py-1 pr-2 align-top">{insumo.marca}</td>
-                <td className="py-1 align-top">{insumo.peso}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          return (
+            <div
+              key={stage.id}
+              className="break-inside-avoid-page border-b pb-1.5 text-[10px]"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold text-primary">
+                  {stage.sequence_order}. {stage.name}
+                </p>
+                <p className="text-muted-foreground">
+                  {record
+                    ? `${operarioNames.get(record.operario_id) ?? "—"} · ${formatTime(record.started_at)}${
+                        record.ended_at
+                          ? `–${formatTime(record.ended_at)} (${durationLabel(record.started_at, record.ended_at)})`
+                          : ""
+                      }`
+                    : "Sin iniciar"}
+                </p>
+              </div>
+
+              {paramEntries.length > 0 && (
+                <table className="mt-1 w-full border-collapse">
+                  <tbody>
+                    {paramEntries.map(([label, value]) => (
+                      <tr key={label} className="border-b border-dashed">
+                        <td className="w-1/3 py-0.5 pr-2 text-muted-foreground">
+                          {label}
+                        </td>
+                        <td className="py-0.5 font-medium">{value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {insumos && insumos.length > 0 && (
+                <table className="mt-1 w-full border-collapse">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-0.5 pr-2 font-normal">Insumo</th>
+                      <th className="py-0.5 pr-2 font-normal">Lote</th>
+                      <th className="py-0.5 pr-2 font-normal">Marca</th>
+                      <th className="py-0.5 font-normal">Cant. (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insumos.map((insumo, idx) => (
+                      <tr key={idx} className="border-b border-dashed">
+                        <td className="py-0.5 pr-2 font-medium">{insumo.nombre}</td>
+                        <td className="py-0.5 pr-2">{insumo.lote}</td>
+                        <td className="py-0.5 pr-2">{insumo.marca}</td>
+                        <td className="py-0.5">{insumo.peso}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {record?.notes && (
+                <p className="mt-1 text-muted-foreground">Notas: {record.notes}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       <div className="mt-4 flex items-end justify-between border-t pt-2 text-[10px] text-muted-foreground">
         <p>Firma responsable: ______________________________</p>
