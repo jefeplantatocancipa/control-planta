@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useActionState } from "react";
+import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -32,6 +34,7 @@ import {
 import {
   upsertStageTemplate,
   cloneDefaultStagesForProduct,
+  deleteProductStages,
   type ActionState,
 } from "./actions";
 import { ALL_PRODUCTS_VALUE } from "./constants";
@@ -273,18 +276,98 @@ function CloneStagesForm({ eligibleProducts }: { eligibleProducts: Product[] }) 
   );
 }
 
+function DeleteProductStagesForm({
+  productId,
+  onSuccess,
+}: {
+  productId: string;
+  onSuccess: () => void;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    deleteProductStages,
+    {},
+  );
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form action={action} className="flex flex-col gap-3">
+      <input type="hidden" name="product_id" value={productId} />
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+      <DialogFooter>
+        <Button type="submit" variant="destructive" disabled={pending}>
+          {pending ? "Eliminando..." : "Eliminar etapas propias"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+function DeleteProductStagesButton({
+  productId,
+  productName,
+}: {
+  productId: string;
+  productName: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="text-destructive"
+        onClick={() => setOpen(true)}
+      >
+        <Trash2 className="size-4" />
+        Eliminar etapas propias
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar etapas propias de {productName}</DialogTitle>
+            <DialogDescription>
+              Esto borra las etapas independientes de este producto (vuelve a
+              quedar sin etapas propias, disponible para copiar de nuevo desde
+              las etapas por defecto). Si ya hay baches que registraron datos
+              en estas etapas, no se va a poder eliminar.
+            </DialogDescription>
+          </DialogHeader>
+          <DeleteProductStagesForm
+            productId={productId}
+            onSuccess={() => setOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function StagesTable({
   title,
   stages,
   onEdit,
+  titleAction,
 }: {
   title: string;
   stages: StageTemplate[];
   onEdit: (stage: StageTemplate) => void;
+  titleAction?: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">{title}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">{title}</h3>
+        {titleAction}
+      </div>
       <Table>
         <TableHeader>
           <TableRow>
@@ -382,6 +465,12 @@ export function StagesPanel({
             title={product.name}
             stages={groups.get(product.id)!}
             onEdit={openEdit}
+            titleAction={
+              <DeleteProductStagesButton
+                productId={product.id}
+                productName={product.name}
+              />
+            }
           />
         ))}
 

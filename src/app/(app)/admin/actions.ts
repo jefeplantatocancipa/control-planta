@@ -195,6 +195,42 @@ export async function cloneDefaultStagesForProduct(
   return { success: true };
 }
 
+const DeleteProductStagesSchema = z.object({
+  product_id: z.string().uuid({ message: "Elegí un producto." }),
+});
+
+export async function deleteProductStages(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteProductStagesSchema.safeParse({
+    product_id: formData.get("product_id"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("process_stage_templates")
+    .delete()
+    .eq("product_id", parsed.data.product_id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: ya hay baches que registraron datos en estas etapas."
+          : "No se pudieron eliminar las etapas.",
+    };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Usuarios (perfiles)
 // ---------------------------------------------------------------------------
