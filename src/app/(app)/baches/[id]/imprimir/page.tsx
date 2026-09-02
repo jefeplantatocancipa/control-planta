@@ -114,11 +114,15 @@ export default async function BacheReportPage({
       : 0;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4 text-xs print:p-0">
+    <div className="mx-auto flex max-w-3xl flex-col gap-3 bg-white p-4 text-xs print:p-0">
       <style>{`
         @page { size: A4; margin: 10mm; }
         @media print {
-          html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          html, body {
+            background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       `}</style>
 
