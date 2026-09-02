@@ -65,7 +65,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
-      <aside className="hidden w-60 shrink-0 border-r bg-muted/20 md:flex md:flex-col">
+      <aside className="hidden w-60 shrink-0 border-r bg-muted/20 md:flex md:flex-col print:hidden">
         <div className="flex flex-col gap-1 border-b px-4 py-4">
           <FasalactWordmark />
           <span className="text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ export function AppShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b px-4 py-3 md:hidden">
+        <header className="flex items-center justify-between border-b px-4 py-3 md:hidden print:hidden">
           <FasalactWordmark />
           <form action={logout}>
             <Button variant="ghost" size="icon" type="submit" title="Salir">
@@ -120,11 +120,11 @@ export function AppShell({
           </form>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 pb-20 md:pb-4">
+        <main className="flex-1 overflow-y-auto p-4 pb-20 md:pb-4 print:overflow-visible print:p-0">
           {children}
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t bg-background md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t bg-background md:hidden print:hidden">
           {mobileItems.map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;

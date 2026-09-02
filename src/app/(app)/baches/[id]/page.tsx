@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Printer } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { StageCard } from "./stage-card";
 import { BacheStatusActions } from "./bache-status-actions";
 import type { BacheStatus } from "@/lib/supabase/types";
@@ -123,6 +126,15 @@ export default async function BacheDetailPage({
           >
             {STATUS_LABELS[bache.status]}
           </Badge>
+          <div className="flex gap-2">
+            <Link
+              href={`/baches/${bache.id}/imprimir`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Printer className="size-4" />
+              Imprimir informe
+            </Link>
+          </div>
           {canAct && (
             <BacheStatusActions bacheId={bache.id} allStagesDone={allStagesDone} />
           )}
