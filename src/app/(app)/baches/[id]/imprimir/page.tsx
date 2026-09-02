@@ -203,7 +203,7 @@ export default async function BacheReportPage({
               key={stage.id}
               className="break-inside-avoid-page border-b pb-1.5 text-[10px]"
             >
-              <p className="font-semibold text-primary">
+              <p className="-mx-1.5 mb-1 rounded bg-primary/10 px-1.5 py-1 text-xs font-bold tracking-wide text-primary">
                 {stage.sequence_order}. {stage.name}
               </p>
 
