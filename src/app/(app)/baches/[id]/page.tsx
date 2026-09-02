@@ -54,7 +54,7 @@ export default async function BacheDetailPage({
   ]);
 
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
-  const recipeInsumos = (productInsumos ?? [])
+  const productRecipeInsumos = (productInsumos ?? [])
     .map((row) => ({ id: row.insumo_id, name: insumoNames.get(row.insumo_id) }))
     .filter((insumo): insumo is { id: string; name: string } => Boolean(insumo.name));
 
@@ -77,6 +77,27 @@ export default async function BacheDetailPage({
   const allStagesDone =
     stages.length > 0 &&
     stages.every((stage) => recordsByStage.get(stage.id)?.ended_at);
+
+  // Una etapa con checklist de insumos parte de la receta del producto si es
+  // la primera de este tipo en la secuencia; si hay una etapa de insumos
+  // anterior ya completada en este mismo bache, parte de lo que se confirmó
+  // ahí (para "arrastrar" solo lo realmente prealistado, no toda la receta).
+  const insumosStages = stages.filter((stage) => stage.captures_insumos);
+  function recipeInsumosFor(stage: (typeof stages)[number]) {
+    if (!stage.captures_insumos) return [];
+    const priorStage = insumosStages
+      .filter((s) => s.sequence_order < stage.sequence_order)
+      .sort((a, b) => b.sequence_order - a.sequence_order)[0];
+    if (!priorStage) return productRecipeInsumos;
+    const priorRecord = recordsByStage.get(priorStage.id);
+    if (priorRecord?.ended_at && Array.isArray(priorRecord.parameters.insumos)) {
+      return priorRecord.parameters.insumos.map((insumo) => ({
+        id: insumo.insumo_id,
+        name: insumo.nombre,
+      }));
+    }
+    return [];
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -122,7 +143,7 @@ export default async function BacheDetailPage({
               stage={stage}
               record={record}
               operarios={operarios ?? []}
-              recipeInsumos={recipeInsumos}
+              recipeInsumos={recipeInsumosFor(stage)}
               canAct={canAct}
               unlocked={unlocked}
             />

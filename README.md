@@ -33,6 +33,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 6. `0006_enmangado_vasos_blancos.sql` — catálogo de vasos blancos (con stock) y de referencias de enmangado; el enmangado queda totalmente desligado del catálogo de productos de baches.
 7. `0007_alistamiento_insumos.sql` — nueva etapa "Alistamiento de insumos" (pesaje) al inicio de la preparación de bache, con captura de una lista de insumos (lote, peso, marca) en vez de parámetros fijos.
 8. `0008_insumos_receta.sql` — catálogo de insumos y receta por producto (qué insumos le corresponden a cada producto), para que el alistamiento de insumos sea un checklist en vez de texto libre.
+9. `0009_captures_insumos.sql` — reemplaza el modo de captura exclusivo (parámetros o insumos) por un flag independiente, para que una etapa pueda tener parámetros propios y checklist de insumos a la vez.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

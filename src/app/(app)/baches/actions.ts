@@ -181,17 +181,24 @@ export async function finishStage(
 
   const supabase = await createClient();
 
-  // El esquema de parámetros (o el modo de captura) es la fuente de verdad
-  // server-side: evita confiar en datos arbitrarios enviados desde el cliente.
+  // El esquema de parámetros (y si incluye checklist de insumos) es la
+  // fuente de verdad server-side: evita confiar en datos arbitrarios
+  // enviados desde el cliente.
   const { data: template } = await supabase
     .from("process_stage_templates")
-    .select("parameter_schema, capture_mode")
+    .select("parameter_schema, captures_insumos")
     .eq("id", parsed.data.stage_template_id)
     .single();
 
-  let parameters: StageRecordParameters;
+  const parameters: StageRecordParameters = {};
 
-  if (template?.capture_mode === "insumos") {
+  for (const param of template?.parameter_schema ?? []) {
+    const raw = formData.get(`param__${param.key}`);
+    if (raw === null || raw === "") continue;
+    parameters[param.key] = param.type === "number" ? Number(raw) : String(raw);
+  }
+
+  if (template?.captures_insumos) {
     const insumosParsed = InsumosSchema.safeParse(
       JSON.parse(String(formData.get("insumos") || "[]")),
     );
@@ -200,15 +207,7 @@ export async function finishStage(
         error: insumosParsed.error.issues[0]?.message ?? "Insumos inválidos.",
       };
     }
-    parameters = { insumos: insumosParsed.data };
-  } else {
-    const values: Record<string, string | number> = {};
-    for (const param of template?.parameter_schema ?? []) {
-      const raw = formData.get(`param__${param.key}`);
-      if (raw === null || raw === "") continue;
-      values[param.key] = param.type === "number" ? Number(raw) : String(raw);
-    }
-    parameters = values;
+    parameters.insumos = insumosParsed.data;
   }
 
   const { error } = await supabase

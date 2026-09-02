@@ -8,8 +8,6 @@ export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
 export type BacheStatus = "en_proceso" | "completado" | "cancelado";
 
-export type StageCaptureMode = "parametros" | "insumos";
-
 export interface StageParameterDef {
   key: string;
   label: string;
@@ -24,9 +22,12 @@ export interface InsumoEntry {
   marca: string;
 }
 
-export type StageRecordParameters =
-  | Record<string, string | number>
-  | { insumos: InsumoEntry[] };
+// Los parámetros propios (definidos en parameter_schema) conviven con la
+// clave "insumos" (cuando la etapa tiene captures_insumos = true).
+export interface StageRecordParameters {
+  insumos?: InsumoEntry[];
+  [key: string]: string | number | InsumoEntry[] | undefined;
+}
 
 export interface Database {
   public: {
@@ -106,7 +107,7 @@ export interface Database {
           name: string;
           sequence_order: number;
           parameter_schema: StageParameterDef[];
-          capture_mode: StageCaptureMode;
+          captures_insumos: boolean;
           active: boolean;
           created_at: string;
         };
@@ -116,7 +117,7 @@ export interface Database {
           name: string;
           sequence_order: number;
           parameter_schema?: StageParameterDef[];
-          capture_mode?: StageCaptureMode;
+          captures_insumos?: boolean;
           active?: boolean;
         };
         Update: Partial<

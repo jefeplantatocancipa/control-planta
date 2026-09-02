@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { StageCaptureMode, UserRole } from "@/lib/supabase/types";
+import type { UserRole } from "@/lib/supabase/types";
 import { ALL_PRODUCTS_VALUE } from "./constants";
 
 export interface ActionState {
@@ -80,7 +80,6 @@ const StageTemplateSchema = z.object({
     .number()
     .int()
     .positive("El orden debe ser mayor a 0."),
-  capture_mode: z.enum(["parametros", "insumos"] satisfies StageCaptureMode[]),
   parameter_schema: z
     .string()
     .transform((raw, ctx) => {
@@ -105,7 +104,6 @@ export async function upsertStageTemplate(
     product_id: productId && productId !== ALL_PRODUCTS_VALUE ? productId : null,
     name: formData.get("name"),
     sequence_order: formData.get("sequence_order"),
-    capture_mode: formData.get("capture_mode") || "parametros",
     parameter_schema: formData.get("parameter_schema") || "[]",
   });
   if (!parsed.success) {
@@ -114,16 +112,17 @@ export async function upsertStageTemplate(
 
   const { id, ...values } = parsed.data;
   const active = formData.get("active") === "on";
+  const captures_insumos = formData.get("captures_insumos") === "on";
   const supabase = await createClient();
 
   const { error } = id
     ? await supabase
         .from("process_stage_templates")
-        .update({ ...values, active })
+        .update({ ...values, active, captures_insumos })
         .eq("id", id)
     : await supabase
         .from("process_stage_templates")
-        .insert({ ...values, active });
+        .insert({ ...values, active, captures_insumos });
 
   if (error) {
     return {
@@ -181,7 +180,7 @@ export async function cloneDefaultStagesForProduct(
       name: stage.name,
       sequence_order: stage.sequence_order,
       parameter_schema: stage.parameter_schema,
-      capture_mode: stage.capture_mode,
+      captures_insumos: stage.captures_insumos,
       active: stage.active,
     })),
   );

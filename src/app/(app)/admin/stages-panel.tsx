@@ -35,16 +35,7 @@ import {
   type ActionState,
 } from "./actions";
 import { ALL_PRODUCTS_VALUE } from "./constants";
-import type {
-  Database,
-  StageCaptureMode,
-  StageParameterDef,
-} from "@/lib/supabase/types";
-
-const CAPTURE_MODE_LABELS: Record<StageCaptureMode, string> = {
-  parametros: "Parámetros",
-  insumos: "Insumos (lote, peso, marca)",
-};
+import type { Database, StageParameterDef } from "@/lib/supabase/types";
 
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
@@ -133,9 +124,6 @@ function StageForm({
   const [parameters, setParameters] = useState<StageParameterDef[]>(
     stage?.parameter_schema ?? [],
   );
-  const [captureMode, setCaptureMode] = useState<StageCaptureMode>(
-    stage?.capture_mode ?? "parametros",
-  );
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -185,31 +173,22 @@ function StageForm({
         </Select>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="capture_mode">Modo de captura</Label>
-        <select
-          id="capture_mode"
-          name="capture_mode"
-          value={captureMode}
-          onChange={(e) => setCaptureMode(e.target.value as StageCaptureMode)}
-          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-        >
-          {Object.entries(CAPTURE_MODE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ParameterEditor parameters={parameters} onChange={setParameters} />
 
-      {captureMode === "insumos" ? (
-        <p className="text-sm text-muted-foreground">
-          Esta etapa captura una lista de insumos (lote, peso y marca); no usa
-          parámetros personalizados.
-        </p>
-      ) : (
-        <ParameterEditor parameters={parameters} onChange={setParameters} />
-      )}
+      <Label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="captures_insumos"
+          defaultChecked={stage?.captures_insumos ?? false}
+          className="size-4"
+        />
+        Incluye checklist de insumos
+      </Label>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Muestra además una lista para marcar insumos con lote/peso/marca (los
+        de la receta del producto, o los confirmados en una etapa anterior de
+        este mismo bache si ya hubo una).
+      </p>
 
       <Label className="flex items-center gap-2">
         <input
@@ -296,8 +275,8 @@ function StagesTable({
           <TableRow>
             <TableHead>Orden</TableHead>
             <TableHead>Nombre</TableHead>
-            <TableHead>Modo</TableHead>
             <TableHead>Parámetros</TableHead>
+            <TableHead>Insumos</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
           </TableRow>
@@ -310,10 +289,8 @@ function StagesTable({
               <TableRow key={stage.id}>
                 <TableCell>{stage.sequence_order}</TableCell>
                 <TableCell className="font-medium">{stage.name}</TableCell>
-                <TableCell>{CAPTURE_MODE_LABELS[stage.capture_mode]}</TableCell>
-                <TableCell>
-                  {stage.capture_mode === "insumos" ? "—" : stage.parameter_schema.length}
-                </TableCell>
+                <TableCell>{stage.parameter_schema.length}</TableCell>
+                <TableCell>{stage.captures_insumos ? "Sí" : "—"}</TableCell>
                 <TableCell>
                   <Badge variant={stage.active ? "default" : "outline"}>
                     {stage.active ? "Activa" : "Inactiva"}

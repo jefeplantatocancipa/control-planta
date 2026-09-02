@@ -238,7 +238,7 @@ function ConfirmFinishForm({
   notes,
   values,
   insumos,
-  isInsumos,
+  capturesInsumos,
   onSuccess,
 }: {
   recordId: string;
@@ -247,7 +247,7 @@ function ConfirmFinishForm({
   notes: string;
   values: Record<string, string>;
   insumos: InsumoDraft[];
-  isInsumos: boolean;
+  capturesInsumos: boolean;
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -265,7 +265,10 @@ function ConfirmFinishForm({
       <input type="hidden" name="bache_id" value={bacheId} />
       <input type="hidden" name="stage_template_id" value={stageTemplateId} />
       <input type="hidden" name="notes" value={notes} />
-      {isInsumos ? (
+      {Object.entries(values).map(([key, value]) => (
+        <input key={key} type="hidden" name={`param__${key}`} value={value} />
+      ))}
+      {capturesInsumos && (
         <input
           type="hidden"
           name="insumos"
@@ -281,10 +284,6 @@ function ConfirmFinishForm({
               })),
           )}
         />
-      ) : (
-        Object.entries(values).map(([key, value]) => (
-          <input key={key} type="hidden" name={`param__${key}`} value={value} />
-        ))
       )}
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
@@ -311,7 +310,7 @@ function FinishStageForm({
   record: StageRecord;
   recipeInsumos: { id: string; name: string }[];
 }) {
-  const isInsumos = stage.capture_mode === "insumos";
+  const capturesInsumos = stage.captures_insumos;
   const [values, setValues] = useState<Record<string, string>>({});
   const [insumos, setInsumos] = useState<InsumoDraft[]>(
     recipeInsumos.map((r) => ({
@@ -327,36 +326,36 @@ function FinishStageForm({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const checkedInsumos = insumos.filter((i) => i.checked);
-  const canSubmit = isInsumos
+  const canSubmit = capturesInsumos
     ? checkedInsumos.length > 0 &&
       checkedInsumos.every((i) => i.lote.trim() && i.peso.trim() && i.marca.trim())
     : true;
 
   return (
     <div className="flex flex-col gap-3">
-      {isInsumos ? (
+      {stage.parameter_schema.map((param) => (
+        <div key={param.key} className="flex flex-col gap-2">
+          <Label htmlFor={`param-${record.id}-${param.key}`}>{param.label}</Label>
+          <Input
+            id={`param-${record.id}-${param.key}`}
+            type={
+              param.type === "number"
+                ? "number"
+                : param.type === "time"
+                  ? "time"
+                  : "text"
+            }
+            step={param.type === "number" ? "0.01" : undefined}
+            value={values[param.key] ?? ""}
+            onChange={(e) =>
+              setValues((v) => ({ ...v, [param.key]: e.target.value }))
+            }
+          />
+        </div>
+      ))}
+
+      {capturesInsumos && (
         <InsumosChecklist drafts={insumos} onChange={setInsumos} />
-      ) : (
-        stage.parameter_schema.map((param) => (
-          <div key={param.key} className="flex flex-col gap-2">
-            <Label htmlFor={`param-${record.id}-${param.key}`}>{param.label}</Label>
-            <Input
-              id={`param-${record.id}-${param.key}`}
-              type={
-                param.type === "number"
-                  ? "number"
-                  : param.type === "time"
-                    ? "time"
-                    : "text"
-              }
-              step={param.type === "number" ? "0.01" : undefined}
-              value={values[param.key] ?? ""}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, [param.key]: e.target.value }))
-              }
-            />
-          </div>
-        ))
       )}
 
       <div className="flex flex-col gap-2">
@@ -369,7 +368,7 @@ function FinishStageForm({
         />
       </div>
 
-      {isInsumos && !canSubmit && (
+      {capturesInsumos && !canSubmit && (
         <p className="text-sm text-muted-foreground">
           {checkedInsumos.length === 0
             ? "Marcá al menos un insumo."
@@ -393,20 +392,19 @@ function FinishStageForm({
             <DialogDescription>{stage.name}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            {isInsumos
-              ? checkedInsumos.map((i) => (
-                  <p key={i.insumo_id}>
-                    {i.nombre}: Lote {i.lote || "—"} · {i.peso || "0"} kg ·{" "}
-                    {i.marca || "—"}
-                  </p>
-                ))
-              : stage.parameter_schema.map((param) =>
-                  values[param.key] ? (
-                    <p key={param.key}>
-                      {param.label}: {values[param.key]}
-                    </p>
-                  ) : null,
-                )}
+            {stage.parameter_schema.map((param) =>
+              values[param.key] ? (
+                <p key={param.key}>
+                  {param.label}: {values[param.key]}
+                </p>
+              ) : null,
+            )}
+            {capturesInsumos &&
+              checkedInsumos.map((i) => (
+                <p key={i.insumo_id}>
+                  {i.nombre}: Lote {i.lote || "—"} · {i.peso || "0"} kg · {i.marca || "—"}
+                </p>
+              ))}
             {notes && <p>Notas: {notes}</p>}
           </div>
           <ConfirmFinishForm
@@ -416,7 +414,7 @@ function FinishStageForm({
             notes={notes}
             values={values}
             insumos={insumos}
-            isInsumos={isInsumos}
+            capturesInsumos={capturesInsumos}
             onSuccess={() => setConfirmOpen(false)}
           />
         </DialogContent>
@@ -450,12 +448,14 @@ export function StageCard({
     ? operarios.find((o) => o.id === record.operario_id)?.full_name
     : undefined;
   const insumos =
-    record &&
-    stage.capture_mode === "insumos" &&
-    "insumos" in record.parameters &&
-    Array.isArray(record.parameters.insumos)
+    record && stage.captures_insumos && Array.isArray(record.parameters.insumos)
       ? record.parameters.insumos
       : null;
+  const paramEntries = record
+    ? (Object.entries(record.parameters).filter(
+        ([key]) => key !== "insumos",
+      ) as [string, string | number][])
+    : [];
 
   return (
     <Card className={status === "not_started" && !unlocked ? "opacity-60" : undefined}>
@@ -488,7 +488,17 @@ export function StageCard({
               {operarioName ?? "—"} · {timeLabel(record.started_at)}–
               {timeLabel(record.ended_at)} ({durationLabel(record.started_at, record.ended_at)})
             </p>
-            {insumos ? (
+            {paramEntries.length > 0 && (
+              <ul className="list-inside list-disc">
+                {paramEntries.map(([key, value]) => (
+                  <li key={key}>
+                    {stage.parameter_schema.find((p) => p.key === key)?.label ?? key}:{" "}
+                    {value}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {insumos && (
               <ul className="list-inside list-disc">
                 {insumos.map((insumo, idx) => (
                   <li key={idx}>
@@ -497,19 +507,6 @@ export function StageCard({
                   </li>
                 ))}
               </ul>
-            ) : (
-              Object.entries(record.parameters).length > 0 && (
-                <ul className="list-inside list-disc">
-                  {Object.entries(record.parameters as Record<string, string | number>).map(
-                    ([key, value]) => (
-                      <li key={key}>
-                        {stage.parameter_schema.find((p) => p.key === key)?.label ?? key}:{" "}
-                        {value}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              )
             )}
             {record.notes && <p>Notas: {record.notes}</p>}
           </div>
