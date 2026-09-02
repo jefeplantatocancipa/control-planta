@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { FasalactWordmark } from "@/components/fasalact-wordmark";
-import { formatTime, formatDateTime } from "@/lib/format-date";
+import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
 import { PrintButton } from "./print-button";
 import type { BacheStatus, Database } from "@/lib/supabase/types";
 
@@ -145,10 +145,16 @@ export default async function BacheReportPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 rounded-md border p-2">
+      <div className="grid grid-cols-5 gap-3 rounded-md border p-2">
         <div>
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Lote</p>
           <p className="font-semibold">{bache.batch_code}</p>
+        </div>
+        <div>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
+            Fecha de elaboración
+          </p>
+          <p className="font-semibold">{formatDate(bache.started_at)}</p>
         </div>
         <div>
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
