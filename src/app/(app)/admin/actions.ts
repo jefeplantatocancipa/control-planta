@@ -92,6 +92,36 @@ const StageTemplateSchema = z.object({
     }),
 });
 
+// Corre una posición hacia adelante (sequence_order + 1) a cualquier etapa
+// del mismo producto que ya esté en el orden pedido o más adelante, para
+// que insertar/mover una etapa a un orden ocupado nunca falle: en vez de
+// rechazar por choque de orden, las demás se desplazan. Se actualiza de la
+// más alta a la más baja para no chocar contra la restricción unique
+// mientras se corren.
+async function makeRoomAtSequenceOrder(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  productId: string | null,
+  fromOrder: number,
+  excludeId: string | undefined,
+) {
+  let query = supabase
+    .from("process_stage_templates")
+    .select("id, sequence_order")
+    .eq("process_type", "bache")
+    .gte("sequence_order", fromOrder)
+    .order("sequence_order", { ascending: false });
+  query = productId === null ? query.is("product_id", null) : query.eq("product_id", productId);
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data: toShift } = await query;
+  for (const row of toShift ?? []) {
+    await supabase
+      .from("process_stage_templates")
+      .update({ sequence_order: row.sequence_order + 1 })
+      .eq("id", row.id);
+  }
+}
+
 export async function upsertStageTemplate(
   _prevState: ActionState,
   formData: FormData,
@@ -115,6 +145,8 @@ export async function upsertStageTemplate(
   const captures_insumos = formData.get("captures_insumos") === "on";
   const captures_readings = formData.get("captures_readings") === "on";
   const supabase = await createClient();
+
+  await makeRoomAtSequenceOrder(supabase, values.product_id, values.sequence_order, id);
 
   const { error } = id
     ? await supabase
