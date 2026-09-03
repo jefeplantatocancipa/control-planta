@@ -252,7 +252,7 @@ export function CorteTurnoDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm" variant="outline">Corte de turno</Button>} />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Corte de turno</DialogTitle>
         </DialogHeader>

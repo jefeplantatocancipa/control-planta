@@ -77,44 +77,65 @@ function InsumosUsoChecklist({
             {draft.nombre}
           </label>
           {draft.checked && (
-            <div className="grid grid-cols-2 gap-2 pl-6 sm:grid-cols-3">
-              <Input
-                placeholder="Lote"
-                value={draft.lote}
-                onChange={(e) => updateAt(index, { lote: e.target.value })}
-              />
-              <Input
-                placeholder="Vencimiento"
-                type="date"
-                value={draft.fecha_vencimiento}
-                onChange={(e) => updateAt(index, { fecha_vencimiento: e.target.value })}
-              />
-              <Input
-                placeholder="Proveedor"
-                value={draft.proveedor}
-                onChange={(e) => updateAt(index, { proveedor: e.target.value })}
-              />
-              <Input
-                placeholder="Cantidad usada"
-                type="number"
-                step="0.01"
-                min="0"
-                value={draft.cantidad_usada}
-                onChange={(e) => updateAt(index, { cantidad_usada: e.target.value })}
-              />
-              <Input
-                placeholder="Unidad (kg, und, m)"
-                value={draft.unidad_medida}
-                onChange={(e) => updateAt(index, { unidad_medida: e.target.value })}
-              />
-              <Input
-                placeholder="Desperdicio"
-                type="number"
-                step="0.01"
-                min="0"
-                value={draft.desperdicio}
-                onChange={(e) => updateAt(index, { desperdicio: e.target.value })}
-              />
+            <div className="grid grid-cols-1 gap-3 pl-6 sm:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">Lote</Label>
+                <Input
+                  value={draft.lote}
+                  onChange={(e) => updateAt(index, { lote: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">
+                  Fecha de vencimiento
+                </Label>
+                <Input
+                  type="date"
+                  value={draft.fecha_vencimiento}
+                  onChange={(e) => updateAt(index, { fecha_vencimiento: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">Proveedor</Label>
+                <Input
+                  value={draft.proveedor}
+                  onChange={(e) => updateAt(index, { proveedor: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">
+                  Cantidad usada
+                </Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={draft.cantidad_usada}
+                  onChange={(e) => updateAt(index, { cantidad_usada: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">
+                  Unidad de medida
+                </Label>
+                <Input
+                  placeholder="kg, und, m..."
+                  value={draft.unidad_medida}
+                  onChange={(e) => updateAt(index, { unidad_medida: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">
+                  Desperdicio
+                </Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={draft.desperdicio}
+                  onChange={(e) => updateAt(index, { desperdicio: e.target.value })}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -355,7 +376,7 @@ export function StartEnvasadoDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm">Iniciar envasado</Button>} />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Iniciar envasado</DialogTitle>
         </DialogHeader>
