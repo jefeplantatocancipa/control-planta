@@ -52,10 +52,10 @@ export default async function EnvasadoPage() {
   const bacheLabels = new Map(bacheOptions.map((b) => [b.id, b.label]));
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
 
-  // Balance de masa por bache: se toma la primera etapa con checklist de
-  // insumos (ej. Alistamiento de insumos) para no duplicar con etapas
-  // encadenadas posteriores (ej. Mezcla) que marcan los mismos insumos ya
-  // pesados en vez de pesar de nuevo.
+  // Balance de masa por bache: se toma la última etapa con checklist de
+  // insumos (ej. Mezcla) en vez de Alistamiento, porque ahí queda
+  // confirmado lo que realmente se agregó al proceso (no todo lo
+  // prealistado necesariamente termina en la mezcla).
   const insumosStageOrder = new Map(
     (insumosStages ?? []).map((s) => [s.id, s.sequence_order]),
   );
@@ -68,7 +68,7 @@ export default async function EnvasadoPage() {
       : [];
     const kg = insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0);
     const current = massBalanceByBache.get(record.bache_id);
-    if (!current || order < current.order) {
+    if (!current || order > current.order) {
       massBalanceByBache.set(record.bache_id, { order, kg });
     }
   }
