@@ -159,6 +159,13 @@ function StageForm({
         <Select
           name="product_id"
           defaultValue={stage?.product_id ?? ALL_PRODUCTS_VALUE}
+          items={[
+            { value: ALL_PRODUCTS_VALUE, label: "Todos los productos" },
+            ...products.map((product) => ({
+              value: product.id,
+              label: product.name,
+            })),
+          ]}
         >
           <SelectTrigger id="product_id" className="w-full">
             <SelectValue />
@@ -251,6 +258,10 @@ function CloneStagesForm({ eligibleProducts }: { eligibleProducts: Product[] }) 
           name="product_id"
           value={productId}
           onValueChange={(value) => setProductId(value ?? "")}
+          items={eligibleProducts.map((product) => ({
+            value: product.id,
+            label: product.name,
+          }))}
         >
           <SelectTrigger id="clone_product_id" className="w-64">
             <SelectValue placeholder="Elegí un producto" />

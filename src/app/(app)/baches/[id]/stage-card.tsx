@@ -119,7 +119,14 @@ function StartStageForm({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
         <Label htmlFor={`operario-${stage.id}`}>Operario responsable</Label>
-        <Select value={operarioId} onValueChange={(value) => setOperarioId(value ?? "")}>
+        <Select
+          value={operarioId}
+          onValueChange={(value) => setOperarioId(value ?? "")}
+          items={operarios.map((operario) => ({
+            value: operario.id,
+            label: operario.full_name,
+          }))}
+        >
           <SelectTrigger id={`operario-${stage.id}`} className="w-full">
             <SelectValue placeholder="Elegí un operario" />
           </SelectTrigger>

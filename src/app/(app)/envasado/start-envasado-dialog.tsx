@@ -52,7 +52,11 @@ function StartEnvasadoForm({
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="bache_id">Bache</Label>
-        <Select name="bache_id" required>
+        <Select
+          name="bache_id"
+          required
+          items={baches.map((bache) => ({ value: bache.id, label: bache.label }))}
+        >
           <SelectTrigger id="bache_id" className="w-full">
             <SelectValue placeholder="Elegí un bache" />
           </SelectTrigger>
@@ -78,7 +82,14 @@ function StartEnvasadoForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="operario_id">Operario responsable</Label>
-        <Select name="operario_id" required>
+        <Select
+          name="operario_id"
+          required
+          items={operarios.map((operario) => ({
+            value: operario.id,
+            label: operario.full_name,
+          }))}
+        >
           <SelectTrigger id="operario_id" className="w-full">
             <SelectValue placeholder="Elegí un operario" />
           </SelectTrigger>

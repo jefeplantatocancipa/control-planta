@@ -56,7 +56,14 @@ function NewEnmangadoForm({
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="referencia_id">Referencia</Label>
-        <Select name="referencia_id" required>
+        <Select
+          name="referencia_id"
+          required
+          items={referencias.map((referencia) => ({
+            value: referencia.id,
+            label: referencia.name,
+          }))}
+        >
           <SelectTrigger id="referencia_id" className="w-full">
             <SelectValue placeholder="Elegí una referencia" />
           </SelectTrigger>
@@ -73,7 +80,14 @@ function NewEnmangadoForm({
       {orders.length > 0 && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="enmangado_order_id">Orden de enmangado</Label>
-          <Select name="enmangado_order_id" defaultValue={NO_ORDER_VALUE}>
+          <Select
+            name="enmangado_order_id"
+            defaultValue={NO_ORDER_VALUE}
+            items={[
+              { value: NO_ORDER_VALUE, label: "Sin orden asociada" },
+              ...orders.map((order) => ({ value: order.id, label: order.label })),
+            ]}
+          >
             <SelectTrigger id="enmangado_order_id" className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -91,7 +105,14 @@ function NewEnmangadoForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="operario_id">Operario responsable</Label>
-        <Select name="operario_id" required>
+        <Select
+          name="operario_id"
+          required
+          items={operarios.map((operario) => ({
+            value: operario.id,
+            label: operario.full_name,
+          }))}
+        >
           <SelectTrigger id="operario_id" className="w-full">
             <SelectValue placeholder="Elegí un operario" />
           </SelectTrigger>

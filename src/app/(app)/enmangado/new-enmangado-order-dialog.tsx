@@ -49,7 +49,14 @@ function NewEnmangadoOrderForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="referencia_id">Referencia</Label>
-        <Select name="referencia_id" required>
+        <Select
+          name="referencia_id"
+          required
+          items={referencias.map((referencia) => ({
+            value: referencia.id,
+            label: referencia.name,
+          }))}
+        >
           <SelectTrigger id="referencia_id" className="w-full">
             <SelectValue placeholder="Elegí una referencia" />
           </SelectTrigger>

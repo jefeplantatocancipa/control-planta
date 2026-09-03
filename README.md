@@ -36,6 +36,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 9. `0009_captures_insumos.sql` — reemplaza el modo de captura exclusivo (parámetros o insumos) por un flag independiente, para que una etapa pueda tener parámetros propios y checklist de insumos a la vez.
 10. `0010_captures_readings.sql` — flag independiente `captures_readings` para que una etapa admita varias lecturas periódicas mientras está en curso (cada una con su hora automática), en vez de un valor único al finalizar — por ejemplo una curva de fermentación.
 11. `0011_programa_import_baches.sql` — columnas nuevas en `production_orders` (`orden_codigo`, `tanque`, `baches_planeados`, horas planeadas) para el importador de Excel del programa de Baches; `planned_quantity` deja de ser obligatoria.
+12. `0012_volumen_por_bache.sql` — columna `volumen_por_bache` en `products`: volumen estándar de un bache de ese producto, para sugerir el volumen al crear un bache desde una orden de producción (que planea por cantidad de baches, no por litros).
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

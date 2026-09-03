@@ -113,7 +113,11 @@ function EntradaForm({
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="vaso_blanco_id">Vaso blanco</Label>
-        <Select name="vaso_blanco_id" required>
+        <Select
+          name="vaso_blanco_id"
+          required
+          items={vasosBlancos.map((vaso) => ({ value: vaso.id, label: vaso.name }))}
+        >
           <SelectTrigger id="vaso_blanco_id" className="w-full">
             <SelectValue placeholder="Elegí un vaso blanco" />
           </SelectTrigger>

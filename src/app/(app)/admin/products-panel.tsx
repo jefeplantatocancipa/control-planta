@@ -62,6 +62,22 @@ function ProductForm({
           required
         />
       </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="volumen_por_bache">Volumen por bache (equivalente)</Label>
+        <Input
+          id="volumen_por_bache"
+          name="volumen_por_bache"
+          type="number"
+          step="0.01"
+          min="0"
+          defaultValue={product?.volumen_por_bache ?? ""}
+          placeholder="Opcional"
+        />
+        <p className="text-xs text-muted-foreground">
+          Volumen estándar de un bache de este producto. Se usa para sugerir
+          el volumen al crear un bache desde una orden de producción.
+        </p>
+      </div>
       <Label className="flex items-center gap-2">
         <input
           type="checkbox"

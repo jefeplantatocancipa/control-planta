@@ -71,7 +71,7 @@ function UserForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="role">Rol</Label>
-        <Select name="role" defaultValue={profile.role}>
+        <Select name="role" defaultValue={profile.role} items={ROLE_LABELS}>
           <SelectTrigger id="role" className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -135,6 +135,7 @@ function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
           name="role"
           value={role}
           onValueChange={(value) => setRole((value as UserRole) ?? "operario")}
+          items={ROLE_LABELS}
         >
           <SelectTrigger id="new_role" className="w-full">
             <SelectValue />

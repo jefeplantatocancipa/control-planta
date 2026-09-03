@@ -129,6 +129,10 @@ function RecipeEditor({
         <Select
           value={productId}
           onValueChange={(value) => selectProduct(value ?? "")}
+          items={products.map((product) => ({
+            value: product.id,
+            label: product.name,
+          }))}
         >
           <SelectTrigger id="recipe-product" className="w-full sm:w-72">
             <SelectValue />

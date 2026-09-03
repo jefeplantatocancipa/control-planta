@@ -49,7 +49,11 @@ function NewOrderForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="product_id">Producto</Label>
-        <Select name="product_id" required>
+        <Select
+          name="product_id"
+          required
+          items={products.map((product) => ({ value: product.id, label: product.name }))}
+        >
           <SelectTrigger id="product_id" className="w-full">
             <SelectValue placeholder="Elegí un producto" />
           </SelectTrigger>

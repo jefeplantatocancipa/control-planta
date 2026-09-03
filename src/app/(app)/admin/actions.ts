@@ -25,6 +25,10 @@ const ProductSchema = z.object({
   code: z.string().trim().min(1, "El código es obligatorio."),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
   unit: z.string().trim().min(1, "La unidad es obligatoria."),
+  volumen_por_bache: z.coerce
+    .number()
+    .positive("El volumen por bache debe ser mayor a 0.")
+    .nullable(),
 });
 
 export async function upsertProduct(
@@ -33,11 +37,13 @@ export async function upsertProduct(
 ): Promise<ActionState> {
   await requireRole(["jefe_planta"]);
 
+  const volumenPorBache = formData.get("volumen_por_bache");
   const parsed = ProductSchema.safeParse({
     id: formData.get("id") || undefined,
     code: formData.get("code"),
     name: formData.get("name"),
     unit: formData.get("unit"),
+    volumen_por_bache: volumenPorBache || null,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };

@@ -69,6 +69,7 @@ export interface Database {
           code: string;
           name: string;
           unit: string;
+          volumen_por_bache: number | null;
           active: boolean;
           created_at: string;
         };
@@ -76,6 +77,7 @@ export interface Database {
           code: string;
           name: string;
           unit?: string;
+          volumen_por_bache?: number | null;
           active?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["products"]["Insert"]>;

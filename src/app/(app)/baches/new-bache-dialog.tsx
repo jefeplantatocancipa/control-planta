@@ -26,6 +26,17 @@ import type { Database } from "@/lib/supabase/types";
 type Product = Database["public"]["Tables"]["products"]["Row"];
 type Order = Database["public"]["Tables"]["production_orders"]["Row"];
 
+function orderLabel(order: Order, productName: string) {
+  const cantidad = order.baches_planeados
+    ? `${order.baches_planeados} baches`
+    : order.planned_quantity
+      ? `${order.planned_quantity} ${order.unit}`
+      : "";
+  return [order.orden_codigo ?? order.scheduled_date, productName, cantidad]
+    .filter(Boolean)
+    .join(" — ");
+}
+
 function NewBacheForm({
   products,
   orders,
@@ -37,12 +48,73 @@ function NewBacheForm({
     createBache,
     {},
   );
+  const productsById = new Map(products.map((p) => [p.id, p]));
+  const [orderId, setOrderId] = useState(NO_ORDER_VALUE);
+  const [productId, setProductId] = useState("");
+  const [volumen, setVolumen] = useState("");
+
+  function selectOrder(value: string) {
+    setOrderId(value);
+    const order = orders.find((o) => o.id === value);
+    if (!order) return;
+    setProductId(order.product_id);
+    const product = productsById.get(order.product_id);
+    if (product?.volumen_por_bache) {
+      setVolumen(String(product.volumen_por_bache));
+    }
+  }
 
   return (
     <form action={action} className="flex flex-col gap-4">
+      {orders.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="production_order_id">Orden de producción</Label>
+          <Select
+            name="production_order_id"
+            value={orderId}
+            onValueChange={(value) => selectOrder(value ?? NO_ORDER_VALUE)}
+            items={[
+              { value: NO_ORDER_VALUE, label: "Sin orden asociada" },
+              ...orders.map((order) => ({
+                value: order.id,
+                label: orderLabel(
+                  order,
+                  productsById.get(order.product_id)?.name ?? "—",
+                ),
+              })),
+            ]}
+          >
+            <SelectTrigger id="production_order_id" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_ORDER_VALUE}>Sin orden asociada</SelectItem>
+              {orders.map((order) => (
+                <SelectItem key={order.id} value={order.id}>
+                  {orderLabel(order, productsById.get(order.product_id)?.name ?? "—")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Al elegir una orden se completan el producto y el volumen
+            sugerido (podés cambiarlos).
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="product_id">Producto</Label>
-        <Select name="product_id" required>
+        <Select
+          name="product_id"
+          value={productId}
+          onValueChange={(value) => setProductId(value ?? "")}
+          items={products.map((product) => ({
+            value: product.id,
+            label: product.name,
+          }))}
+          required
+        >
           <SelectTrigger id="product_id" className="w-full">
             <SelectValue placeholder="Elegí un producto" />
           </SelectTrigger>
@@ -69,28 +141,11 @@ function NewBacheForm({
           type="number"
           step="0.01"
           min="0"
+          value={volumen}
+          onChange={(e) => setVolumen(e.target.value)}
           placeholder="Opcional"
         />
       </div>
-
-      {orders.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="production_order_id">Orden de producción</Label>
-          <Select name="production_order_id" defaultValue={NO_ORDER_VALUE}>
-            <SelectTrigger id="production_order_id" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_ORDER_VALUE}>Sin orden asociada</SelectItem>
-              {orders.map((order) => (
-                <SelectItem key={order.id} value={order.id}>
-                  {order.scheduled_date} — {order.planned_quantity} {order.unit}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
 
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
