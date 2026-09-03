@@ -36,8 +36,9 @@ function ImportEnvasadoForm() {
         />
         <p className="text-xs text-muted-foreground">
           Tiene que tener las columnas de la plantilla: FECHA, Linea, SKU,
-          Descripción, Und Programadas, Gramaje x UND. El producto se busca
-          por el código (sku) ya cargado en Administración → Productos.
+          Descripción, Und Programadas. La referencia se busca por el sku ya
+          cargado en Administración → Envasado (si no existe, creala ahí
+          primero).
         </p>
       </div>
 

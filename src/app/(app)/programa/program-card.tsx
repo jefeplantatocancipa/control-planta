@@ -25,6 +25,8 @@ import type { Database, ProgramStatus } from "@/lib/supabase/types";
 type Program = Database["public"]["Tables"]["production_programs"]["Row"];
 type Order = Database["public"]["Tables"]["production_orders"]["Row"];
 type EnvasadoOrder = Database["public"]["Tables"]["envasado_orders"]["Row"];
+type EnvasadoReferencia =
+  Database["public"]["Tables"]["envasado_referencias"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
 const PROGRAM_STATUS_LABELS: Record<ProgramStatus, string> = {
@@ -44,6 +46,7 @@ export function ProgramCard({
   orders,
   envasadoOrders,
   products,
+  envasadoReferencias,
   canWrite,
   realTimesByOrder,
 }: {
@@ -51,10 +54,12 @@ export function ProgramCard({
   orders: Order[];
   envasadoOrders: EnvasadoOrder[];
   products: Product[];
+  envasadoReferencias: EnvasadoReferencia[];
   canWrite: boolean;
   realTimesByOrder?: Map<string, { start: string; end: string | null }>;
 }) {
   const productNames = new Map(products.map((p) => [p.id, p.name]));
+  const referenciasById = new Map(envasadoReferencias.map((r) => [r.id, r]));
 
   return (
     <Card>
@@ -149,6 +154,7 @@ export function ProgramCard({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Referencia</TableHead>
               <TableHead>Producto</TableHead>
               <TableHead>Línea</TableHead>
               <TableHead>Fecha</TableHead>
@@ -158,27 +164,33 @@ export function ProgramCard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {envasadoOrders.map((order) => (
-              <TableRow key={order.id}>
-                <TableCell className="font-medium">
-                  {productNames.get(order.product_id) ?? "—"}
-                </TableCell>
-                <TableCell>{order.linea ?? "—"}</TableCell>
-                <TableCell>
-                  {format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy")}
-                </TableCell>
-                <TableCell>{order.planned_quantity}</TableCell>
-                <TableCell>
-                  {order.gramaje_por_unidad ? `${order.gramaje_por_unidad} g` : "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">{order.status}</Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            {envasadoOrders.map((order) => {
+              const referencia = referenciasById.get(order.referencia_id);
+              return (
+                <TableRow key={order.id}>
+                  <TableCell className="font-medium">
+                    {referencia ? `${referencia.sku} — ${referencia.name}` : "—"}
+                  </TableCell>
+                  <TableCell>
+                    {referencia ? productNames.get(referencia.product_id) ?? "—" : "—"}
+                  </TableCell>
+                  <TableCell>{order.linea ?? "—"}</TableCell>
+                  <TableCell>
+                    {format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy")}
+                  </TableCell>
+                  <TableCell>{order.planned_quantity}</TableCell>
+                  <TableCell>
+                    {referencia ? `${referencia.peso_unitario} g` : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{order.status}</Badge>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {envasadoOrders.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Sin órdenes de envasado todavía.
                 </TableCell>
               </TableRow>

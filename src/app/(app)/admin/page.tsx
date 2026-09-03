@@ -5,6 +5,7 @@ import { ProductsPanel } from "./products-panel";
 import { StagesPanel } from "./stages-panel";
 import { UsersPanel } from "./users-panel";
 import { InsumosPanel } from "./insumos-panel";
+import { EnvasadoReferenciasPanel } from "./envasado-referencias-panel";
 
 export default async function AdminPage() {
   const profile = await requireRole(["jefe_planta"]);
@@ -16,6 +17,7 @@ export default async function AdminPage() {
     { data: profiles },
     { data: insumos },
     { data: productInsumos },
+    { data: envasadoReferencias },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
     supabase
@@ -25,6 +27,7 @@ export default async function AdminPage() {
     supabase.from("profiles").select("*").order("full_name"),
     supabase.from("insumos").select("*").order("name"),
     supabase.from("product_insumos").select("*"),
+    supabase.from("envasado_referencias").select("*").order("sku"),
   ]);
 
   return (
@@ -42,6 +45,7 @@ export default async function AdminPage() {
           <TabsTrigger value="productos">Productos</TabsTrigger>
           <TabsTrigger value="etapas">Etapas</TabsTrigger>
           <TabsTrigger value="insumos">Insumos</TabsTrigger>
+          <TabsTrigger value="envasado">Envasado</TabsTrigger>
           <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
         </TabsList>
         <TabsContent value="productos">
@@ -55,6 +59,12 @@ export default async function AdminPage() {
             insumos={insumos ?? []}
             products={products ?? []}
             productInsumos={productInsumos ?? []}
+          />
+        </TabsContent>
+        <TabsContent value="envasado">
+          <EnvasadoReferenciasPanel
+            referencias={envasadoReferencias ?? []}
+            products={products ?? []}
           />
         </TabsContent>
         <TabsContent value="usuarios">

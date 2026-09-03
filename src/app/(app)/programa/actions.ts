@@ -402,9 +402,11 @@ export async function importEnvasadoProgram(
   }
 
   const supabase = await createClient();
-  const { data: products } = await supabase.from("products").select("id, code");
-  const productByCode = new Map(
-    (products ?? []).map((p) => [normalize(p.code), p.id]),
+  const { data: referencias } = await supabase
+    .from("envasado_referencias")
+    .select("id, sku");
+  const referenciaBySku = new Map(
+    (referencias ?? []).map((r) => [normalize(r.sku), r.id]),
   );
 
   const { data: existingPrograms } = await supabase
@@ -432,12 +434,12 @@ export async function importEnvasadoProgram(
     const descripcion = columns["descripcion"]
       ? cellText(row.getCell(columns["descripcion"]))
       : "";
-    const productId = productByCode.get(normalize(sku));
-    if (!productId) {
+    const referenciaId = referenciaBySku.get(normalize(sku));
+    if (!referenciaId) {
       warnings.push(
-        `Fila ${r}: no se encontró un producto con sku "${sku}"${
+        `Fila ${r}: no se encontró una referencia de envasado con sku "${sku}"${
           descripcion ? ` (${descripcion})` : ""
-        }.`,
+        }. Creala en Administración → Envasado.`,
       );
       continue;
     }
@@ -450,22 +452,16 @@ export async function importEnvasadoProgram(
     }
 
     const linea = columns["linea"] ? cellText(row.getCell(columns["linea"])) || null : null;
-    const gramajeRaw = columns["gramaje x und"]
-      ? row.getCell(columns["gramaje x und"]).value
-      : null;
-    const gramaje =
-      typeof gramajeRaw === "number" ? gramajeRaw : Number(gramajeRaw) || null;
 
     const week = mondayOfWeek(scheduledDate);
     drafts.push({
       week,
       order: {
         program_id: "",
-        product_id: productId,
+        referencia_id: referenciaId,
         linea,
         scheduled_date: scheduledDate,
         planned_quantity: plannedQuantity,
-        gramaje_por_unidad: gramaje,
       },
     });
   }
@@ -498,7 +494,7 @@ export async function importEnvasadoProgram(
 
   const { error: upsertError } = await supabase
     .from("envasado_orders")
-    .upsert(rows, { onConflict: "scheduled_date,linea,product_id" });
+    .upsert(rows, { onConflict: "scheduled_date,linea,referencia_id" });
 
   if (upsertError) {
     return { error: "No se pudieron guardar las órdenes de envasado importadas." };

@@ -193,25 +193,47 @@ export interface Database {
         >;
         Relationships: [];
       };
+      envasado_referencias: {
+        Row: {
+          id: string;
+          product_id: string;
+          sku: string;
+          name: string;
+          peso_unitario: number;
+          multiempaque: number;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          product_id: string;
+          sku: string;
+          name: string;
+          peso_unitario: number;
+          multiempaque?: number;
+          active?: boolean;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_referencias"]["Insert"]
+        >;
+        Relationships: [];
+      };
       envasado_orders: {
         Row: {
           id: string;
           program_id: string;
-          product_id: string;
+          referencia_id: string;
           linea: string | null;
           scheduled_date: string;
           planned_quantity: number;
-          gramaje_por_unidad: number | null;
           status: OrderStatus;
           created_at: string;
         };
         Insert: {
           program_id: string;
-          product_id: string;
+          referencia_id: string;
           linea?: string | null;
           scheduled_date: string;
           planned_quantity: number;
-          gramaje_por_unidad?: number | null;
           status?: OrderStatus;
         };
         Update: Partial<

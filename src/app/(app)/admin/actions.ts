@@ -479,3 +479,58 @@ export async function saveProductRecipe(
   revalidatePath("/admin");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Referencias de envasado (presentaciones empacadas, por sku)
+// ---------------------------------------------------------------------------
+const EnvasadoReferenciaSchema = z.object({
+  id: z.string().uuid().optional(),
+  product_id: z.string().uuid({ message: "Elegí un producto." }),
+  sku: z.string().trim().min(1, "La referencia (sku) es obligatoria."),
+  name: z.string().trim().min(1, "El nombre es obligatorio."),
+  peso_unitario: z.coerce
+    .number()
+    .positive("El peso unitario debe ser mayor a 0."),
+  multiempaque: z.coerce
+    .number()
+    .int()
+    .positive("El multiempaque debe ser mayor a 0."),
+});
+
+export async function upsertEnvasadoReferencia(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = EnvasadoReferenciaSchema.safeParse({
+    id: formData.get("id") || undefined,
+    product_id: formData.get("product_id"),
+    sku: formData.get("sku"),
+    name: formData.get("name"),
+    peso_unitario: formData.get("peso_unitario"),
+    multiempaque: formData.get("multiempaque"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const active = formData.get("active") === "on";
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("envasado_referencias").update({ ...values, active }).eq("id", id)
+    : await supabase.from("envasado_referencias").insert({ ...values, active });
+
+  if (error) {
+    return {
+      error: isUniqueViolation(error)
+        ? "Ya existe una referencia con ese sku."
+        : "No se pudo guardar la referencia.",
+    };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}

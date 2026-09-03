@@ -14,6 +14,7 @@ export default async function ProgramaPage() {
     { data: orders },
     { data: envasadoOrders },
     { data: products },
+    { data: envasadoReferencias },
     { data: baches },
   ] = await Promise.all([
     supabase
@@ -29,6 +30,7 @@ export default async function ProgramaPage() {
       .select("*")
       .order("scheduled_date"),
     supabase.from("products").select("*").order("name"),
+    supabase.from("envasado_referencias").select("*"),
     supabase
       .from("baches")
       .select("production_order_id, started_at, completed_at")
@@ -80,6 +82,7 @@ export default async function ProgramaPage() {
               (o) => o.program_id === program.id,
             )}
             products={products ?? []}
+            envasadoReferencias={envasadoReferencias ?? []}
             canWrite={canWrite}
             realTimesByOrder={realTimesByOrder}
           />
