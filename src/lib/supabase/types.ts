@@ -193,6 +193,32 @@ export interface Database {
         >;
         Relationships: [];
       };
+      envasado_orders: {
+        Row: {
+          id: string;
+          program_id: string;
+          product_id: string;
+          linea: string | null;
+          scheduled_date: string;
+          planned_quantity: number;
+          gramaje_por_unidad: number | null;
+          status: OrderStatus;
+          created_at: string;
+        };
+        Insert: {
+          program_id: string;
+          product_id: string;
+          linea?: string | null;
+          scheduled_date: string;
+          planned_quantity: number;
+          gramaje_por_unidad?: number | null;
+          status?: OrderStatus;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_orders"]["Insert"]
+        >;
+        Relationships: [];
+      };
       enmangado_programs: {
         Row: {
           id: string;

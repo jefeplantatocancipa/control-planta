@@ -24,6 +24,7 @@ import type { Database, ProgramStatus } from "@/lib/supabase/types";
 
 type Program = Database["public"]["Tables"]["production_programs"]["Row"];
 type Order = Database["public"]["Tables"]["production_orders"]["Row"];
+type EnvasadoOrder = Database["public"]["Tables"]["envasado_orders"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
 const PROGRAM_STATUS_LABELS: Record<ProgramStatus, string> = {
@@ -41,12 +42,14 @@ function formatWeek(dateStr: string) {
 export function ProgramCard({
   program,
   orders,
+  envasadoOrders,
   products,
   canWrite,
   realTimesByOrder,
 }: {
   program: Program;
   orders: Order[];
+  envasadoOrders: EnvasadoOrder[];
   products: Product[];
   canWrite: boolean;
   realTimesByOrder?: Map<string, { start: string; end: string | null }>;
@@ -69,6 +72,7 @@ export function ProgramCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <h3 className="text-sm font-medium">Baches</h3>
         <Table>
           <TableHeader>
             <TableRow>
@@ -140,6 +144,47 @@ export function ProgramCard({
             />
           </div>
         )}
+
+        <h3 className="mt-3 text-sm font-medium">Envasado</h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Producto</TableHead>
+              <TableHead>Línea</TableHead>
+              <TableHead>Fecha</TableHead>
+              <TableHead>Und. programadas</TableHead>
+              <TableHead>Gramaje x und.</TableHead>
+              <TableHead>Estado</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {envasadoOrders.map((order) => (
+              <TableRow key={order.id}>
+                <TableCell className="font-medium">
+                  {productNames.get(order.product_id) ?? "—"}
+                </TableCell>
+                <TableCell>{order.linea ?? "—"}</TableCell>
+                <TableCell>
+                  {format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy")}
+                </TableCell>
+                <TableCell>{order.planned_quantity}</TableCell>
+                <TableCell>
+                  {order.gramaje_por_unidad ? `${order.gramaje_por_unidad} g` : "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{order.status}</Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+            {envasadoOrders.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  Sin órdenes de envasado todavía.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
