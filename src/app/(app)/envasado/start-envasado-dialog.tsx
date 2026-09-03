@@ -47,8 +47,6 @@ interface InsumoUsoDraft {
   fecha_vencimiento: string;
   proveedor: string;
   cantidad_usada: string;
-  unidad_medida: string;
-  desperdicio: string;
 }
 
 function InsumosUsoChecklist({
@@ -114,28 +112,6 @@ function InsumosUsoChecklist({
                   onChange={(e) => updateAt(index, { cantidad_usada: e.target.value })}
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs font-normal text-muted-foreground">
-                  Unidad de medida
-                </Label>
-                <Input
-                  placeholder="kg, und, m..."
-                  value={draft.unidad_medida}
-                  onChange={(e) => updateAt(index, { unidad_medida: e.target.value })}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs font-normal text-muted-foreground">
-                  Desperdicio
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={draft.desperdicio}
-                  onChange={(e) => updateAt(index, { desperdicio: e.target.value })}
-                />
-              </div>
             </div>
           )}
         </div>
@@ -159,8 +135,6 @@ function buildInsumoDrafts(list: EnvasadoInsumo[]): InsumoUsoDraft[] {
     fecha_vencimiento: "",
     proveedor: "",
     cantidad_usada: "",
-    unidad_medida: "",
-    desperdicio: "",
   }));
 }
 
@@ -321,8 +295,6 @@ function StartEnvasadoForm({
             fecha_vencimiento: i.fecha_vencimiento || undefined,
             proveedor: i.proveedor,
             cantidad_usada: i.cantidad_usada || undefined,
-            unidad_medida: i.unidad_medida,
-            desperdicio: i.desperdicio || undefined,
           })),
         )}
       />

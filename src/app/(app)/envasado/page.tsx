@@ -30,6 +30,8 @@ export default async function EnvasadoPage() {
     { data: envasadoReferenciaInsumos },
     { data: turnos },
     { data: cortes },
+    { data: calidadLecturas },
+    { data: estibas },
   ] = await Promise.all([
     supabase
       .from("envasados")
@@ -58,7 +60,9 @@ export default async function EnvasadoPage() {
     supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
-    supabase.from("envasado_cortes").select("*").order("created_at"),
+    supabase.from("envasado_cortes").select("*").order("started_at"),
+    supabase.from("envasado_calidad_lecturas").select("*").order("created_at"),
+    supabase.from("envasado_estibas").select("*").order("inicio_estiba"),
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
@@ -70,6 +74,36 @@ export default async function EnvasadoPage() {
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
 
   const turnoNames = new Map((turnos ?? []).map((t) => [t.id, t.name]));
+
+  const lecturasByCorte = new Map<string, CorteDisplay["lecturas"]>();
+  for (const lectura of calidadLecturas ?? []) {
+    const pesos = [lectura.peso_1, lectura.peso_2, lectura.peso_3].filter(
+      (p): p is number => p !== null,
+    );
+    const list = lecturasByCorte.get(lectura.corte_id) ?? [];
+    list.push({
+      id: lectura.id,
+      timestamp: lectura.created_at,
+      pesoPromedio: pesos.length === 3 ? (pesos[0] + pesos[1] + pesos[2]) / 3 : null,
+      selladoCumple: lectura.sellado_cumple,
+      fechadoCumple: lectura.fechado_cumple,
+      observaciones: lectura.observaciones,
+    });
+    lecturasByCorte.set(lectura.corte_id, list);
+  }
+
+  const estibasByCorte = new Map<string, CorteDisplay["estibas"]>();
+  for (const estiba of estibas ?? []) {
+    const list = estibasByCorte.get(estiba.corte_id) ?? [];
+    list.push({
+      id: estiba.id,
+      inicioEstiba: estiba.inicio_estiba,
+      finalEstiba: estiba.final_estiba,
+      unidadesPorEstiba: estiba.unidades_por_estiba,
+    });
+    estibasByCorte.set(estiba.corte_id, list);
+  }
+
   const cortesByEnvasado = new Map<string, CorteDisplay[]>();
   for (const corte of cortes ?? []) {
     const operariosLabel = [
@@ -78,21 +112,18 @@ export default async function EnvasadoPage() {
     ]
       .filter(Boolean)
       .join(" y ");
-    const pesos = [corte.peso_1, corte.peso_2, corte.peso_3].filter(
-      (p): p is number => p !== null,
-    );
     const display: CorteDisplay = {
       id: corte.id,
       turnoName: turnoNames.get(corte.turno_id) ?? "—",
-      fecha: format(new Date(`${corte.fecha}T00:00:00`), "dd/MM/yyyy"),
       operarios: operariosLabel || "—",
-      unidades: corte.unidades_final - corte.unidades_inicio,
+      startedAt: corte.started_at,
+      endedAt: corte.ended_at,
+      unidadesInicio: corte.unidades_inicio,
       unidadesFinal: corte.unidades_final,
-      selladoCumple: corte.sellado_cumple,
-      loteMarcado: corte.lote_marcado,
-      pesoPromedio:
-        pesos.length === 3 ? (pesos[0] + pesos[1] + pesos[2]) / 3 : null,
+      desperdicio: corte.desperdicio,
       observaciones: corte.observaciones,
+      lecturas: lecturasByCorte.get(corte.id) ?? [],
+      estibas: estibasByCorte.get(corte.id) ?? [],
     };
     const list = cortesByEnvasado.get(corte.envasado_id) ?? [];
     list.push(display);

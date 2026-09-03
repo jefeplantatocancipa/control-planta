@@ -547,13 +547,11 @@ export interface Database {
           fecha: string;
           operario_id: string;
           operario_2_id: string | null;
+          started_at: string;
+          ended_at: string | null;
           unidades_inicio: number;
-          unidades_final: number;
-          sellado_cumple: boolean;
-          lote_marcado: "C" | "NC";
-          peso_1: number | null;
-          peso_2: number | null;
-          peso_3: number | null;
+          unidades_final: number | null;
+          desperdicio: number | null;
           observaciones: string | null;
           created_by: string;
           created_at: string;
@@ -564,18 +562,66 @@ export interface Database {
           fecha?: string;
           operario_id: string;
           operario_2_id?: string | null;
+          started_at?: string;
+          ended_at?: string | null;
           unidades_inicio: number;
-          unidades_final: number;
-          sellado_cumple: boolean;
-          lote_marcado: "C" | "NC";
-          peso_1?: number | null;
-          peso_2?: number | null;
-          peso_3?: number | null;
+          unidades_final?: number | null;
+          desperdicio?: number | null;
           observaciones?: string | null;
           created_by: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["envasado_cortes"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      envasado_calidad_lecturas: {
+        Row: {
+          id: string;
+          corte_id: string;
+          peso_1: number | null;
+          peso_2: number | null;
+          peso_3: number | null;
+          sellado_cumple: boolean;
+          fechado_cumple: boolean;
+          observaciones: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          corte_id: string;
+          peso_1?: number | null;
+          peso_2?: number | null;
+          peso_3?: number | null;
+          sellado_cumple: boolean;
+          fechado_cumple: boolean;
+          observaciones?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_calidad_lecturas"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      envasado_estibas: {
+        Row: {
+          id: string;
+          corte_id: string;
+          inicio_estiba: string;
+          final_estiba: string | null;
+          unidades_por_estiba: number | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          corte_id: string;
+          inicio_estiba?: string;
+          final_estiba?: string | null;
+          unidades_por_estiba?: number | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_estibas"]["Insert"]
         >;
         Relationships: [];
       };

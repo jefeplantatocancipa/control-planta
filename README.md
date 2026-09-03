@@ -43,6 +43,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 16. `0016_envasado_turnos_cortes.sql` — control de envasado por turno: tabla `turnos` (franjas horarias fijas, con A/B/C precargados), catálogo `envasado_insumos` (envases/empaques), `envasado_insumos_uso` (lote/vencimiento/proveedor/cantidad/desperdicio capturados al iniciar el envasado) y `envasado_cortes` (checkpoint por turno: unidades inicio/final, operarios, sellado cumple/no cumple, lote C/NC, peso de 3 unidades).
 17. `0017_envasado_insumos_detalle.sql` — columnas `presentacion_caja` y `marca` en `envasado_insumos`, para el importador de Excel del catálogo de material de empaque.
 18. `0018_envasado_referencia_insumos.sql` — tabla `envasado_referencia_insumos`: receta de material de empaque por referencia (sku), igual que `product_insumos` para la receta de materia prima por producto. Filtra el checklist de "Iniciar envasado" a solo los insumos que corresponden a la referencia elegida.
+19. `0019_envasado_control_horario.sql` — reestructura `envasado_cortes` como inicio/fin de turno (`started_at`/`ended_at`, `unidades_final` y `desperdicio` opcionales hasta finalizar); mueve el control de calidad (peso neto, sellado, fechado) a lecturas repetidas en `envasado_calidad_lecturas`; agrega `envasado_estibas` para medir cuánto se demora cada estiba y sus unidades.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

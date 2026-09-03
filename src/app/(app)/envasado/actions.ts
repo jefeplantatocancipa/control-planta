@@ -150,71 +150,56 @@ export async function saveEnvasado(
 }
 
 // ---------------------------------------------------------------------------
-// Corte de turno: checkpoint de calidad y unidades por turno (A/B/C)
+// Turno: inicio y fin (como iniciar/finalizar una etapa). Mientras está
+// activo (sin ended_at) se le van agregando lecturas de calidad y ciclos
+// de estiba por separado.
 // ---------------------------------------------------------------------------
-const CorteTurnoSchema = z
-  .object({
-    envasado_id: z.string().uuid(),
-    turno_id: z.string().uuid({ message: "Elegí un turno." }),
-    operario_id: z.string().uuid({ message: "Elegí el operario responsable." }),
-    operario_2_id: z.string().uuid().nullable(),
-    unidades_inicio: z.coerce
-      .number()
-      .min(0, "Las unidades de inicio no pueden ser negativas."),
-    unidades_final: z.coerce
-      .number()
-      .min(0, "Las unidades finales no pueden ser negativas."),
-    sellado_cumple: z.enum(["true", "false"]),
-    lote_marcado: z.enum(["C", "NC"]),
-    peso_1: z.coerce.number().positive().optional(),
-    peso_2: z.coerce.number().positive().optional(),
-    peso_3: z.coerce.number().positive().optional(),
-    observaciones: z.string().trim().optional(),
-  })
-  .refine((data) => data.unidades_final >= data.unidades_inicio, {
-    message: "Las unidades finales no pueden ser menores a las iniciales.",
-    path: ["unidades_final"],
-  });
+const IniciarTurnoSchema = z.object({
+  envasado_id: z.string().uuid(),
+  turno_id: z.string().uuid({ message: "Elegí un turno." }),
+  operario_id: z.string().uuid({ message: "Elegí el operario responsable." }),
+  operario_2_id: z.string().uuid().nullable(),
+  unidades_inicio: z.coerce
+    .number()
+    .min(0, "Las unidades de inicio no pueden ser negativas."),
+});
 
-export async function addCorteTurno(
+export async function iniciarCorteTurno(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const profile = await requireRole(["jefe_planta", "supervisor"]);
 
   const operario2 = formData.get("operario_2_id");
-  const parsed = CorteTurnoSchema.safeParse({
+  const parsed = IniciarTurnoSchema.safeParse({
     envasado_id: formData.get("envasado_id"),
     turno_id: formData.get("turno_id"),
     operario_id: formData.get("operario_id"),
     operario_2_id: operario2 && operario2 !== NO_ORDER_VALUE ? operario2 : null,
     unidades_inicio: formData.get("unidades_inicio"),
-    unidades_final: formData.get("unidades_final"),
-    sellado_cumple: formData.get("sellado_cumple"),
-    lote_marcado: formData.get("lote_marcado"),
-    peso_1: formData.get("peso_1") || undefined,
-    peso_2: formData.get("peso_2") || undefined,
-    peso_3: formData.get("peso_3") || undefined,
-    observaciones: formData.get("observaciones"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
   const supabase = await createClient();
+
+  const { data: activo } = await supabase
+    .from("envasado_cortes")
+    .select("id")
+    .eq("envasado_id", parsed.data.envasado_id)
+    .is("ended_at", null)
+    .limit(1);
+  if (activo && activo.length > 0) {
+    return { error: "Ya hay un turno activo. Finalizalo antes de iniciar otro." };
+  }
+
   const { error } = await supabase.from("envasado_cortes").insert({
     envasado_id: parsed.data.envasado_id,
     turno_id: parsed.data.turno_id,
     operario_id: parsed.data.operario_id,
     operario_2_id: parsed.data.operario_2_id,
     unidades_inicio: parsed.data.unidades_inicio,
-    unidades_final: parsed.data.unidades_final,
-    sellado_cumple: parsed.data.sellado_cumple === "true",
-    lote_marcado: parsed.data.lote_marcado,
-    peso_1: parsed.data.peso_1 ?? null,
-    peso_2: parsed.data.peso_2 ?? null,
-    peso_3: parsed.data.peso_3 ?? null,
-    observaciones: parsed.data.observaciones || null,
     created_by: profile.id,
   });
 
@@ -222,9 +207,197 @@ export async function addCorteTurno(
     return {
       error:
         error.code === "23505"
-          ? "Ya se registró un corte para ese turno hoy."
-          : "No se pudo guardar el corte.",
+          ? "Ya se registró un turno de esa franja horaria hoy."
+          : "No se pudo iniciar el turno.",
     };
+  }
+
+  revalidatePath("/envasado");
+  return { success: true };
+}
+
+const FinalizarTurnoSchema = z
+  .object({
+    corte_id: z.string().uuid(),
+    unidades_inicio: z.coerce.number(),
+    unidades_final: z.coerce
+      .number()
+      .min(0, "Las unidades finales no pueden ser negativas."),
+    desperdicio: z.coerce.number().min(0).optional(),
+    observaciones: z.string().trim().optional(),
+  })
+  .refine((data) => data.unidades_final >= data.unidades_inicio, {
+    message: "Las unidades finales no pueden ser menores a las iniciales.",
+    path: ["unidades_final"],
+  });
+
+export async function finalizarCorteTurno(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = FinalizarTurnoSchema.safeParse({
+    corte_id: formData.get("corte_id"),
+    unidades_inicio: formData.get("unidades_inicio"),
+    unidades_final: formData.get("unidades_final"),
+    desperdicio: formData.get("desperdicio") || undefined,
+    observaciones: formData.get("observaciones"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("envasado_cortes")
+    .update({
+      ended_at: new Date().toISOString(),
+      unidades_final: parsed.data.unidades_final,
+      desperdicio: parsed.data.desperdicio ?? null,
+      observaciones: parsed.data.observaciones || null,
+    })
+    .eq("id", parsed.data.corte_id);
+
+  if (error) {
+    return { error: "No se pudo finalizar el turno." };
+  }
+
+  revalidatePath("/envasado");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Lecturas de calidad (peso neto de 3 unidades, sellado, fechado): se van
+// agregando cada hora mientras el turno está activo.
+// ---------------------------------------------------------------------------
+const CalidadLecturaSchema = z.object({
+  corte_id: z.string().uuid(),
+  peso_1: z.coerce.number().positive().optional(),
+  peso_2: z.coerce.number().positive().optional(),
+  peso_3: z.coerce.number().positive().optional(),
+  sellado_cumple: z.enum(["true", "false"]),
+  fechado_cumple: z.enum(["true", "false"]),
+  observaciones: z.string().trim().optional(),
+});
+
+export async function addCalidadLectura(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = CalidadLecturaSchema.safeParse({
+    corte_id: formData.get("corte_id"),
+    peso_1: formData.get("peso_1") || undefined,
+    peso_2: formData.get("peso_2") || undefined,
+    peso_3: formData.get("peso_3") || undefined,
+    sellado_cumple: formData.get("sellado_cumple"),
+    fechado_cumple: formData.get("fechado_cumple"),
+    observaciones: formData.get("observaciones"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("envasado_calidad_lecturas").insert({
+    corte_id: parsed.data.corte_id,
+    peso_1: parsed.data.peso_1 ?? null,
+    peso_2: parsed.data.peso_2 ?? null,
+    peso_3: parsed.data.peso_3 ?? null,
+    sellado_cumple: parsed.data.sellado_cumple === "true",
+    fechado_cumple: parsed.data.fechado_cumple === "true",
+    observaciones: parsed.data.observaciones || null,
+    created_by: profile.id,
+  });
+
+  if (error) {
+    return { error: "No se pudo guardar la lectura." };
+  }
+
+  revalidatePath("/envasado");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Estibas: cuánto se demora armando cada estiba, con sus unidades. Solo
+// puede haber una estiba abierta a la vez por turno.
+// ---------------------------------------------------------------------------
+const IniciarEstibaSchema = z.object({
+  corte_id: z.string().uuid(),
+});
+
+export async function iniciarEstiba(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = IniciarEstibaSchema.safeParse({
+    corte_id: formData.get("corte_id"),
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: abierta } = await supabase
+    .from("envasado_estibas")
+    .select("id")
+    .eq("corte_id", parsed.data.corte_id)
+    .is("final_estiba", null)
+    .limit(1);
+  if (abierta && abierta.length > 0) {
+    return { error: "Ya hay una estiba en curso. Finalizala antes de iniciar otra." };
+  }
+
+  const { error } = await supabase.from("envasado_estibas").insert({
+    corte_id: parsed.data.corte_id,
+    created_by: profile.id,
+  });
+
+  if (error) {
+    return { error: "No se pudo iniciar la estiba." };
+  }
+
+  revalidatePath("/envasado");
+  return { success: true };
+}
+
+const FinalizarEstibaSchema = z.object({
+  estiba_id: z.string().uuid(),
+  unidades_por_estiba: z.coerce
+    .number()
+    .positive("Las unidades de la estiba deben ser mayores a 0."),
+});
+
+export async function finalizarEstiba(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = FinalizarEstibaSchema.safeParse({
+    estiba_id: formData.get("estiba_id"),
+    unidades_por_estiba: formData.get("unidades_por_estiba"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("envasado_estibas")
+    .update({
+      final_estiba: new Date().toISOString(),
+      unidades_por_estiba: parsed.data.unidades_por_estiba,
+    })
+    .eq("id", parsed.data.estiba_id);
+
+  if (error) {
+    return { error: "No se pudo finalizar la estiba." };
   }
 
   revalidatePath("/envasado");
