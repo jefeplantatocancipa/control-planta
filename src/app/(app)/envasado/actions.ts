@@ -103,46 +103,60 @@ export async function startEnvasado(
   return { success: true };
 }
 
-const SaveEnvasadoSchema = z.object({
+const FinalizarEnvasadoSchema = z.object({
   record_id: z.string().uuid(),
-  cantidad_unidades: z.coerce
-    .number()
-    .min(0, "La cantidad no puede ser negativa."),
-  cantidad_mermas: z.coerce.number().min(0, "Las mermas no pueden ser negativas."),
-  notes: z.string().trim().optional(),
-  finalize: z.enum(["true", "false"]),
 });
 
-export async function saveEnvasado(
+export async function finalizarEnvasado(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["jefe_planta", "supervisor"]);
 
-  const parsed = SaveEnvasadoSchema.safeParse({
+  const parsed = FinalizarEnvasadoSchema.safeParse({
     record_id: formData.get("record_id"),
-    cantidad_unidades: formData.get("cantidad_unidades"),
-    cantidad_mermas: formData.get("cantidad_mermas") || 0,
-    notes: formData.get("notes"),
-    finalize: formData.get("finalize"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+    return { error: "Datos inválidos." };
   }
 
   const supabase = await createClient();
+
+  const { data: activo } = await supabase
+    .from("envasado_cortes")
+    .select("id")
+    .eq("envasado_id", parsed.data.record_id)
+    .is("ended_at", null)
+    .limit(1);
+  if (activo && activo.length > 0) {
+    return { error: "Finalizá el turno activo antes de cerrar el envasado." };
+  }
+
+  // Las unidades y mermas totales son la suma de lo que dejó cada turno
+  // (unidades_final - unidades_inicio, y desperdicio), no un valor a mano.
+  const { data: cortes } = await supabase
+    .from("envasado_cortes")
+    .select("unidades_inicio, unidades_final, desperdicio")
+    .eq("envasado_id", parsed.data.record_id)
+    .not("ended_at", "is", null);
+
+  const cantidad_unidades = (cortes ?? []).reduce(
+    (sum, c) => sum + ((c.unidades_final ?? c.unidades_inicio) - c.unidades_inicio),
+    0,
+  );
+  const cantidad_mermas = (cortes ?? []).reduce((sum, c) => sum + (c.desperdicio ?? 0), 0);
+
   const { error } = await supabase
     .from("envasados")
     .update({
-      cantidad_unidades: parsed.data.cantidad_unidades,
-      cantidad_mermas: parsed.data.cantidad_mermas,
-      notes: parsed.data.notes || null,
-      ended_at: parsed.data.finalize === "true" ? new Date().toISOString() : null,
+      cantidad_unidades,
+      cantidad_mermas,
+      ended_at: new Date().toISOString(),
     })
     .eq("id", parsed.data.record_id);
 
   if (error) {
-    return { error: "No se pudo guardar el envasado." };
+    return { error: "No se pudo finalizar el envasado." };
   }
 
   revalidatePath("/envasado");

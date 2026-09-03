@@ -1,4 +1,6 @@
 import { format } from "date-fns";
+import Link from "next/link";
+import { Printer } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -9,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
 import { EnvasadoCard, type CorteDisplay } from "./envasado-card";
 import { formatDateTime } from "@/lib/format-date";
@@ -209,9 +212,6 @@ export default async function EnvasadoPage() {
               bacheLabel={bacheLabels.get(envasado.bache_id) ?? "—"}
               presentacion={envasado.presentacion}
               operarioName={operarioNames.get(envasado.operario_id) ?? "—"}
-              cantidadUnidades={envasado.cantidad_unidades}
-              cantidadMermas={envasado.cantidad_mermas}
-              notes={envasado.notes}
               massBalanceKg={massBalanceByBache.get(envasado.bache_id)?.kg}
               turnos={turnos ?? []}
               operarios={operarios ?? []}
@@ -236,6 +236,7 @@ export default async function EnvasadoPage() {
               <TableHead>Mermas</TableHead>
               <TableHead>Operario</TableHead>
               <TableHead>Finalizado</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -254,11 +255,20 @@ export default async function EnvasadoPage() {
                 <TableCell>
                   {envasado.ended_at && formatDateTime(envasado.ended_at)}
                 </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/envasado/${envasado.id}/imprimir`}
+                    className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                    title="Imprimir informe"
+                  >
+                    <Printer className="size-4" />
+                  </Link>
+                </TableCell>
               </TableRow>
             ))}
             {closed.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   Sin envasados finalizados todavía.
                 </TableCell>
               </TableRow>

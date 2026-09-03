@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { saveEnvasado, type ActionState } from "./actions";
+import Link from "next/link";
+import { Printer } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { finalizarEnvasado, type ActionState } from "./actions";
 import { TurnoPanel, type CorteDisplay } from "./turno-panel";
 import type { Database } from "@/lib/supabase/types";
 
@@ -14,14 +14,43 @@ type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 export type { CorteDisplay, LecturaDisplay, EstibaDisplay } from "./turno-panel";
 
+function FinalizarEnvasadoForm({
+  recordId,
+  disabled,
+}: {
+  recordId: string;
+  disabled: boolean;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    finalizarEnvasado,
+    {},
+  );
+
+  return (
+    <form action={action} className="flex flex-col items-end gap-1">
+      <input type="hidden" name="record_id" value={recordId} />
+      <Button type="submit" size="sm" disabled={pending || disabled}>
+        {pending ? "Finalizando..." : "Finalizar envasado"}
+      </Button>
+      {disabled && (
+        <p className="text-xs text-muted-foreground">
+          Finalizá el turno activo antes de cerrar el envasado.
+        </p>
+      )}
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 export function EnvasadoCard({
   recordId,
   bacheLabel,
   presentacion,
   operarioName,
-  cantidadUnidades,
-  cantidadMermas,
-  notes,
   massBalanceKg,
   turnos,
   operarios,
@@ -31,18 +60,18 @@ export function EnvasadoCard({
   bacheLabel: string;
   presentacion: string;
   operarioName: string;
-  cantidadUnidades: number;
-  cantidadMermas: number;
-  notes: string | null;
   massBalanceKg?: number;
   turnos: Turno[];
   operarios: Profile[];
   cortes: CorteDisplay[];
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(
-    saveEnvasado,
-    {},
+  const cortesCerrados = cortes.filter((c) => c.endedAt);
+  const hayTurnoActivo = cortes.some((c) => !c.endedAt);
+  const totalUnidades = cortesCerrados.reduce(
+    (sum, c) => sum + ((c.unidadesFinal ?? c.unidadesInicio) - c.unidadesInicio),
+    0,
   );
+  const totalDesperdicio = cortesCerrados.reduce((sum, c) => sum + (c.desperdicio ?? 0), 0);
 
   return (
     <Card>
@@ -50,6 +79,15 @@ export function EnvasadoCard({
         <CardTitle className="text-base">
           {bacheLabel} · {presentacion}
         </CardTitle>
+        <CardAction>
+          <Link
+            href={`/envasado/${recordId}/imprimir`}
+            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            title="Imprimir informe"
+          >
+            <Printer className="size-4" />
+          </Link>
+        </CardAction>
         <p className="text-sm text-muted-foreground">{operarioName}</p>
         {massBalanceKg !== undefined && (
           <p className="text-sm text-muted-foreground">
@@ -59,69 +97,20 @@ export function EnvasadoCard({
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <form action={action} className="flex flex-col gap-3">
-          <input type="hidden" name="record_id" value={recordId} />
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={`unidades-${recordId}`}>Unidades (total)</Label>
-              <Input
-                id={`unidades-${recordId}`}
-                name="cantidad_unidades"
-                type="number"
-                step="1"
-                min="0"
-                defaultValue={cantidadUnidades}
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={`mermas-${recordId}`}>Mermas (total)</Label>
-              <Input
-                id={`mermas-${recordId}`}
-                name="cantidad_mermas"
-                type="number"
-                step="1"
-                min="0"
-                defaultValue={cantidadMermas}
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`notes-${recordId}`}>Notas</Label>
-            <Input
-              id={`notes-${recordId}`}
-              name="notes"
-              defaultValue={notes ?? ""}
-              placeholder="Opcional"
-            />
-          </div>
-          {state.error && (
-            <p className="text-sm text-destructive" role="alert">
-              {state.error}
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Unidades: <span className="font-semibold text-foreground">{totalUnidades}</span>
+              {" · "}
+              Desperdicio:{" "}
+              <span className="font-semibold text-foreground">{totalDesperdicio}</span>
             </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button
-              type="submit"
-              name="finalize"
-              value="false"
-              variant="outline"
-              size="sm"
-              disabled={pending}
-            >
-              Actualizar
-            </Button>
-            <Button
-              type="submit"
-              name="finalize"
-              value="true"
-              size="sm"
-              disabled={pending}
-            >
-              Finalizar
-            </Button>
+            <p className="text-xs text-muted-foreground">
+              Suma de los turnos ya finalizados.
+            </p>
           </div>
-        </form>
+          <FinalizarEnvasadoForm recordId={recordId} disabled={hayTurnoActivo} />
+        </div>
 
         <TurnoPanel
           envasadoId={recordId}
