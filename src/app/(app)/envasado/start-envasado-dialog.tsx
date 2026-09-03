@@ -25,6 +25,7 @@ import { NO_ORDER_VALUE } from "./constants";
 import type { Database } from "@/lib/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
 
 interface BacheOption {
   id: string;
@@ -37,15 +38,107 @@ interface EnvasadoOrderOption {
   presentacion: string;
 }
 
+interface InsumoUsoDraft {
+  envasado_insumo_id: string;
+  nombre: string;
+  checked: boolean;
+  lote: string;
+  fecha_vencimiento: string;
+  proveedor: string;
+  cantidad_usada: string;
+  unidad_medida: string;
+  desperdicio: string;
+}
+
+function InsumosUsoChecklist({
+  drafts,
+  onChange,
+}: {
+  drafts: InsumoUsoDraft[];
+  onChange: (drafts: InsumoUsoDraft[]) => void;
+}) {
+  function updateAt(index: number, patch: Partial<InsumoUsoDraft>) {
+    onChange(drafts.map((draft, i) => (i === index ? { ...draft, ...patch } : draft)));
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Label>Insumos de envasado usados</Label>
+      {drafts.map((draft, index) => (
+        <div key={draft.envasado_insumo_id} className="flex flex-col gap-2 rounded-lg border p-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={draft.checked}
+              onChange={(e) => updateAt(index, { checked: e.target.checked })}
+            />
+            {draft.nombre}
+          </label>
+          {draft.checked && (
+            <div className="grid grid-cols-2 gap-2 pl-6 sm:grid-cols-3">
+              <Input
+                placeholder="Lote"
+                value={draft.lote}
+                onChange={(e) => updateAt(index, { lote: e.target.value })}
+              />
+              <Input
+                placeholder="Vencimiento"
+                type="date"
+                value={draft.fecha_vencimiento}
+                onChange={(e) => updateAt(index, { fecha_vencimiento: e.target.value })}
+              />
+              <Input
+                placeholder="Proveedor"
+                value={draft.proveedor}
+                onChange={(e) => updateAt(index, { proveedor: e.target.value })}
+              />
+              <Input
+                placeholder="Cantidad usada"
+                type="number"
+                step="0.01"
+                min="0"
+                value={draft.cantidad_usada}
+                onChange={(e) => updateAt(index, { cantidad_usada: e.target.value })}
+              />
+              <Input
+                placeholder="Unidad (kg, und, m)"
+                value={draft.unidad_medida}
+                onChange={(e) => updateAt(index, { unidad_medida: e.target.value })}
+              />
+              <Input
+                placeholder="Desperdicio"
+                type="number"
+                step="0.01"
+                min="0"
+                value={draft.desperdicio}
+                onChange={(e) => updateAt(index, { desperdicio: e.target.value })}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      {drafts.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No hay insumos de envasado configurados en Administración →
+          Envasado.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function StartEnvasadoForm({
   baches,
   operarios,
   envasadoOrders,
+  envasadoInsumos,
   onSuccess,
 }: {
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
+  envasadoInsumos: EnvasadoInsumo[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -54,6 +147,20 @@ function StartEnvasadoForm({
   );
   const [orderId, setOrderId] = useState(NO_ORDER_VALUE);
   const [presentacion, setPresentacion] = useState("");
+  const [insumos, setInsumos] = useState<InsumoUsoDraft[]>(
+    envasadoInsumos.map((i) => ({
+      envasado_insumo_id: i.id,
+      nombre: i.name,
+      checked: false,
+      lote: "",
+      fecha_vencimiento: "",
+      proveedor: "",
+      cantidad_usada: "",
+      unidad_medida: "",
+      desperdicio: "",
+    })),
+  );
+  const [insumosObservacion, setInsumosObservacion] = useState("");
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -64,6 +171,8 @@ function StartEnvasadoForm({
     const order = envasadoOrders.find((o) => o.id === value);
     if (order) setPresentacion(order.presentacion);
   }
+
+  const checkedInsumos = insumos.filter((i) => i.checked);
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -156,13 +265,47 @@ function StartEnvasadoForm({
         </Select>
       </div>
 
+      <InsumosUsoChecklist drafts={insumos} onChange={setInsumos} />
+      <input
+        type="hidden"
+        name="insumos_uso"
+        value={JSON.stringify(
+          checkedInsumos.map((i) => ({
+            envasado_insumo_id: i.envasado_insumo_id,
+            lote: i.lote,
+            fecha_vencimiento: i.fecha_vencimiento || undefined,
+            proveedor: i.proveedor,
+            cantidad_usada: i.cantidad_usada || undefined,
+            unidad_medida: i.unidad_medida,
+            desperdicio: i.desperdicio || undefined,
+          })),
+        )}
+      />
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="insumos_observacion">Observación del supervisor</Label>
+        <Input
+          id="insumos_observacion"
+          name="insumos_observacion"
+          placeholder="Opcional"
+          value={insumosObservacion}
+          onChange={(e) => setInsumosObservacion(e.target.value)}
+        />
+      </div>
+
+      {checkedInsumos.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Marcá al menos un insumo de envasado antes de iniciar.
+        </p>
+      )}
+
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || checkedInsumos.length === 0}>
           {pending ? "Iniciando..." : "Iniciar envasado"}
         </Button>
       </DialogFooter>
@@ -174,10 +317,12 @@ export function StartEnvasadoDialog({
   baches,
   operarios,
   envasadoOrders,
+  envasadoInsumos,
 }: {
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
+  envasadoInsumos: EnvasadoInsumo[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -192,6 +337,7 @@ export function StartEnvasadoDialog({
           baches={baches}
           operarios={operarios}
           envasadoOrders={envasadoOrders}
+          envasadoInsumos={envasadoInsumos}
           onSuccess={() => setOpen(false)}
         />
       </DialogContent>

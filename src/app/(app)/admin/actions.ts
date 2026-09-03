@@ -534,3 +534,83 @@ export async function upsertEnvasadoReferencia(
   revalidatePath("/admin");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Turnos (franjas horarias fijas para el control de envasado)
+// ---------------------------------------------------------------------------
+const TurnoSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "El nombre es obligatorio."),
+  hora_inicio: z.string().trim().min(1, "La hora de inicio es obligatoria."),
+  hora_fin: z.string().trim().min(1, "La hora final es obligatoria."),
+});
+
+export async function upsertTurno(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = TurnoSchema.safeParse({
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+    hora_inicio: formData.get("hora_inicio"),
+    hora_fin: formData.get("hora_fin"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const active = formData.get("active") === "on";
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("turnos").update({ ...values, active }).eq("id", id)
+    : await supabase.from("turnos").insert({ ...values, active });
+
+  if (error) {
+    return { error: "No se pudo guardar el turno." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Insumos de envasado (envases/empaques: vasos, tapas, etiquetas, cajas)
+// ---------------------------------------------------------------------------
+const EnvasadoInsumoSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "El nombre es obligatorio."),
+});
+
+export async function upsertEnvasadoInsumo(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = EnvasadoInsumoSchema.safeParse({
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const active = formData.get("active") === "on";
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("envasado_insumos").update({ ...values, active }).eq("id", id)
+    : await supabase.from("envasado_insumos").insert({ ...values, active });
+
+  if (error) {
+    return { error: "No se pudo guardar el insumo." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}

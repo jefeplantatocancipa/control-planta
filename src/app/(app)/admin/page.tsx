@@ -6,6 +6,8 @@ import { StagesPanel } from "./stages-panel";
 import { UsersPanel } from "./users-panel";
 import { InsumosPanel } from "./insumos-panel";
 import { EnvasadoReferenciasPanel } from "./envasado-referencias-panel";
+import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
+import { TurnosPanel } from "./turnos-panel";
 
 export default async function AdminPage() {
   const profile = await requireRole(["jefe_planta"]);
@@ -18,6 +20,8 @@ export default async function AdminPage() {
     { data: insumos },
     { data: productInsumos },
     { data: envasadoReferencias },
+    { data: envasadoInsumos },
+    { data: turnos },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
     supabase
@@ -28,6 +32,8 @@ export default async function AdminPage() {
     supabase.from("insumos").select("*").order("name"),
     supabase.from("product_insumos").select("*"),
     supabase.from("envasado_referencias").select("*").order("sku"),
+    supabase.from("envasado_insumos").select("*").order("name"),
+    supabase.from("turnos").select("*").order("hora_inicio"),
   ]);
 
   return (
@@ -46,6 +52,7 @@ export default async function AdminPage() {
           <TabsTrigger value="etapas">Etapas</TabsTrigger>
           <TabsTrigger value="insumos">Insumos</TabsTrigger>
           <TabsTrigger value="envasado">Envasado</TabsTrigger>
+          <TabsTrigger value="turnos">Turnos</TabsTrigger>
           <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
         </TabsList>
         <TabsContent value="productos">
@@ -62,10 +69,16 @@ export default async function AdminPage() {
           />
         </TabsContent>
         <TabsContent value="envasado">
-          <EnvasadoReferenciasPanel
-            referencias={envasadoReferencias ?? []}
-            products={products ?? []}
-          />
+          <div className="flex flex-col gap-8">
+            <EnvasadoReferenciasPanel
+              referencias={envasadoReferencias ?? []}
+              products={products ?? []}
+            />
+            <EnvasadoInsumosPanel insumos={envasadoInsumos ?? []} />
+          </div>
+        </TabsContent>
+        <TabsContent value="turnos">
+          <TurnosPanel turnos={turnos ?? []} />
         </TabsContent>
         <TabsContent value="usuarios">
           <UsersPanel profiles={profiles ?? []} currentUserId={profile.id} />

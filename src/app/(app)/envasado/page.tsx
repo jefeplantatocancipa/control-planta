@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
-import { EnvasadoCard } from "./envasado-card";
+import { EnvasadoCard, type CorteDisplay } from "./envasado-card";
 import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnvasadoPage() {
@@ -26,6 +26,9 @@ export default async function EnvasadoPage() {
     { data: stageRecords },
     { data: envasadoOrders },
     { data: envasadoReferencias },
+    { data: envasadoInsumos },
+    { data: turnos },
+    { data: cortes },
   ] = await Promise.all([
     supabase
       .from("envasados")
@@ -51,6 +54,9 @@ export default async function EnvasadoPage() {
       .in("status", ["pendiente", "en_proceso"])
       .order("scheduled_date"),
     supabase.from("envasado_referencias").select("*"),
+    supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
+    supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
+    supabase.from("envasado_cortes").select("*").order("created_at"),
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
@@ -60,6 +66,36 @@ export default async function EnvasadoPage() {
   }));
   const bacheLabels = new Map(bacheOptions.map((b) => [b.id, b.label]));
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
+
+  const turnoNames = new Map((turnos ?? []).map((t) => [t.id, t.name]));
+  const cortesByEnvasado = new Map<string, CorteDisplay[]>();
+  for (const corte of cortes ?? []) {
+    const operariosLabel = [
+      operarioNames.get(corte.operario_id),
+      corte.operario_2_id ? operarioNames.get(corte.operario_2_id) : null,
+    ]
+      .filter(Boolean)
+      .join(" y ");
+    const pesos = [corte.peso_1, corte.peso_2, corte.peso_3].filter(
+      (p): p is number => p !== null,
+    );
+    const display: CorteDisplay = {
+      id: corte.id,
+      turnoName: turnoNames.get(corte.turno_id) ?? "—",
+      fecha: format(new Date(`${corte.fecha}T00:00:00`), "dd/MM/yyyy"),
+      operarios: operariosLabel || "—",
+      unidades: corte.unidades_final - corte.unidades_inicio,
+      unidadesFinal: corte.unidades_final,
+      selladoCumple: corte.sellado_cumple,
+      loteMarcado: corte.lote_marcado,
+      pesoPromedio:
+        pesos.length === 3 ? (pesos[0] + pesos[1] + pesos[2]) / 3 : null,
+      observaciones: corte.observaciones,
+    };
+    const list = cortesByEnvasado.get(corte.envasado_id) ?? [];
+    list.push(display);
+    cortesByEnvasado.set(corte.envasado_id, list);
+  }
 
   const referenciasById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
   const envasadoOrderOptions = (envasadoOrders ?? []).map((order) => {
@@ -115,6 +151,7 @@ export default async function EnvasadoPage() {
           baches={bacheOptions}
           operarios={operarios ?? []}
           envasadoOrders={envasadoOrderOptions}
+          envasadoInsumos={envasadoInsumos ?? []}
         />
       </div>
 
@@ -132,6 +169,9 @@ export default async function EnvasadoPage() {
               cantidadMermas={envasado.cantidad_mermas}
               notes={envasado.notes}
               massBalanceKg={massBalanceByBache.get(envasado.bache_id)?.kg}
+              turnos={turnos ?? []}
+              operarios={operarios ?? []}
+              cortes={cortesByEnvasado.get(envasado.id) ?? []}
             />
           ))}
           {open.length === 0 && (

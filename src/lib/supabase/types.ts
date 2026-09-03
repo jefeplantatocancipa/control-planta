@@ -404,6 +404,7 @@ export interface Database {
           presentacion: string;
           cantidad_unidades: number;
           cantidad_mermas: number;
+          insumos_observacion: string | null;
           started_at: string;
           ended_at: string | null;
           notes: string | null;
@@ -417,6 +418,7 @@ export interface Database {
           presentacion: string;
           cantidad_unidades: number;
           cantidad_mermas?: number;
+          insumos_observacion?: string | null;
           started_at?: string;
           ended_at?: string | null;
           notes?: string | null;
@@ -454,6 +456,108 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["vasos_enmangados"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      turnos: {
+        Row: {
+          id: string;
+          name: string;
+          hora_inicio: string;
+          hora_fin: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          hora_inicio: string;
+          hora_fin: string;
+          active?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["turnos"]["Insert"]>;
+        Relationships: [];
+      };
+      envasado_insumos: {
+        Row: {
+          id: string;
+          name: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          active?: boolean;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_insumos"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      envasado_insumos_uso: {
+        Row: {
+          id: string;
+          envasado_id: string;
+          envasado_insumo_id: string;
+          lote: string | null;
+          fecha_vencimiento: string | null;
+          proveedor: string | null;
+          cantidad_usada: number | null;
+          unidad_medida: string | null;
+          desperdicio: number | null;
+          created_at: string;
+        };
+        Insert: {
+          envasado_id: string;
+          envasado_insumo_id: string;
+          lote?: string | null;
+          fecha_vencimiento?: string | null;
+          proveedor?: string | null;
+          cantidad_usada?: number | null;
+          unidad_medida?: string | null;
+          desperdicio?: number | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_insumos_uso"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      envasado_cortes: {
+        Row: {
+          id: string;
+          envasado_id: string;
+          turno_id: string;
+          fecha: string;
+          operario_id: string;
+          operario_2_id: string | null;
+          unidades_inicio: number;
+          unidades_final: number;
+          sellado_cumple: boolean;
+          lote_marcado: "C" | "NC";
+          peso_1: number | null;
+          peso_2: number | null;
+          peso_3: number | null;
+          observaciones: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          envasado_id: string;
+          turno_id: string;
+          fecha?: string;
+          operario_id: string;
+          operario_2_id?: string | null;
+          unidades_inicio: number;
+          unidades_final: number;
+          sellado_cumple: boolean;
+          lote_marcado: "C" | "NC";
+          peso_1?: number | null;
+          peso_2?: number | null;
+          peso_3?: number | null;
+          observaciones?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_cortes"]["Insert"]
         >;
         Relationships: [];
       };
