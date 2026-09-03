@@ -42,6 +42,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 15. `0015_envasado_order_link.sql` — columna `envasado_order_id` en `envasados`, igual que `baches.production_order_id`: permite iniciar un envasado a partir de una orden de trabajo del programa.
 16. `0016_envasado_turnos_cortes.sql` — control de envasado por turno: tabla `turnos` (franjas horarias fijas, con A/B/C precargados), catálogo `envasado_insumos` (envases/empaques), `envasado_insumos_uso` (lote/vencimiento/proveedor/cantidad/desperdicio capturados al iniciar el envasado) y `envasado_cortes` (checkpoint por turno: unidades inicio/final, operarios, sellado cumple/no cumple, lote C/NC, peso de 3 unidades).
 17. `0017_envasado_insumos_detalle.sql` — columnas `presentacion_caja` y `marca` en `envasado_insumos`, para el importador de Excel del catálogo de material de empaque.
+18. `0018_envasado_referencia_insumos.sql` — tabla `envasado_referencia_insumos`: receta de material de empaque por referencia (sku), igual que `product_insumos` para la receta de materia prima por producto. Filtra el checklist de "Iniciar envasado" a solo los insumos que corresponden a la referencia elegida.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

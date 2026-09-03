@@ -22,6 +22,7 @@ export default async function AdminPage() {
     { data: productInsumos },
     { data: envasadoReferencias },
     { data: envasadoInsumos },
+    { data: envasadoReferenciaInsumos },
     { data: turnos },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
@@ -34,6 +35,7 @@ export default async function AdminPage() {
     supabase.from("product_insumos").select("*"),
     supabase.from("envasado_referencias").select("*").order("sku"),
     supabase.from("envasado_insumos").select("*").order("name"),
+    supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").order("hora_inicio"),
   ]);
 
@@ -70,7 +72,11 @@ export default async function AdminPage() {
               productInsumos={productInsumos ?? []}
             />
             <Separator />
-            <EnvasadoInsumosPanel insumos={envasadoInsumos ?? []} />
+            <EnvasadoInsumosPanel
+              insumos={envasadoInsumos ?? []}
+              referencias={envasadoReferencias ?? []}
+              referenciaInsumos={envasadoReferenciaInsumos ?? []}
+            />
           </div>
         </TabsContent>
         <TabsContent value="envasado">

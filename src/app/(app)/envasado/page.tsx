@@ -27,6 +27,7 @@ export default async function EnvasadoPage() {
     { data: envasadoOrders },
     { data: envasadoReferencias },
     { data: envasadoInsumos },
+    { data: envasadoReferenciaInsumos },
     { data: turnos },
     { data: cortes },
   ] = await Promise.all([
@@ -55,6 +56,7 @@ export default async function EnvasadoPage() {
       .order("scheduled_date"),
     supabase.from("envasado_referencias").select("*"),
     supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
+    supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
     supabase.from("envasado_cortes").select("*").order("created_at"),
   ]);
@@ -110,8 +112,18 @@ export default async function EnvasadoPage() {
     ]
       .filter(Boolean)
       .join(" — ");
-    return { id: order.id, label, presentacion };
+    return { id: order.id, label, presentacion, referenciaId: order.referencia_id };
   });
+
+  // Receta de material de empaque por referencia: filtra el checklist de
+  // "Iniciar envasado" a solo los insumos que corresponden, en vez de
+  // mostrar todo el catálogo.
+  const recipeByReferencia: Record<string, string[]> = {};
+  for (const row of envasadoReferenciaInsumos ?? []) {
+    const list = recipeByReferencia[row.referencia_id] ?? [];
+    list.push(row.envasado_insumo_id);
+    recipeByReferencia[row.referencia_id] = list;
+  }
 
   // Balance de masa por bache: se toma la última etapa con checklist de
   // insumos (ej. Mezcla) en vez de Alistamiento, porque ahí queda
@@ -152,6 +164,7 @@ export default async function EnvasadoPage() {
           operarios={operarios ?? []}
           envasadoOrders={envasadoOrderOptions}
           envasadoInsumos={envasadoInsumos ?? []}
+          recipeByReferencia={recipeByReferencia}
         />
       </div>
 

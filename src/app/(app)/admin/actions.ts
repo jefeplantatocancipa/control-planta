@@ -727,3 +727,53 @@ export async function importEnvasadoInsumos(
   revalidatePath("/admin");
   return { success: true, imported, warnings };
 }
+
+// ---------------------------------------------------------------------------
+// Receta de material de empaque por referencia
+// ---------------------------------------------------------------------------
+const EnvasadoRecipeSchema = z.object({
+  referencia_id: z.string().uuid({ message: "Elegí una referencia." }),
+  envasado_insumo_ids: z.array(z.string().uuid()),
+});
+
+export async function saveEnvasadoReferenciaRecipe(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = EnvasadoRecipeSchema.safeParse({
+    referencia_id: formData.get("referencia_id"),
+    envasado_insumo_ids: formData.getAll("envasado_insumo_ids"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { error: deleteError } = await supabase
+    .from("envasado_referencia_insumos")
+    .delete()
+    .eq("referencia_id", parsed.data.referencia_id);
+  if (deleteError) {
+    return { error: "No se pudo guardar la receta." };
+  }
+
+  if (parsed.data.envasado_insumo_ids.length > 0) {
+    const { error: insertError } = await supabase
+      .from("envasado_referencia_insumos")
+      .insert(
+        parsed.data.envasado_insumo_ids.map((envasado_insumo_id) => ({
+          referencia_id: parsed.data.referencia_id,
+          envasado_insumo_id,
+        })),
+      );
+    if (insertError) {
+      return { error: "No se pudo guardar la receta." };
+    }
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -21,11 +22,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { upsertEnvasadoInsumo, type ActionState } from "./actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  upsertEnvasadoInsumo,
+  saveEnvasadoReferenciaRecipe,
+  type ActionState,
+} from "./actions";
 import { ImportEnvasadoInsumosDialog } from "./import-envasado-insumos-dialog";
 import type { Database } from "@/lib/supabase/types";
 
 type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
+type EnvasadoReferencia =
+  Database["public"]["Tables"]["envasado_referencias"]["Row"];
 
 function EnvasadoInsumoForm({
   insumo,
@@ -97,13 +111,120 @@ function EnvasadoInsumoForm({
   );
 }
 
+function RecipeEditor({
+  referencias,
+  insumos,
+  recipeByReferencia,
+}: {
+  referencias: EnvasadoReferencia[];
+  insumos: EnvasadoInsumo[];
+  recipeByReferencia: Map<string, Set<string>>;
+}) {
+  const [referenciaId, setReferenciaId] = useState(referencias[0]?.id ?? "");
+  const [checked, setChecked] = useState<Set<string>>(
+    new Set(recipeByReferencia.get(referencias[0]?.id ?? "") ?? []),
+  );
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    saveEnvasadoReferenciaRecipe,
+    {},
+  );
+
+  function selectReferencia(id: string) {
+    setReferenciaId(id);
+    setChecked(new Set(recipeByReferencia.get(id) ?? []));
+  }
+
+  function toggle(insumoId: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(insumoId)) next.delete(insumoId);
+      else next.add(insumoId);
+      return next;
+    });
+  }
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <input type="hidden" name="referencia_id" value={referenciaId} />
+      {Array.from(checked).map((id) => (
+        <input key={id} type="hidden" name="envasado_insumo_ids" value={id} />
+      ))}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="recipe-referencia">Referencia</Label>
+        <Select
+          value={referenciaId}
+          onValueChange={(value) => selectReferencia(value ?? "")}
+          items={referencias.map((r) => ({
+            value: r.id,
+            label: `${r.sku} — ${r.name}`,
+          }))}
+        >
+          <SelectTrigger id="recipe-referencia" className="w-full sm:w-96">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {referencias.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.sku} — {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {insumos.map((insumo) => (
+          <label key={insumo.id} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={checked.has(insumo.id)}
+              onChange={() => toggle(insumo.id)}
+            />
+            {insumo.name}
+          </label>
+        ))}
+        {insumos.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            Sin insumos de envasado en el catálogo todavía.
+          </p>
+        )}
+      </div>
+
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+      <Button type="submit" disabled={pending || !referenciaId} className="self-start">
+        {pending ? "Guardando..." : "Guardar receta"}
+      </Button>
+      {state.success && (
+        <p className="text-sm text-muted-foreground">Receta guardada.</p>
+      )}
+    </form>
+  );
+}
+
 export function EnvasadoInsumosPanel({
   insumos,
+  referencias,
+  referenciaInsumos,
 }: {
   insumos: EnvasadoInsumo[];
+  referencias: EnvasadoReferencia[];
+  referenciaInsumos: { referencia_id: string; envasado_insumo_id: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EnvasadoInsumo | null>(null);
+
+  const recipeByReferencia = new Map<string, Set<string>>();
+  for (const row of referenciaInsumos) {
+    const set = recipeByReferencia.get(row.referencia_id) ?? new Set<string>();
+    set.add(row.envasado_insumo_id);
+    recipeByReferencia.set(row.referencia_id, set);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -173,6 +294,30 @@ export function EnvasadoInsumosPanel({
           )}
         </TableBody>
       </Table>
+
+      <Separator />
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <h3 className="font-medium">Receta por referencia</h3>
+          <p className="text-sm text-muted-foreground">
+            Los insumos marcados acá son los que aparecen para chequear al
+            iniciar un envasado con esa referencia.
+          </p>
+        </div>
+        {referencias.length > 0 ? (
+          <RecipeEditor
+            referencias={referencias}
+            insumos={insumos}
+            recipeByReferencia={recipeByReferencia}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Creá al menos una referencia en la pestaña Envasado para definir
+            su receta de empaque.
+          </p>
+        )}
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

@@ -36,6 +36,7 @@ interface EnvasadoOrderOption {
   id: string;
   label: string;
   presentacion: string;
+  referenciaId: string;
 }
 
 interface InsumoUsoDraft {
@@ -128,17 +129,33 @@ function InsumosUsoChecklist({
   );
 }
 
+function buildInsumoDrafts(list: EnvasadoInsumo[]): InsumoUsoDraft[] {
+  return list.map((i) => ({
+    envasado_insumo_id: i.id,
+    nombre: i.name,
+    checked: false,
+    lote: "",
+    fecha_vencimiento: "",
+    proveedor: "",
+    cantidad_usada: "",
+    unidad_medida: "",
+    desperdicio: "",
+  }));
+}
+
 function StartEnvasadoForm({
   baches,
   operarios,
   envasadoOrders,
   envasadoInsumos,
+  recipeByReferencia,
   onSuccess,
 }: {
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
   envasadoInsumos: EnvasadoInsumo[];
+  recipeByReferencia: Record<string, string[]>;
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -148,18 +165,9 @@ function StartEnvasadoForm({
   const [orderId, setOrderId] = useState(NO_ORDER_VALUE);
   const [presentacion, setPresentacion] = useState("");
   const [insumos, setInsumos] = useState<InsumoUsoDraft[]>(
-    envasadoInsumos.map((i) => ({
-      envasado_insumo_id: i.id,
-      nombre: i.name,
-      checked: false,
-      lote: "",
-      fecha_vencimiento: "",
-      proveedor: "",
-      cantidad_usada: "",
-      unidad_medida: "",
-      desperdicio: "",
-    })),
+    buildInsumoDrafts(envasadoInsumos),
   );
+  const [insumosFiltrados, setInsumosFiltrados] = useState(false);
   const [insumosObservacion, setInsumosObservacion] = useState("");
 
   useEffect(() => {
@@ -169,7 +177,18 @@ function StartEnvasadoForm({
   function selectOrder(value: string) {
     setOrderId(value);
     const order = envasadoOrders.find((o) => o.id === value);
-    if (order) setPresentacion(order.presentacion);
+    if (!order) return;
+    setPresentacion(order.presentacion);
+
+    const receta = recipeByReferencia[order.referenciaId];
+    if (receta && receta.length > 0) {
+      const recetaSet = new Set(receta);
+      setInsumos(buildInsumoDrafts(envasadoInsumos.filter((i) => recetaSet.has(i.id))));
+      setInsumosFiltrados(true);
+    } else {
+      setInsumos(buildInsumoDrafts(envasadoInsumos));
+      setInsumosFiltrados(false);
+    }
   }
 
   const checkedInsumos = insumos.filter((i) => i.checked);
@@ -265,6 +284,11 @@ function StartEnvasadoForm({
         </Select>
       </div>
 
+      {insumosFiltrados && (
+        <p className="-mb-2 text-xs text-muted-foreground">
+          Mostrando solo los insumos de la receta de esta referencia.
+        </p>
+      )}
       <InsumosUsoChecklist drafts={insumos} onChange={setInsumos} />
       <input
         type="hidden"
@@ -318,11 +342,13 @@ export function StartEnvasadoDialog({
   operarios,
   envasadoOrders,
   envasadoInsumos,
+  recipeByReferencia,
 }: {
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
   envasadoInsumos: EnvasadoInsumo[];
+  recipeByReferencia: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -338,6 +364,7 @@ export function StartEnvasadoDialog({
           operarios={operarios}
           envasadoOrders={envasadoOrders}
           envasadoInsumos={envasadoInsumos}
+          recipeByReferencia={recipeByReferencia}
           onSuccess={() => setOpen(false)}
         />
       </DialogContent>

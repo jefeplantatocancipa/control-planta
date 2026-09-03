@@ -497,6 +497,20 @@ export interface Database {
         >;
         Relationships: [];
       };
+      envasado_referencia_insumos: {
+        Row: {
+          referencia_id: string;
+          envasado_insumo_id: string;
+        };
+        Insert: {
+          referencia_id: string;
+          envasado_insumo_id: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_referencia_insumos"]["Insert"]
+        >;
+        Relationships: [];
+      };
       envasado_insumos_uso: {
         Row: {
           id: string;
