@@ -132,16 +132,26 @@ export async function finalizarEnvasado(
     return { error: "Finalizá el turno activo antes de cerrar el envasado." };
   }
 
-  // Las unidades y mermas totales son la suma de lo que dejó cada turno
-  // (unidades_final - unidades_inicio, y desperdicio), no un valor a mano.
+  // Las unidades totales son la suma de lo que dio cada estiba (dato real,
+  // contado), no la resta de los contadores de inicio/final del turno. Las
+  // mermas sí son la suma del desperdicio que dejó cada turno.
   const { data: cortes } = await supabase
     .from("envasado_cortes")
-    .select("unidades_inicio, unidades_final, desperdicio")
+    .select("id, desperdicio")
     .eq("envasado_id", parsed.data.record_id)
     .not("ended_at", "is", null);
 
-  const cantidad_unidades = (cortes ?? []).reduce(
-    (sum, c) => sum + ((c.unidades_final ?? c.unidades_inicio) - c.unidades_inicio),
+  const corteIds = (cortes ?? []).map((c) => c.id);
+  const { data: estibas } =
+    corteIds.length > 0
+      ? await supabase
+          .from("envasado_estibas")
+          .select("unidades_por_estiba")
+          .in("corte_id", corteIds)
+      : { data: [] };
+
+  const cantidad_unidades = (estibas ?? []).reduce(
+    (sum, e) => sum + (e.unidades_por_estiba ?? 0),
     0,
   );
   const cantidad_mermas = (cortes ?? []).reduce((sum, c) => sum + (c.desperdicio ?? 0), 0);

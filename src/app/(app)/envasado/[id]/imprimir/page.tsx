@@ -101,8 +101,11 @@ export default async function EnvasadoReportPage({
   }
 
   const cortesCerrados = (cortes ?? []).filter((c) => c.ended_at);
-  const totalUnidades = cortesCerrados.reduce(
-    (sum, c) => sum + ((c.unidades_final ?? c.unidades_inicio) - c.unidades_inicio),
+  // Las unidades envasadas son la suma de lo que dio cada estiba (dato
+  // real, contado), no la resta de los contadores de inicio/final del
+  // turno.
+  const totalUnidades = (estibas ?? []).reduce(
+    (sum, e) => sum + (e.unidades_por_estiba ?? 0),
     0,
   );
   const totalDesperdicio = cortesCerrados.reduce((sum, c) => sum + (c.desperdicio ?? 0), 0);

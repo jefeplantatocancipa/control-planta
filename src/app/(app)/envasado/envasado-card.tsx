@@ -67,8 +67,12 @@ export function EnvasadoCard({
 }) {
   const cortesCerrados = cortes.filter((c) => c.endedAt);
   const hayTurnoActivo = cortes.some((c) => !c.endedAt);
-  const totalUnidades = cortesCerrados.reduce(
-    (sum, c) => sum + ((c.unidadesFinal ?? c.unidadesInicio) - c.unidadesInicio),
+  // Las unidades envasadas son la suma de lo que dio cada estiba (dato
+  // real, contado), no la resta de los contadores de inicio/final del
+  // turno (que son solo una referencia).
+  const totalUnidades = cortes.reduce(
+    (sum, c) =>
+      sum + c.estibas.reduce((s2, e) => s2 + (e.unidadesPorEstiba ?? 0), 0),
     0,
   );
   const totalDesperdicio = cortesCerrados.reduce((sum, c) => sum + (c.desperdicio ?? 0), 0);
