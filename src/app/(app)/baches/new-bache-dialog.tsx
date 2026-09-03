@@ -60,7 +60,8 @@ function NewBacheForm({
     setProductId(order.product_id);
     const product = productsById.get(order.product_id);
     if (product?.volumen_por_bache) {
-      setVolumen(String(product.volumen_por_bache));
+      const cantidadBaches = order.baches_planeados ?? 1;
+      setVolumen(String(product.volumen_por_bache * cantidadBaches));
     }
   }
 
