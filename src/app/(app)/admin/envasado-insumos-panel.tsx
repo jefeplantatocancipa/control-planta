@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { upsertEnvasadoInsumo, type ActionState } from "./actions";
+import { ImportEnvasadoInsumosDialog } from "./import-envasado-insumos-dialog";
 import type { Database } from "@/lib/supabase/types";
 
 type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
@@ -46,13 +47,31 @@ function EnvasadoInsumoForm({
     <form action={action} className="flex flex-col gap-4">
       {insumo && <input type="hidden" name="id" value={insumo.id} />}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="name">Nombre</Label>
+        <Label htmlFor="name">Nombre del insumo</Label>
         <Input
           id="name"
           name="name"
           placeholder="Ej: Vaso 450 g, Tapa, Etiqueta, Caja x12"
           defaultValue={insumo?.name}
           required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="presentacion_caja">Presentación por caja</Label>
+        <Input
+          id="presentacion_caja"
+          name="presentacion_caja"
+          placeholder="Ej: 500 unidades x caja"
+          defaultValue={insumo?.presentacion_caja ?? ""}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="marca">Marca o marcas</Label>
+        <Input
+          id="marca"
+          name="marca"
+          placeholder="Ej: Plastienvases, Empack"
+          defaultValue={insumo?.marca ?? ""}
         />
       </div>
       <Label className="flex items-center gap-2">
@@ -96,21 +115,26 @@ export function EnvasadoInsumosPanel({
             iniciar un envasado.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Nuevo insumo
-        </Button>
+        <div className="flex gap-2">
+          <ImportEnvasadoInsumosDialog />
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            Nuevo insumo
+          </Button>
+        </div>
       </div>
 
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Nombre</TableHead>
+            <TableHead>Presentación por caja</TableHead>
+            <TableHead>Marca</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
           </TableRow>
@@ -119,6 +143,8 @@ export function EnvasadoInsumosPanel({
           {insumos.map((insumo) => (
             <TableRow key={insumo.id}>
               <TableCell className="font-medium">{insumo.name}</TableCell>
+              <TableCell>{insumo.presentacion_caja ?? "—"}</TableCell>
+              <TableCell>{insumo.marca ?? "—"}</TableCell>
               <TableCell>
                 <Badge variant={insumo.active ? "default" : "outline"}>
                   {insumo.active ? "Activo" : "Inactivo"}
@@ -140,7 +166,7 @@ export function EnvasadoInsumosPanel({
           ))}
           {insumos.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="text-center text-muted-foreground">
+              <TableCell colSpan={5} className="text-center text-muted-foreground">
                 Sin insumos de envasado todavía.
               </TableCell>
             </TableRow>

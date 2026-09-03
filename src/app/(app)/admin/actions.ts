@@ -1,16 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import ExcelJS from "exceljs";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalize, cellText } from "../programa/excel-utils";
 import type { UserRole } from "@/lib/supabase/types";
 import { ALL_PRODUCTS_VALUE } from "./constants";
 
 export interface ActionState {
   error?: string;
   success?: boolean;
+}
+
+export interface ImportActionState {
+  error?: string;
+  success?: boolean;
+  imported?: number;
+  warnings?: string[];
 }
 
 function isUniqueViolation(error: { code?: string } | null) {
@@ -583,6 +592,8 @@ export async function upsertTurno(
 const EnvasadoInsumoSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
+  presentacion_caja: z.string().trim().optional(),
+  marca: z.string().trim().optional(),
 });
 
 export async function upsertEnvasadoInsumo(
@@ -594,6 +605,8 @@ export async function upsertEnvasadoInsumo(
   const parsed = EnvasadoInsumoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
+    presentacion_caja: formData.get("presentacion_caja") || undefined,
+    marca: formData.get("marca") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -613,4 +626,104 @@ export async function upsertEnvasadoInsumo(
 
   revalidatePath("/admin");
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Importador de Excel: material de empaque (envasado_insumos)
+// ---------------------------------------------------------------------------
+const ENVASADO_INSUMOS_REQUIRED_HEADERS = ["nombre del insumo"];
+
+export async function importEnvasadoInsumos(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Elegí un archivo de Excel (.xlsx)." };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer as never);
+  } catch {
+    return { error: "No se pudo leer el archivo. ¿Es un .xlsx válido?" };
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { error: "El archivo no tiene hojas." };
+
+  let headerRowNumber = -1;
+  let columns: Record<string, number> = {};
+  for (let r = 1; r <= Math.min(sheet.rowCount, 20); r++) {
+    const row = sheet.getRow(r);
+    const map: Record<string, number> = {};
+    row.eachCell((cell, colNumber) => {
+      const key = normalize(cellText(cell));
+      if (key) map[key] = colNumber;
+    });
+    if (ENVASADO_INSUMOS_REQUIRED_HEADERS.every((h) => h in map)) {
+      headerRowNumber = r;
+      columns = map;
+      break;
+    }
+  }
+  if (headerRowNumber === -1) {
+    return {
+      error:
+        "No se encontró la columna \"Nombre del insumo\". Usá la plantilla.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("envasado_insumos")
+    .select("id, name");
+  const existingByName = new Map(
+    (existing ?? []).map((i) => [normalize(i.name), i.id]),
+  );
+
+  const warnings: string[] = [];
+  let imported = 0;
+
+  for (let r = headerRowNumber + 1; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const name = cellText(row.getCell(columns["nombre del insumo"]));
+    if (!name) continue; // fila vacía: fin de la tabla
+
+    const presentacionCaja = columns["presentacion por caja"]
+      ? cellText(row.getCell(columns["presentacion por caja"])) || null
+      : null;
+    const marca = columns["marca o marcas"]
+      ? cellText(row.getCell(columns["marca o marcas"])) || null
+      : null;
+
+    const existingId = existingByName.get(normalize(name));
+    const { error } = existingId
+      ? await supabase
+          .from("envasado_insumos")
+          .update({ name, presentacion_caja: presentacionCaja, marca })
+          .eq("id", existingId)
+      : await supabase
+          .from("envasado_insumos")
+          .insert({ name, presentacion_caja: presentacionCaja, marca });
+
+    if (error) {
+      warnings.push(`Fila ${r} (${name}): no se pudo guardar.`);
+      continue;
+    }
+    imported++;
+  }
+
+  if (imported === 0) {
+    return {
+      error: warnings[0] ?? "No se encontraron filas para importar.",
+      warnings,
+    };
+  }
+
+  revalidatePath("/admin");
+  return { success: true, imported, warnings };
 }

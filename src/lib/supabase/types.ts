@@ -481,11 +481,15 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          presentacion_caja: string | null;
+          marca: string | null;
           active: boolean;
           created_at: string;
         };
         Insert: {
           name: string;
+          presentacion_caja?: string | null;
+          marca?: string | null;
           active?: boolean;
         };
         Update: Partial<
