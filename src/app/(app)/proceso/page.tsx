@@ -45,7 +45,7 @@ export default async function ProcesoPage() {
       <div>
         <h1 className="text-2xl font-semibold">Proceso actual</h1>
         <p className="text-muted-foreground">
-          Tablero en vivo de los baches en proceso y sus 8 etapas.
+          Tablero en vivo de los procesos de producción en curso, etapa por etapa.
         </p>
       </div>
 

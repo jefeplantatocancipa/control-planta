@@ -14,7 +14,7 @@ const CARDS: {
   {
     href: "/proceso",
     title: "Proceso actual",
-    description: "Tablero en vivo de los baches y sus 8 etapas.",
+    description: "Tablero en vivo de los procesos de producción, etapa por etapa.",
     icon: Activity,
     roles: ["jefe_planta", "supervisor", "operario"],
   },
