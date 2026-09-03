@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 
 const SIZES = {
-  sm: { title: "text-lg", tagline: "text-[0.5rem]" },
-  lg: { title: "text-3xl", tagline: "text-xs" },
+  sm: { title: "text-2xl", tagline: "text-xs" },
+  lg: { title: "text-4xl", tagline: "text-sm" },
 };
 
 export function FasalactWordmark({
