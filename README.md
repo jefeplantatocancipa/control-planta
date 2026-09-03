@@ -39,6 +39,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 12. `0012_volumen_por_bache.sql` — columna `volumen_por_bache` en `products`: volumen estándar de un bache de ese producto, para sugerir el volumen al crear un bache desde una orden de producción (que planea por cantidad de baches, no por litros).
 13. `0013_envasado_orders.sql` — tabla `envasado_orders` (programa de Envasado, comparte semana con `production_programs`) para el importador de Excel del "Formato de Empaque": producto (sku), línea, fecha, unidades programadas y gramaje por unidad.
 14. `0014_envasado_referencias.sql` — el sku del formato de empaque identifica una presentación empacada (no el producto a granel), así que se agrega el catálogo `envasado_referencias` (sku, nombre, producto, peso unitario, multiempaque) y `envasado_orders` pasa a planear por `referencia_id` en vez de `product_id`.
+15. `0015_envasado_order_link.sql` — columna `envasado_order_id` en `envasados`, igual que `baches.production_order_id`: permite iniciar un envasado a partir de una orden de trabajo del programa.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

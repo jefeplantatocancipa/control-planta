@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -23,6 +24,8 @@ export default async function EnvasadoPage() {
     { data: operarios },
     { data: insumosStages },
     { data: stageRecords },
+    { data: envasadoOrders },
+    { data: envasadoReferencias },
   ] = await Promise.all([
     supabase
       .from("envasados")
@@ -42,6 +45,12 @@ export default async function EnvasadoPage() {
     supabase
       .from("bache_stage_records")
       .select("bache_id, stage_template_id, parameters"),
+    supabase
+      .from("envasado_orders")
+      .select("*")
+      .in("status", ["pendiente", "en_proceso"])
+      .order("scheduled_date"),
+    supabase.from("envasado_referencias").select("*"),
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
@@ -51,6 +60,22 @@ export default async function EnvasadoPage() {
   }));
   const bacheLabels = new Map(bacheOptions.map((b) => [b.id, b.label]));
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
+
+  const referenciasById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
+  const envasadoOrderOptions = (envasadoOrders ?? []).map((order) => {
+    const referencia = referenciasById.get(order.referencia_id);
+    const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
+    const presentacion = referencia ? `${referencia.sku} — ${referencia.name}` : "—";
+    const label = [
+      presentacion,
+      order.linea,
+      fecha,
+      `${order.planned_quantity} und.`,
+    ]
+      .filter(Boolean)
+      .join(" — ");
+    return { id: order.id, label, presentacion };
+  });
 
   // Balance de masa por bache: se toma la última etapa con checklist de
   // insumos (ej. Mezcla) en vez de Alistamiento, porque ahí queda
@@ -89,6 +114,7 @@ export default async function EnvasadoPage() {
         <StartEnvasadoDialog
           baches={bacheOptions}
           operarios={operarios ?? []}
+          envasadoOrders={envasadoOrderOptions}
         />
       </div>
 

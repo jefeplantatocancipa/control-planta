@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { NO_ORDER_VALUE } from "./constants";
 
 export interface ActionState {
   error?: string;
@@ -13,6 +14,7 @@ export interface ActionState {
 const StartEnvasadoSchema = z.object({
   bache_id: z.string().uuid({ message: "Elegí un bache." }),
   operario_id: z.string().uuid({ message: "Elegí quién realiza el envasado." }),
+  envasado_order_id: z.string().uuid().nullable(),
   presentacion: z.string().trim().min(1, "La presentación es obligatoria."),
 });
 
@@ -22,9 +24,11 @@ export async function startEnvasado(
 ): Promise<ActionState> {
   const profile = await requireRole(["jefe_planta", "supervisor"]);
 
+  const orderId = formData.get("envasado_order_id");
   const parsed = StartEnvasadoSchema.safeParse({
     bache_id: formData.get("bache_id"),
     operario_id: formData.get("operario_id"),
+    envasado_order_id: orderId && orderId !== NO_ORDER_VALUE ? orderId : null,
     presentacion: formData.get("presentacion"),
   });
   if (!parsed.success) {

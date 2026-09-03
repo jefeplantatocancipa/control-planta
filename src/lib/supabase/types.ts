@@ -400,6 +400,7 @@ export interface Database {
           id: string;
           bache_id: string;
           operario_id: string;
+          envasado_order_id: string | null;
           presentacion: string;
           cantidad_unidades: number;
           cantidad_mermas: number;
@@ -412,6 +413,7 @@ export interface Database {
         Insert: {
           bache_id: string;
           operario_id: string;
+          envasado_order_id?: string | null;
           presentacion: string;
           cantidad_unidades: number;
           cantidad_mermas?: number;
