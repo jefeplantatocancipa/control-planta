@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { createBache, type ActionState } from "./actions";
 import { NO_ORDER_VALUE } from "./constants";
+import { formatTime } from "@/lib/format-date";
 import type { Database } from "@/lib/supabase/types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -31,8 +33,12 @@ function orderLabel(order: Order, productName: string) {
     ? `${order.baches_planeados} baches`
     : order.planned_quantity
       ? `${order.planned_quantity} ${order.unit}`
-      : "";
-  return [order.orden_codigo ?? order.scheduled_date, productName, cantidad]
+      : null;
+  const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
+  const horaInicio = order.hora_inicio_planeada
+    ? `desde ${formatTime(order.hora_inicio_planeada)}`
+    : null;
+  return [order.orden_codigo, productName, cantidad, fecha, horaInicio]
     .filter(Boolean)
     .join(" — ");
 }
