@@ -89,9 +89,13 @@ export function EnvasadoInsumosPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">
-          Insumos de envasado (envases y empaques)
-        </h3>
+        <div>
+          <h3 className="font-medium">Material de empaque</h3>
+          <p className="text-sm text-muted-foreground">
+            Envases y empaques (vasos, tapas, etiquetas, cajas), usados al
+            iniciar un envasado.
+          </p>
+        </div>
         <Button
           size="sm"
           onClick={() => {

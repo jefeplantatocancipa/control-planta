@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { ProductsPanel } from "./products-panel";
 import { StagesPanel } from "./stages-panel";
 import { UsersPanel } from "./users-panel";
@@ -62,20 +63,21 @@ export default async function AdminPage() {
           <StagesPanel stages={stages ?? []} products={products ?? []} />
         </TabsContent>
         <TabsContent value="insumos">
-          <InsumosPanel
-            insumos={insumos ?? []}
-            products={products ?? []}
-            productInsumos={productInsumos ?? []}
-          />
-        </TabsContent>
-        <TabsContent value="envasado">
           <div className="flex flex-col gap-8">
-            <EnvasadoReferenciasPanel
-              referencias={envasadoReferencias ?? []}
+            <InsumosPanel
+              insumos={insumos ?? []}
               products={products ?? []}
+              productInsumos={productInsumos ?? []}
             />
+            <Separator />
             <EnvasadoInsumosPanel insumos={envasadoInsumos ?? []} />
           </div>
+        </TabsContent>
+        <TabsContent value="envasado">
+          <EnvasadoReferenciasPanel
+            referencias={envasadoReferencias ?? []}
+            products={products ?? []}
+          />
         </TabsContent>
         <TabsContent value="turnos">
           <TurnosPanel turnos={turnos ?? []} />

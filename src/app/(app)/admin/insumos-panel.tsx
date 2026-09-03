@@ -203,7 +203,14 @@ export function InsumosPanel({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-4">
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium">Materia prima</h3>
+            <p className="text-sm text-muted-foreground">
+              Insumos de producción del bache (leche, proteína, cultivos,
+              etc.), usados en Alistamiento de insumos y Mezcla.
+            </p>
+          </div>
           <Button
             size="sm"
             onClick={() => {
