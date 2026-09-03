@@ -176,6 +176,10 @@ function InsumosChecklist({
     onChange(drafts.map((draft, i) => (i === index ? { ...draft, ...patch } : draft)));
   }
 
+  const totalKg = drafts
+    .filter((d) => d.checked)
+    .reduce((sum, d) => sum + (Number(d.peso) || 0), 0);
+
   return (
     <div className="flex flex-col gap-3">
       <Label>Insumos (receta del producto)</Label>
@@ -238,6 +242,11 @@ function InsumosChecklist({
         <p className="text-sm text-muted-foreground">
           Este producto no tiene insumos configurados en Administración →
           Insumos.
+        </p>
+      )}
+      {drafts.some((d) => d.checked) && (
+        <p className="text-sm font-semibold">
+          Balance de masa (insumos): {totalKg.toFixed(2)} kg
         </p>
       )}
     </div>
@@ -586,6 +595,15 @@ function FinishStageForm({
                   {i.nombre}: Lote {i.lote || "—"} · {i.peso || "0"} kg · {i.marca || "—"}
                 </p>
               ))}
+            {capturesInsumos && checkedInsumos.length > 0 && (
+              <p className="font-semibold text-foreground">
+                Balance de masa (insumos):{" "}
+                {checkedInsumos
+                  .reduce((sum, i) => sum + (Number(i.peso) || 0), 0)
+                  .toFixed(2)}{" "}
+                kg
+              </p>
+            )}
             {notes && <p>Notas: {notes}</p>}
           </div>
           <ConfirmFinishForm
@@ -684,14 +702,21 @@ export function StageCard({
               </ul>
             )}
             {insumos && (
-              <ul className="list-inside list-disc">
-                {insumos.map((insumo, idx) => (
-                  <li key={idx}>
-                    {insumo.nombre}: Lote {insumo.lote} · {insumo.peso} kg ·{" "}
-                    {insumo.marca}
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="list-inside list-disc">
+                  {insumos.map((insumo, idx) => (
+                    <li key={idx}>
+                      {insumo.nombre}: Lote {insumo.lote} · {insumo.peso} kg ·{" "}
+                      {insumo.marca}
+                    </li>
+                  ))}
+                </ul>
+                <p className="font-semibold text-foreground">
+                  Balance de masa (insumos):{" "}
+                  {insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0).toFixed(2)}{" "}
+                  kg
+                </p>
+              </>
             )}
             {readings && (
               <div className="pt-1">

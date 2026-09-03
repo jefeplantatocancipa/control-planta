@@ -272,6 +272,14 @@ export default async function BacheReportPage({
                         <td className="py-0.5">{insumo.peso}</td>
                       </tr>
                     ))}
+                    <tr>
+                      <td colSpan={3} className="py-0.5 pr-2 text-right font-semibold">
+                        Balance de masa (insumos)
+                      </td>
+                      <td className="py-0.5 font-semibold">
+                        {insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0)} kg
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               )}

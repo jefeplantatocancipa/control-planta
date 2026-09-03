@@ -16,20 +16,33 @@ export default async function EnvasadoPage() {
   await requireRole(["jefe_planta", "supervisor"]);
   const supabase = await createClient();
 
-  const [{ data: envasados }, { data: baches }, { data: products }, { data: operarios }] =
-    await Promise.all([
-      supabase
-        .from("envasados")
-        .select("*")
-        .order("started_at", { ascending: false }),
-      supabase
-        .from("baches")
-        .select("*")
-        .neq("status", "cancelado")
-        .order("started_at", { ascending: false }),
-      supabase.from("products").select("*"),
-      supabase.from("profiles").select("*").eq("active", true).order("full_name"),
-    ]);
+  const [
+    { data: envasados },
+    { data: baches },
+    { data: products },
+    { data: operarios },
+    { data: insumosStages },
+    { data: stageRecords },
+  ] = await Promise.all([
+    supabase
+      .from("envasados")
+      .select("*")
+      .order("started_at", { ascending: false }),
+    supabase
+      .from("baches")
+      .select("*")
+      .neq("status", "cancelado")
+      .order("started_at", { ascending: false }),
+    supabase.from("products").select("*"),
+    supabase.from("profiles").select("*").eq("active", true).order("full_name"),
+    supabase
+      .from("process_stage_templates")
+      .select("id, sequence_order")
+      .eq("captures_insumos", true),
+    supabase
+      .from("bache_stage_records")
+      .select("bache_id, stage_template_id, parameters"),
+  ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
   const bacheOptions = (baches ?? []).map((bache) => ({
@@ -38,6 +51,27 @@ export default async function EnvasadoPage() {
   }));
   const bacheLabels = new Map(bacheOptions.map((b) => [b.id, b.label]));
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
+
+  // Balance de masa por bache: se toma la primera etapa con checklist de
+  // insumos (ej. Alistamiento de insumos) para no duplicar con etapas
+  // encadenadas posteriores (ej. Mezcla) que marcan los mismos insumos ya
+  // pesados en vez de pesar de nuevo.
+  const insumosStageOrder = new Map(
+    (insumosStages ?? []).map((s) => [s.id, s.sequence_order]),
+  );
+  const massBalanceByBache = new Map<string, { order: number; kg: number }>();
+  for (const record of stageRecords ?? []) {
+    const order = insumosStageOrder.get(record.stage_template_id);
+    if (order === undefined) continue;
+    const insumos = Array.isArray(record.parameters?.insumos)
+      ? record.parameters.insumos
+      : [];
+    const kg = insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0);
+    const current = massBalanceByBache.get(record.bache_id);
+    if (!current || order < current.order) {
+      massBalanceByBache.set(record.bache_id, { order, kg });
+    }
+  }
 
   const open = (envasados ?? []).filter((e) => !e.ended_at);
   const closed = (envasados ?? []).filter((e) => e.ended_at);
@@ -71,6 +105,7 @@ export default async function EnvasadoPage() {
               cantidadUnidades={envasado.cantidad_unidades}
               cantidadMermas={envasado.cantidad_mermas}
               notes={envasado.notes}
+              massBalanceKg={massBalanceByBache.get(envasado.bache_id)?.kg}
             />
           ))}
           {open.length === 0 && (
@@ -86,6 +121,7 @@ export default async function EnvasadoPage() {
             <TableRow>
               <TableHead>Bache</TableHead>
               <TableHead>Presentación</TableHead>
+              <TableHead>Insumos (kg)</TableHead>
               <TableHead>Unidades</TableHead>
               <TableHead>Mermas</TableHead>
               <TableHead>Operario</TableHead>
@@ -99,6 +135,9 @@ export default async function EnvasadoPage() {
                   {bacheLabels.get(envasado.bache_id) ?? "—"}
                 </TableCell>
                 <TableCell>{envasado.presentacion}</TableCell>
+                <TableCell>
+                  {massBalanceByBache.get(envasado.bache_id)?.kg ?? "—"}
+                </TableCell>
                 <TableCell>{envasado.cantidad_unidades}</TableCell>
                 <TableCell>{envasado.cantidad_mermas}</TableCell>
                 <TableCell>{operarioNames.get(envasado.operario_id) ?? "—"}</TableCell>
@@ -109,7 +148,7 @@ export default async function EnvasadoPage() {
             ))}
             {closed.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Sin envasados finalizados todavía.
                 </TableCell>
               </TableRow>

@@ -15,6 +15,7 @@ export function EnvasadoCard({
   cantidadUnidades,
   cantidadMermas,
   notes,
+  massBalanceKg,
 }: {
   recordId: string;
   bacheLabel: string;
@@ -23,6 +24,7 @@ export function EnvasadoCard({
   cantidadUnidades: number;
   cantidadMermas: number;
   notes: string | null;
+  massBalanceKg?: number;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     saveEnvasado,
@@ -36,6 +38,12 @@ export function EnvasadoCard({
           {bacheLabel} · {presentacion}
         </CardTitle>
         <p className="text-sm text-muted-foreground">{operarioName}</p>
+        {massBalanceKg !== undefined && (
+          <p className="text-sm text-muted-foreground">
+            Insumos alistados: <span className="font-medium">{massBalanceKg} kg</span>{" "}
+            (referencia para calcular mermas)
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <form action={action} className="flex flex-col gap-3">
