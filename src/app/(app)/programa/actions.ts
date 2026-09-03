@@ -1,14 +1,29 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import ExcelJS from "exceljs";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import type { OrderStatus, ProgramStatus } from "@/lib/supabase/types";
+import {
+  normalize,
+  cellText,
+  excelDateOnlyToISO,
+  excelDateTimeToBogotaISO,
+  mondayOfWeek,
+} from "./excel-utils";
+import type { Database, OrderStatus, ProgramStatus } from "@/lib/supabase/types";
 
 export interface ActionState {
   error?: string;
   success?: boolean;
+}
+
+export interface ImportActionState {
+  error?: string;
+  success?: boolean;
+  imported?: number;
+  warnings?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -165,4 +180,169 @@ export async function updateOrderStatus(
 
   revalidatePath("/programa");
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Importador de Excel: programa de Baches
+// ---------------------------------------------------------------------------
+const REQUIRED_HEADERS = ["orden de produccion", "sku", "fecha"];
+
+interface OrderDraft {
+  week: string;
+  order: Database["public"]["Tables"]["production_orders"]["Insert"];
+}
+
+export async function importBachesProgram(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  const profile = await requireRole(["jefe_planta"]);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Elegí un archivo de Excel (.xlsx)." };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer as never);
+  } catch {
+    return { error: "No se pudo leer el archivo. ¿Es un .xlsx válido?" };
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { error: "El archivo no tiene hojas." };
+
+  let headerRowNumber = -1;
+  let columns: Record<string, number> = {};
+  for (let r = 1; r <= Math.min(sheet.rowCount, 20); r++) {
+    const row = sheet.getRow(r);
+    const map: Record<string, number> = {};
+    row.eachCell((cell, colNumber) => {
+      const key = normalize(cellText(cell));
+      if (key) map[key] = colNumber;
+    });
+    if (REQUIRED_HEADERS.every((h) => h in map)) {
+      headerRowNumber = r;
+      columns = map;
+      break;
+    }
+  }
+  if (headerRowNumber === -1) {
+    return {
+      error:
+        "No se encontraron los encabezados esperados (Orden de Producción, sku, FECHA). Usá la plantilla.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: products } = await supabase.from("products").select("id, code");
+  const productByCode = new Map(
+    (products ?? []).map((p) => [normalize(p.code), p.id]),
+  );
+
+  const { data: existingPrograms } = await supabase
+    .from("production_programs")
+    .select("id, week_start_date");
+  const programByWeek = new Map(
+    (existingPrograms ?? []).map((p) => [p.week_start_date, p.id]),
+  );
+
+  const warnings: string[] = [];
+  const drafts: OrderDraft[] = [];
+
+  for (let r = headerRowNumber + 1; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const ordenCodigo = cellText(row.getCell(columns["orden de produccion"]));
+    if (!ordenCodigo) continue; // fila vacía: fin de la tabla
+
+    const sku = cellText(row.getCell(columns["sku"]));
+    const nombre = columns["nombres"]
+      ? cellText(row.getCell(columns["nombres"]))
+      : "";
+
+    const fechaValue = row.getCell(columns["fecha"]).value;
+    const scheduledDate = excelDateOnlyToISO(fechaValue);
+    if (!scheduledDate) {
+      warnings.push(`Fila ${r} (${ordenCodigo}): FECHA inválida, se omitió.`);
+      continue;
+    }
+
+    const productId = productByCode.get(normalize(sku));
+    if (!productId) {
+      warnings.push(
+        `Fila ${r} (${ordenCodigo}): no se encontró un producto con sku "${sku}"${
+          nombre ? ` (${nombre})` : ""
+        }.`,
+      );
+      continue;
+    }
+
+    const tanque = columns["tanque"]
+      ? cellText(row.getCell(columns["tanque"])) || null
+      : null;
+    const bachesRaw = columns["baches"] ? row.getCell(columns["baches"]).value : null;
+    const bachesPlaneados =
+      typeof bachesRaw === "number" ? bachesRaw : Number(bachesRaw) || null;
+    const horaInicio = columns["hora inicio"]
+      ? excelDateTimeToBogotaISO(row.getCell(columns["hora inicio"]).value)
+      : null;
+    const horaFinal = columns["hora final"]
+      ? excelDateTimeToBogotaISO(row.getCell(columns["hora final"]).value)
+      : null;
+
+    const week = mondayOfWeek(scheduledDate);
+    drafts.push({
+      week,
+      order: {
+        program_id: "",
+        product_id: productId,
+        scheduled_date: scheduledDate,
+        unit: "baches",
+        orden_codigo: ordenCodigo,
+        tanque,
+        baches_planeados: bachesPlaneados,
+        hora_inicio_planeada: horaInicio,
+        hora_final_planeada: horaFinal,
+      },
+    });
+  }
+
+  if (drafts.length === 0) {
+    return {
+      error: warnings[0] ?? "No se encontraron filas para importar.",
+      warnings,
+    };
+  }
+
+  const weeksNeeded = new Set(drafts.map((d) => d.week));
+  for (const week of weeksNeeded) {
+    if (programByWeek.has(week)) continue;
+    const { data: created, error } = await supabase
+      .from("production_programs")
+      .insert({ week_start_date: week, created_by: profile.id })
+      .select("id")
+      .single();
+    if (error || !created) {
+      return { error: `No se pudo crear el programa de la semana del ${week}.` };
+    }
+    programByWeek.set(week, created.id);
+  }
+
+  const rows = drafts.map((d) => ({
+    ...d.order,
+    program_id: programByWeek.get(d.week)!,
+  }));
+
+  const { error: upsertError } = await supabase
+    .from("production_orders")
+    .upsert(rows, { onConflict: "orden_codigo" });
+
+  if (upsertError) {
+    return { error: "No se pudieron guardar las órdenes importadas." };
+  }
+
+  revalidatePath("/programa");
+  return { success: true, imported: rows.length, warnings };
 }

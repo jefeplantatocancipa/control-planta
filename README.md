@@ -35,6 +35,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 8. `0008_insumos_receta.sql` — catálogo de insumos y receta por producto (qué insumos le corresponden a cada producto), para que el alistamiento de insumos sea un checklist en vez de texto libre.
 9. `0009_captures_insumos.sql` — reemplaza el modo de captura exclusivo (parámetros o insumos) por un flag independiente, para que una etapa pueda tener parámetros propios y checklist de insumos a la vez.
 10. `0010_captures_readings.sql` — flag independiente `captures_readings` para que una etapa admita varias lecturas periódicas mientras está en curso (cada una con su hora automática), en vez de un valor único al finalizar — por ejemplo una curva de fermentación.
+11. `0011_programa_import_baches.sql` — columnas nuevas en `production_orders` (`orden_codigo`, `tanque`, `baches_planeados`, horas planeadas) para el importador de Excel del programa de Baches; `planned_quantity` deja de ser obligatoria.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

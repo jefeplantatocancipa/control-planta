@@ -163,18 +163,28 @@ export interface Database {
           program_id: string;
           product_id: string;
           scheduled_date: string;
-          planned_quantity: number;
+          planned_quantity: number | null;
           unit: string;
           status: OrderStatus;
+          orden_codigo: string | null;
+          tanque: string | null;
+          baches_planeados: number | null;
+          hora_inicio_planeada: string | null;
+          hora_final_planeada: string | null;
           created_at: string;
         };
         Insert: {
           program_id: string;
           product_id: string;
           scheduled_date: string;
-          planned_quantity: number;
+          planned_quantity?: number | null;
           unit?: string;
           status?: OrderStatus;
+          orden_codigo?: string | null;
+          tanque?: string | null;
+          baches_planeados?: number | null;
+          hora_inicio_planeada?: string | null;
+          hora_final_planeada?: string | null;
         };
         Update: Partial<
           Database["public"]["Tables"]["production_orders"]["Insert"]

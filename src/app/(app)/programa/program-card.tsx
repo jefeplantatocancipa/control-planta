@@ -19,6 +19,7 @@ import {
 import { ProgramStatusSelect } from "./program-status-select";
 import { OrderStatusSelect } from "./order-status-select";
 import { NewOrderDialog } from "./new-order-dialog";
+import { formatDateTime } from "@/lib/format-date";
 import type { Database, ProgramStatus } from "@/lib/supabase/types";
 
 type Program = Database["public"]["Tables"]["production_programs"]["Row"];
@@ -42,11 +43,13 @@ export function ProgramCard({
   orders,
   products,
   canWrite,
+  realTimesByOrder,
 }: {
   program: Program;
   orders: Order[];
   products: Product[];
   canWrite: boolean;
+  realTimesByOrder?: Map<string, { start: string; end: string | null }>;
 }) {
   const productNames = new Map(products.map((p) => [p.id, p.name]));
 
@@ -69,36 +72,60 @@ export function ProgramCard({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Orden</TableHead>
               <TableHead>Producto</TableHead>
+              <TableHead>Tanque</TableHead>
               <TableHead>Fecha</TableHead>
-              <TableHead>Planeado</TableHead>
+              <TableHead>Baches</TableHead>
+              <TableHead>Planeado (inicio–final)</TableHead>
+              <TableHead>Real (inicio–final)</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((order) => (
-              <TableRow key={order.id}>
-                <TableCell className="font-medium">
-                  {productNames.get(order.product_id) ?? "—"}
-                </TableCell>
-                <TableCell>
-                  {format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy")}
-                </TableCell>
-                <TableCell>
-                  {order.planned_quantity} {order.unit}
-                </TableCell>
-                <TableCell>
-                  {canWrite ? (
-                    <OrderStatusSelect orderId={order.id} status={order.status} />
-                  ) : (
-                    <Badge variant="outline">{order.status}</Badge>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+            {orders.map((order) => {
+              const real = realTimesByOrder?.get(order.id);
+              return (
+                <TableRow key={order.id}>
+                  <TableCell className="font-medium">
+                    {order.orden_codigo ?? "—"}
+                  </TableCell>
+                  <TableCell>{productNames.get(order.product_id) ?? "—"}</TableCell>
+                  <TableCell>{order.tanque ?? "—"}</TableCell>
+                  <TableCell>
+                    {format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy")}
+                  </TableCell>
+                  <TableCell>
+                    {order.baches_planeados ??
+                      (order.planned_quantity
+                        ? `${order.planned_quantity} ${order.unit}`
+                        : "—")}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {order.hora_inicio_planeada
+                      ? formatDateTime(order.hora_inicio_planeada)
+                      : "—"}
+                    {order.hora_final_planeada
+                      ? ` – ${formatDateTime(order.hora_final_planeada)}`
+                      : ""}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {real ? formatDateTime(real.start) : "—"}
+                    {real?.end ? ` – ${formatDateTime(real.end)}` : ""}
+                  </TableCell>
+                  <TableCell>
+                    {canWrite ? (
+                      <OrderStatusSelect orderId={order.id} status={order.status} />
+                    ) : (
+                      <Badge variant="outline">{order.status}</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {orders.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   Sin órdenes todavía.
                 </TableCell>
               </TableRow>
