@@ -48,7 +48,11 @@ export async function createBache(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("baches")
-    .insert({ ...parsed.data, created_by: profile.id })
+    .insert({
+      ...parsed.data,
+      volumen_restante_litros: parsed.data.volumen_total_litros,
+      created_by: profile.id,
+    })
     .select("id")
     .single();
 

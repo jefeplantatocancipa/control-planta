@@ -1,9 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useActionState } from "react";
 import Link from "next/link";
 import { Printer } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { finalizarEnvasado, type ActionState } from "./actions";
 import { TurnoPanel, type CorteDisplay } from "./turno-panel";
@@ -16,33 +27,89 @@ export type { CorteDisplay, LecturaDisplay, EstibaDisplay } from "./turno-panel"
 
 function FinalizarEnvasadoForm({
   recordId,
-  disabled,
+  onSuccess,
 }: {
   recordId: string;
-  disabled: boolean;
+  onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     finalizarEnvasado,
     {},
   );
+  const [bacheTerminado, setBacheTerminado] = useState("true");
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
 
   return (
-    <form action={action} className="flex flex-col items-end gap-1">
+    <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="record_id" value={recordId} />
-      <Button type="submit" size="sm" disabled={pending || disabled}>
-        {pending ? "Finalizando..." : "Finalizar envasado"}
-      </Button>
-      {disabled && (
-        <p className="text-xs text-muted-foreground">
-          Finalizá el turno activo antes de cerrar el envasado.
-        </p>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="bache_terminado">¿Se terminó de envasar este bache?</Label>
+        <select
+          id="bache_terminado"
+          name="bache_terminado"
+          value={bacheTerminado}
+          onChange={(e) => setBacheTerminado(e.target.value)}
+          className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+        >
+          <option value="true">Sí, no queda producto</option>
+          <option value="false">No, queda producto sin envasar</option>
+        </select>
+      </div>
+
+      {bacheTerminado === "false" && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="volumen_restante">Cantidad restante (L)</Label>
+          <Input
+            id="volumen_restante"
+            name="volumen_restante"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Opcional"
+          />
+          <p className="text-xs text-muted-foreground">
+            El bache sigue apareciendo para elegir en un próximo envasado.
+          </p>
+        </div>
       )}
+
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
         </p>
       )}
+      <DialogFooter>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Finalizando..." : "Finalizar envasado"}
+        </Button>
+      </DialogFooter>
     </form>
+  );
+}
+
+function FinalizarEnvasadoDialog({
+  recordId,
+  disabled,
+}: {
+  recordId: string;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button size="sm" disabled={disabled}>Finalizar envasado</Button>} />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Finalizar envasado</DialogTitle>
+        </DialogHeader>
+        <FinalizarEnvasadoForm recordId={recordId} onSuccess={() => setOpen(false)} />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -113,7 +180,14 @@ export function EnvasadoCard({
               Suma de los turnos ya finalizados.
             </p>
           </div>
-          <FinalizarEnvasadoForm recordId={recordId} disabled={hayTurnoActivo} />
+          <div className="flex flex-col items-end gap-1">
+            <FinalizarEnvasadoDialog recordId={recordId} disabled={hayTurnoActivo} />
+            {hayTurnoActivo && (
+              <p className="text-xs text-muted-foreground">
+                Finalizá el turno activo antes de cerrar el envasado.
+              </p>
+            )}
+          </div>
         </div>
 
         <TurnoPanel

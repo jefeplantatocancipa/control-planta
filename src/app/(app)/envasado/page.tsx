@@ -57,7 +57,7 @@ export default async function EnvasadoPage() {
     supabase
       .from("envasado_orders")
       .select("*")
-      .in("status", ["pendiente", "en_proceso"])
+      .eq("status", "pendiente")
       .order("scheduled_date"),
     supabase.from("envasado_referencias").select("*"),
     supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
@@ -69,11 +69,30 @@ export default async function EnvasadoPage() {
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
-  const bacheOptions = (baches ?? []).map((bache) => ({
-    id: bache.id,
-    label: `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`,
-  }));
-  const bacheLabels = new Map(bacheOptions.map((b) => [b.id, b.label]));
+  // El desplegable de "Iniciar envasado" solo debe ofrecer baches que
+  // sigan teniendo producto sin envasar; los ya completados se sacan acá
+  // pero se mantienen en `baches` para poder mostrar su nombre en el
+  // historial de envasados ya vinculados a ellos.
+  const bacheOptions = (baches ?? [])
+    .filter((bache) => bache.status === "en_proceso")
+    .map((bache) => ({
+      id: bache.id,
+      label: [
+        bache.batch_code,
+        productNames.get(bache.product_id) ?? "—",
+        bache.volumen_restante_litros != null
+          ? `quedan ${bache.volumen_restante_litros} L`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" — "),
+    }));
+  const bacheLabels = new Map(
+    (baches ?? []).map((bache) => [
+      bache.id,
+      `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`,
+    ]),
+  );
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
 
   const turnoNames = new Map((turnos ?? []).map((t) => [t.id, t.name]));

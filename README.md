@@ -44,6 +44,7 @@ En el **SQL Editor** del proyecto Supabase, ejecuta en orden los archivos de `su
 17. `0017_envasado_insumos_detalle.sql` — columnas `presentacion_caja` y `marca` en `envasado_insumos`, para el importador de Excel del catálogo de material de empaque.
 18. `0018_envasado_referencia_insumos.sql` — tabla `envasado_referencia_insumos`: receta de material de empaque por referencia (sku), igual que `product_insumos` para la receta de materia prima por producto. Filtra el checklist de "Iniciar envasado" a solo los insumos que corresponden a la referencia elegida.
 19. `0019_envasado_control_horario.sql` — reestructura `envasado_cortes` como inicio/fin de turno (`started_at`/`ended_at`, `unidades_final` y `desperdicio` opcionales hasta finalizar); mueve el control de calidad (peso neto, sellado, fechado) a lecturas repetidas en `envasado_calidad_lecturas`; agrega `envasado_estibas` para medir cuánto se demora cada estiba y sus unidades.
+20. `0020_bache_volumen_restante.sql` — columna `volumen_restante_litros` en `baches`: al finalizar un envasado se confirma si el bache se terminó (lo marca `completado` y deja de aparecer en "Iniciar envasado") o cuánto queda (sigue apareciendo). Las órdenes de envasado ya usadas también dejan de aparecer en el desplegable.
 
 (Alternativamente, con la CLI de Supabase: `supabase link` y luego `supabase db push`.)
 

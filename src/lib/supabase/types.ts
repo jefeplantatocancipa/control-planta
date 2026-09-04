@@ -349,6 +349,7 @@ export interface Database {
           batch_code: string;
           status: BacheStatus;
           volumen_total_litros: number | null;
+          volumen_restante_litros: number | null;
           started_at: string;
           completed_at: string | null;
           created_by: string;
@@ -360,6 +361,7 @@ export interface Database {
           batch_code: string;
           status?: BacheStatus;
           volumen_total_litros?: number | null;
+          volumen_restante_litros?: number | null;
           created_by: string;
         };
         Update: Partial<Database["public"]["Tables"]["baches"]["Insert"]> & {

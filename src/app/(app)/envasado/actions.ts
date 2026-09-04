@@ -99,12 +99,24 @@ export async function startEnvasado(
     };
   }
 
+  // Una vez que la orden de envasado se usó, deja de estar disponible para
+  // elegir en un nuevo "Iniciar envasado".
+  if (parsed.data.envasado_order_id) {
+    await supabase
+      .from("envasado_orders")
+      .update({ status: "en_proceso" })
+      .eq("id", parsed.data.envasado_order_id);
+  }
+
   revalidatePath("/envasado");
+  revalidatePath("/programa");
   return { success: true };
 }
 
 const FinalizarEnvasadoSchema = z.object({
   record_id: z.string().uuid(),
+  bache_terminado: z.enum(["true", "false"]),
+  volumen_restante: z.coerce.number().min(0).optional(),
 });
 
 export async function finalizarEnvasado(
@@ -115,12 +127,23 @@ export async function finalizarEnvasado(
 
   const parsed = FinalizarEnvasadoSchema.safeParse({
     record_id: formData.get("record_id"),
+    bache_terminado: formData.get("bache_terminado"),
+    volumen_restante: formData.get("volumen_restante") || undefined,
   });
   if (!parsed.success) {
-    return { error: "Datos inválidos." };
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
   const supabase = await createClient();
+
+  const { data: envasado } = await supabase
+    .from("envasados")
+    .select("bache_id, envasado_order_id")
+    .eq("id", parsed.data.record_id)
+    .single();
+  if (!envasado) {
+    return { error: "No se encontró el envasado." };
+  }
 
   const { data: activo } = await supabase
     .from("envasado_cortes")
@@ -169,7 +192,35 @@ export async function finalizarEnvasado(
     return { error: "No se pudo finalizar el envasado." };
   }
 
+  // El bache sigue apareciendo para elegir en un próximo envasado mientras
+  // no esté marcado como terminado.
+  if (parsed.data.bache_terminado === "true") {
+    await supabase
+      .from("baches")
+      .update({
+        status: "completado",
+        completed_at: new Date().toISOString(),
+        volumen_restante_litros: 0,
+      })
+      .eq("id", envasado.bache_id);
+  } else if (parsed.data.volumen_restante !== undefined) {
+    await supabase
+      .from("baches")
+      .update({ volumen_restante_litros: parsed.data.volumen_restante })
+      .eq("id", envasado.bache_id);
+  }
+
+  // La orden de envasado usada ya no debe volver a aparecer para elegir.
+  if (envasado.envasado_order_id) {
+    await supabase
+      .from("envasado_orders")
+      .update({ status: "completado" })
+      .eq("id", envasado.envasado_order_id);
+  }
+
   revalidatePath("/envasado");
+  revalidatePath("/baches");
+  revalidatePath("/programa");
   return { success: true };
 }
 
