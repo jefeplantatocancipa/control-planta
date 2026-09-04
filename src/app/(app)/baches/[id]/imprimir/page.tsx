@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
 import { PrintButton } from "./print-button";
-import type { BacheStatus, Database } from "@/lib/supabase/types";
+import type { BacheStatus, Database, StageReading } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
   en_proceso: "En proceso",
@@ -41,6 +41,111 @@ function StatTile({ label, value }: { label: string; value: string }) {
       <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm font-bold text-primary">{value}</p>
     </div>
+  );
+}
+
+const CHART_COLORS = ["#005240", "#a3b18a"];
+
+// Curva de las lecturas periódicas (ej. temperatura en pasteurización, pH
+// en fermentación): solo grafica los parámetros numéricos, una línea por
+// parámetro, para dar de un vistazo la tendencia que ya está en la tabla.
+function LecturasChart({
+  stage,
+  lecturas,
+}: {
+  stage: StageTemplate;
+  lecturas: StageReading[];
+}) {
+  const numericParams = stage.parameter_schema.filter((p) => p.type === "number");
+  const series = numericParams
+    .map((param) => ({
+      key: param.key,
+      label: param.label,
+      points: lecturas
+        .map((reading, i) => ({ i, v: Number(reading[param.key]) }))
+        .filter((p) => !Number.isNaN(p.v)),
+    }))
+    .filter((s) => s.points.length >= 2);
+
+  if (series.length === 0) return null;
+
+  const width = 560;
+  const height = 108;
+  const padL = 30;
+  const padR = 14;
+  const padT = 10;
+  const padB = 8;
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
+
+  const allValues = series.flatMap((s) => s.points.map((p) => p.v));
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+  const range = max - min || 1;
+  const yMin = min - range * 0.15;
+  const yMax = max + range * 0.15;
+
+  const n = lecturas.length;
+  const xFor = (i: number) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yFor = (v: number) => padT + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="mt-1 w-full"
+      style={{ maxWidth: `${width}px`, height: "auto" }}
+    >
+      {[0, 0.5, 1].map((frac) => {
+        const y = padT + plotH * frac;
+        return (
+          <line
+            key={frac}
+            x1={padL}
+            x2={width - padR}
+            y1={y}
+            y2={y}
+            stroke="#ddd6c6"
+            strokeWidth="0.75"
+            strokeDasharray="2,2"
+          />
+        );
+      })}
+      <text x={padL - 4} y={padT + 3} textAnchor="end" fontSize="7" fill="#8a8578">
+        {yMax.toFixed(1)}
+      </text>
+      <text x={padL - 4} y={padT + plotH + 3} textAnchor="end" fontSize="7" fill="#8a8578">
+        {yMin.toFixed(1)}
+      </text>
+
+      {series.map((s, si) => {
+        const color = CHART_COLORS[si % CHART_COLORS.length];
+        const d = s.points
+          .map((p, idx) => `${idx === 0 ? "M" : "L"}${xFor(p.i).toFixed(1)},${yFor(p.v).toFixed(1)}`)
+          .join(" ");
+        const last = s.points[s.points.length - 1];
+        return (
+          <g key={s.key}>
+            <path d={d} fill="none" stroke={color} strokeWidth="1.5" />
+            {s.points.map((p) => (
+              <circle key={p.i} cx={xFor(p.i)} cy={yFor(p.v)} r="1.6" fill={color} />
+            ))}
+            {/* Etiqueta de la serie con el último valor, en una posición fija
+                arriba a la derecha (no pegada al último punto) para que no
+                se superponga entre series ni se salga del gráfico. */}
+            <text
+              x={width - padR}
+              y={padT + 7 + si * 9}
+              textAnchor="end"
+              fontSize="7"
+              fontWeight="600"
+              fill={color}
+            >
+              {s.label} {last.v}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -311,6 +416,10 @@ export default async function BacheReportPage({
                     ))}
                   </tbody>
                 </table>
+              )}
+
+              {lecturas && lecturas.length > 1 && (
+                <LecturasChart stage={stage} lecturas={lecturas} />
               )}
 
               {record?.notes && (
