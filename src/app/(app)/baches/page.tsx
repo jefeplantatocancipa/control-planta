@@ -52,7 +52,7 @@ export default async function BachesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Preparación de baches</h1>
           <p className="text-muted-foreground">
-            Crear baches y capturar cada una de las 8 etapas.
+            Crear baches y capturar cada etapa del proceso.
           </p>
         </div>
         <NewBacheDialog products={(products ?? []).filter((p) => p.active)} orders={orders ?? []} />
