@@ -69,12 +69,13 @@ export default async function EnvasadoPage() {
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
-  // El desplegable de "Iniciar envasado" solo debe ofrecer baches que
-  // sigan teniendo producto sin envasar; los ya completados se sacan acá
-  // pero se mantienen en `baches` para poder mostrar su nombre en el
-  // historial de envasados ya vinculados a ellos.
+  // El desplegable de "Iniciar envasado" se filtra por si queda producto sin
+  // envasar (volumen_restante_litros), NO por el estado del bache: "el bache
+  // ya terminó de producirse" (status) y "no queda producto para envasar"
+  // (volumen restante) son cosas distintas — un bache recién "completado"
+  // (todas sus etapas listas) es justo el que hay que poder envasar.
   const bacheOptions = (baches ?? [])
-    .filter((bache) => bache.status === "en_proceso")
+    .filter((bache) => bache.status !== "cancelado" && bache.volumen_restante_litros !== 0)
     .map((bache) => ({
       id: bache.id,
       label: [

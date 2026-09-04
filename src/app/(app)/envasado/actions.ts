@@ -192,16 +192,13 @@ export async function finalizarEnvasado(
     return { error: "No se pudo finalizar el envasado." };
   }
 
-  // El bache sigue apareciendo para elegir en un próximo envasado mientras
-  // no esté marcado como terminado.
+  // Esto solo actualiza volumen_restante_litros (cuánto queda por envasar),
+  // nunca el status del bache: ese campo lo controla el jefe de planta desde
+  // la propia página del bache para indicar si ya terminó de producirse.
   if (parsed.data.bache_terminado === "true") {
     await supabase
       .from("baches")
-      .update({
-        status: "completado",
-        completed_at: new Date().toISOString(),
-        volumen_restante_litros: 0,
-      })
+      .update({ volumen_restante_litros: 0 })
       .eq("id", envasado.bache_id);
   } else if (parsed.data.volumen_restante !== undefined) {
     await supabase
