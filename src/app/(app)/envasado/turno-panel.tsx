@@ -507,16 +507,19 @@ function EstibasList({ estibas }: { estibas: EstibaDisplay[] }) {
 function FinalizarTurnoForm({
   corteId,
   unidadesInicio,
+  totalUnidadesEstibas,
   onSuccess,
 }: {
   corteId: string;
   unidadesInicio: number;
+  totalUnidadesEstibas: number;
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     finalizarCorteTurno,
     {},
   );
+  const unidadesFinal = unidadesInicio + totalUnidadesEstibas;
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -526,17 +529,20 @@ function FinalizarTurnoForm({
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="corte_id" value={corteId} />
       <input type="hidden" name="unidades_inicio" value={unidadesInicio} />
+      <input type="hidden" name="unidades_final" value={unidadesFinal} />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="unidades_final">Unidades al final</Label>
         <Input
           id="unidades_final"
-          name="unidades_final"
           type="number"
-          step="1"
-          min="0"
-          required
+          value={unidadesFinal}
+          readOnly
+          disabled
         />
+        <p className="text-xs text-muted-foreground">
+          Suma de las unidades reportadas en las estibas del turno.
+        </p>
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="desperdicio">Desperdicio</Label>
@@ -571,9 +577,11 @@ function FinalizarTurnoForm({
 function FinalizarTurnoDialog({
   corteId,
   unidadesInicio,
+  totalUnidadesEstibas,
 }: {
   corteId: string;
   unidadesInicio: number;
+  totalUnidadesEstibas: number;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -587,6 +595,7 @@ function FinalizarTurnoDialog({
         <FinalizarTurnoForm
           corteId={corteId}
           unidadesInicio={unidadesInicio}
+          totalUnidadesEstibas={totalUnidadesEstibas}
           onSuccess={() => setOpen(false)}
         />
       </DialogContent>
@@ -611,6 +620,8 @@ export function TurnoPanel({
   const activo = cortes.find((c) => !c.endedAt);
   const cerrados = cortes.filter((c) => c.endedAt);
   const estibaAbierta = activo?.estibas.find((e) => !e.finalEstiba);
+  const totalUnidadesEstibas =
+    activo?.estibas.reduce((sum, e) => sum + (e.unidadesPorEstiba ?? 0), 0) ?? 0;
 
   return (
     <div className="flex flex-col gap-3 border-t pt-3">
@@ -631,7 +642,11 @@ export function TurnoPanel({
                 inicio {activo.unidadesInicio}
               </p>
             </div>
-            <FinalizarTurnoDialog corteId={activo.id} unidadesInicio={activo.unidadesInicio} />
+            <FinalizarTurnoDialog
+              corteId={activo.id}
+              unidadesInicio={activo.unidadesInicio}
+              totalUnidadesEstibas={totalUnidadesEstibas}
+            />
           </div>
 
           <div className="flex flex-col gap-2">
