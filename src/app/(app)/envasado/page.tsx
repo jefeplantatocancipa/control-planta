@@ -161,11 +161,16 @@ export default async function EnvasadoPage() {
     const referencia = referenciasById.get(order.referencia_id);
     const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
     const presentacion = referencia ? `${referencia.sku} — ${referencia.name}` : "—";
+    // El producto (nombre) va primero para identificar qué se va a envasar;
+    // línea/fecha/cantidad, que es lo que distingue órdenes de un mismo
+    // producto, van antes de que se trunque; el sku (solo un código) queda
+    // al final, igual que el código de orden en "Nuevo bache".
     const label = [
-      presentacion,
+      referencia?.name ?? "—",
       order.linea,
       fecha,
       `${order.planned_quantity} und.`,
+      referencia?.sku,
     ]
       .filter(Boolean)
       .join(" — ");
