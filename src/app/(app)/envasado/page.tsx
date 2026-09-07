@@ -266,7 +266,7 @@ export default async function EnvasadoPage() {
           </TableHeader>
           <TableBody>
             {closed.map((envasado) => (
-              <TableRow key={envasado.id}>
+              <TableRow key={envasado.id} className="group">
                 <TableCell className="font-medium">
                   {bacheLabels.get(envasado.bache_id) ?? "—"}
                 </TableCell>
@@ -290,7 +290,7 @@ export default async function EnvasadoPage() {
                   </Link>
                 </TableCell>
                 {canDelete && (
-                  <TableCell className="sticky right-0 bg-card text-right">
+                  <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
                     <DeleteButton
                       action={deleteEnvasado}
                       id={envasado.id}

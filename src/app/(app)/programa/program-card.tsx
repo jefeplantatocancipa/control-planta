@@ -110,7 +110,7 @@ export function ProgramCard({
             {orders.map((order) => {
               const real = realTimesByOrder?.get(order.id);
               return (
-                <TableRow key={order.id}>
+                <TableRow key={order.id} className="group">
                   <TableCell className="font-medium">
                     {order.orden_codigo ?? "—"}
                   </TableCell>
@@ -145,7 +145,7 @@ export function ProgramCard({
                     )}
                   </TableCell>
                   {canWrite && (
-                    <TableCell className="sticky right-0 bg-card text-right">
+                    <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
                       <DeleteButton
                         action={deleteOrder}
                         id={order.id}
@@ -198,7 +198,7 @@ export function ProgramCard({
             {envasadoOrders.map((order) => {
               const referencia = referenciasById.get(order.referencia_id);
               return (
-                <TableRow key={order.id}>
+                <TableRow key={order.id} className="group">
                   <TableCell className="font-medium">
                     {referencia ? `${referencia.sku} — ${referencia.name}` : "—"}
                   </TableCell>
@@ -217,7 +217,7 @@ export function ProgramCard({
                     <Badge variant="outline">{order.status}</Badge>
                   </TableCell>
                   {canWrite && (
-                    <TableCell className="sticky right-0 bg-card text-right">
+                    <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
                       <DeleteButton
                         action={deleteEnvasadoOrder}
                         id={order.id}

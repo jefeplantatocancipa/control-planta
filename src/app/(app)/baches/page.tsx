@@ -75,7 +75,7 @@ export default async function BachesPage() {
         </TableHeader>
         <TableBody>
           {(baches ?? []).map((bache) => (
-            <TableRow key={bache.id}>
+            <TableRow key={bache.id} className="group">
               <TableCell className="font-medium">{bache.batch_code}</TableCell>
               <TableCell>{productNames.get(bache.product_id) ?? "—"}</TableCell>
               <TableCell>
@@ -100,7 +100,7 @@ export default async function BachesPage() {
                 </Link>
               </TableCell>
               {canDelete && (
-                <TableCell className="sticky right-0 bg-card text-right">
+                <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
                   <DeleteButton
                     action={deleteBache}
                     id={bache.id}
