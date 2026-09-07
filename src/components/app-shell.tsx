@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta"] },
 ];
 
-const MOBILE_ITEMS = ["/", "/proceso", "/baches", "/envasado", "/estadisticas"];
+const MOBILE_ITEMS = ["/", "/proceso", "/baches", "/envasado", "/encajado", "/estadisticas"];
 
 function initials(name: string) {
   return name
