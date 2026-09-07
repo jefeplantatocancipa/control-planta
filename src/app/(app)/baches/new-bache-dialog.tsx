@@ -38,9 +38,10 @@ function orderLabel(order: Order, productName: string) {
   const horaInicio = order.hora_inicio_planeada
     ? formatTime(order.hora_inicio_planeada)
     : null;
-  // Fecha y hora van primero: si el texto se trunca por espacio, lo más
-  // importante para identificar la orden sigue siendo visible.
-  return [order.orden_codigo, fecha, horaInicio, productName, cantidad]
+  // El producto va justo después del código de orden: quien inicia el bache
+  // necesita saber qué se va a producir antes que la fecha/hora, y si el
+  // texto se trunca por espacio, código + producto siguen siendo visibles.
+  return [order.orden_codigo, productName, fecha, horaInicio, cantidad]
     .filter(Boolean)
     .join(" — ");
 }
@@ -182,7 +183,7 @@ export function NewBacheDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm">Nuevo bache</Button>} />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nuevo bache</DialogTitle>
         </DialogHeader>
