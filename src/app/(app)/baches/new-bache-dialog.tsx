@@ -38,10 +38,10 @@ function orderLabel(order: Order, productName: string) {
   const horaInicio = order.hora_inicio_planeada
     ? formatTime(order.hora_inicio_planeada)
     : null;
-  // El producto va justo después del código de orden: quien inicia el bache
-  // necesita saber qué se va a producir antes que la fecha/hora, y si el
-  // texto se trunca por espacio, código + producto siguen siendo visibles.
-  return [order.orden_codigo, productName, fecha, horaInicio, cantidad]
+  // El producto va primero: quien inicia el bache necesita saber qué se va
+  // a producir antes que cualquier otro dato. El código de orden queda al
+  // final, como referencia.
+  return [productName, fecha, horaInicio, cantidad, order.orden_codigo]
     .filter(Boolean)
     .join(" — ");
 }
