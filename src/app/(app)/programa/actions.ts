@@ -354,10 +354,12 @@ export async function importBachesProgram(
       ? cellText(row.getCell(columns["nombres"]))
       : "";
 
-    const fechaValue = row.getCell(columns["fecha"]).value;
-    const scheduledDate = excelDateOnlyToISO(fechaValue);
+    const fechaCell = row.getCell(columns["fecha"]);
+    const scheduledDate = excelDateOnlyToISO(fechaCell.value);
     if (!scheduledDate) {
-      warnings.push(`Fila ${r} (${ordenCodigo}): FECHA inválida, se omitió.`);
+      warnings.push(
+        `Fila ${r} (${ordenCodigo}): FECHA inválida ("${cellText(fechaCell)}"), se omitió.`,
+      );
       continue;
     }
 
@@ -514,13 +516,13 @@ export async function importEnvasadoProgram(
 
   for (let r = headerRowNumber + 1; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
-    const fechaValue = row.getCell(columns["fecha"]).value;
-    const scheduledDate = excelDateOnlyToISO(fechaValue);
+    const fechaCell = row.getCell(columns["fecha"]);
+    const scheduledDate = excelDateOnlyToISO(fechaCell.value);
     const sku = cellText(row.getCell(columns["sku"]));
     if (!scheduledDate && !sku) continue; // fila vacía: fin de la tabla
 
     if (!scheduledDate) {
-      warnings.push(`Fila ${r}: FECHA inválida, se omitió.`);
+      warnings.push(`Fila ${r}: FECHA inválida ("${cellText(fechaCell)}"), se omitió.`);
       continue;
     }
 

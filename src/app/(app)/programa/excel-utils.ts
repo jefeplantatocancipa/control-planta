@@ -44,6 +44,35 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+// Si la columna se arma con una fórmula (ej. "=F2+1" para ir sumando días),
+// ExcelJS guarda `{ formula, result }` en vez del valor final; y si tiene
+// partes con formato distinto dentro de la misma celda, `{ richText: [...] }`.
+// Este helper "desenvuelve" esos casos hasta llegar al valor real.
+function resolveRawValue(value: unknown): Date | string | number | null {
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") return value;
+  if (value && typeof value === "object") {
+    if ("result" in value) {
+      return resolveRawValue((value as { result: unknown }).result);
+    }
+    if ("richText" in value) {
+      const richText = (value as { richText: { text: string }[] }).richText;
+      return richText.map((part) => part.text).join("");
+    }
+  }
+  return null;
+}
+
+// Excel cuenta los días desde el 30 de diciembre de 1899 (por el bug del año
+// bisiesto 1900 que Excel arrastra por compatibilidad histórica).
+const EXCEL_EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
+
+function excelSerialToDate(serial: number): Date | null {
+  if (!Number.isFinite(serial)) return null;
+  const date = new Date(EXCEL_EPOCH_UTC_MS + Math.round(serial) * 86_400_000);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 // La planta a veces escribe la fecha como texto en español ("domingo,
 // septiembre 06, 2026", "06 de septiembre de 2026") en vez de una celda de
 // fecha real de Excel. Se intentan varios formatos comunes antes de darla
@@ -99,11 +128,18 @@ function parseSpanishDateTimeText(
 // (Date, con los componentes de calendario en los accesores UTC) como texto
 // en español (el formato que usa la plantilla real de la planta).
 export function excelDateOnlyToISO(value: unknown): string | null {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return `${value.getUTCFullYear()}-${pad2(value.getUTCMonth() + 1)}-${pad2(value.getUTCDate())}`;
+  const resolved = resolveRawValue(value);
+  const date =
+    resolved instanceof Date
+      ? resolved
+      : typeof resolved === "number"
+        ? excelSerialToDate(resolved)
+        : null;
+  if (date && !Number.isNaN(date.getTime())) {
+    return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
   }
-  if (typeof value === "string") {
-    const parsed = parseSpanishDateText(value);
+  if (typeof resolved === "string") {
+    const parsed = parseSpanishDateText(resolved);
     if (parsed) return `${parsed.y}-${pad2(parsed.m)}-${pad2(parsed.d)}`;
   }
   return null;
@@ -118,19 +154,26 @@ export function excelDateTimeToBogotaISO(
   value: unknown,
   fallbackYear?: number,
 ): string | null {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+  const resolved = resolveRawValue(value);
+  const date =
+    resolved instanceof Date
+      ? resolved
+      : typeof resolved === "number"
+        ? excelSerialToDate(resolved)
+        : null;
+  if (date && !Number.isNaN(date.getTime())) {
     const utcMs = Date.UTC(
-      value.getUTCFullYear(),
-      value.getUTCMonth(),
-      value.getUTCDate(),
-      value.getUTCHours() + BOGOTA_OFFSET_HOURS,
-      value.getUTCMinutes(),
-      value.getUTCSeconds(),
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours() + BOGOTA_OFFSET_HOURS,
+      date.getUTCMinutes(),
+      date.getUTCSeconds(),
     );
     return new Date(utcMs).toISOString();
   }
-  if (typeof value === "string" && fallbackYear) {
-    const parsed = parseSpanishDateTimeText(value, fallbackYear);
+  if (typeof resolved === "string" && fallbackYear) {
+    const parsed = parseSpanishDateTimeText(resolved, fallbackYear);
     if (parsed) {
       const utcMs = Date.UTC(
         parsed.y,
