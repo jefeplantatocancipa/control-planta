@@ -167,7 +167,7 @@ export function EnvasadoCard({
                 action={deleteEnvasado}
                 id={recordId}
                 title="Eliminar envasado"
-                description="Borra este envasado con todos sus turnos, lecturas y estibas registradas."
+                description="Borra este envasado con todos sus turnos, lecturas, estibas y su encajado."
               />
             )}
           </div>

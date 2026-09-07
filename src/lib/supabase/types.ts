@@ -627,6 +627,48 @@ export interface Database {
         >;
         Relationships: [];
       };
+      encajados: {
+        Row: {
+          id: string;
+          envasado_id: string;
+          bache_id: string;
+          lote: string | null;
+          started_at: string | null;
+          ended_at: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          envasado_id: string;
+          bache_id: string;
+          lote?: string | null;
+          started_at?: string | null;
+          ended_at?: string | null;
+          created_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["encajados"]["Insert"]>;
+        Relationships: [];
+      };
+      encajado_estibas: {
+        Row: {
+          id: string;
+          encajado_id: string;
+          inicio_estiba: string;
+          final_estiba: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          encajado_id: string;
+          inicio_estiba?: string;
+          final_estiba?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["encajado_estibas"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: {
       v_proceso_actual: {

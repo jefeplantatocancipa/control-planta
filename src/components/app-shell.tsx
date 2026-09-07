@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   Beaker,
+  Boxes,
   ClipboardList,
   LayoutDashboard,
   LineChart,
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario"] },
   { href: "/baches", label: "Baches", icon: Beaker, roles: ["jefe_planta", "supervisor"] },
   { href: "/envasado", label: "Envasado", icon: Package, roles: ["jefe_planta", "supervisor"] },
+  { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor"] },
   { href: "/enmangado", label: "Enmangado", icon: Package, roles: ["jefe_planta", "supervisor"] },
   { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor"] },
   { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor"] },

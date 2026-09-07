@@ -300,7 +300,7 @@ export default async function EnvasadoPage() {
                       action={deleteEnvasado}
                       id={envasado.id}
                       title="Eliminar envasado"
-                      description="Borra este envasado con todos sus turnos, lecturas y estibas registradas."
+                      description="Borra este envasado con todos sus turnos, lecturas, estibas y su encajado."
                     />
                   </TableCell>
                 )}
