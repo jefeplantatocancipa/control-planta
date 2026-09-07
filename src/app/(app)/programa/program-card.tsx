@@ -101,7 +101,9 @@ export function ProgramCard({
               <TableHead>Planeado (inicio–final)</TableHead>
               <TableHead>Real (inicio–final)</TableHead>
               <TableHead>Estado</TableHead>
-              {canWrite && <TableHead />}
+              {canWrite && (
+                <TableHead className="sticky right-0 bg-card" />
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -143,7 +145,7 @@ export function ProgramCard({
                     )}
                   </TableCell>
                   {canWrite && (
-                    <TableCell className="text-right">
+                    <TableCell className="sticky right-0 bg-card text-right">
                       <DeleteButton
                         action={deleteOrder}
                         id={order.id}
@@ -187,7 +189,9 @@ export function ProgramCard({
               <TableHead>Und. programadas</TableHead>
               <TableHead>Gramaje x und.</TableHead>
               <TableHead>Estado</TableHead>
-              {canWrite && <TableHead />}
+              {canWrite && (
+                <TableHead className="sticky right-0 bg-card" />
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -213,7 +217,7 @@ export function ProgramCard({
                     <Badge variant="outline">{order.status}</Badge>
                   </TableCell>
                   {canWrite && (
-                    <TableCell className="text-right">
+                    <TableCell className="sticky right-0 bg-card text-right">
                       <DeleteButton
                         action={deleteEnvasadoOrder}
                         id={order.id}

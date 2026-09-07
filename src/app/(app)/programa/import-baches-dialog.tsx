@@ -81,7 +81,7 @@ export function ImportBachesDialog() {
         render={
           <Button size="sm" variant="outline">
             <Upload className="size-4" />
-            Importar Excel
+            Importar Bases
           </Button>
         }
       />
