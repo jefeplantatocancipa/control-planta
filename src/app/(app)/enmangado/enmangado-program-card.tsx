@@ -63,6 +63,7 @@ export function EnmangadoProgramCard({
         <CardAction>
           {canWrite ? (
             <EnmangadoProgramStatusSelect
+              key={program.status}
               programId={program.id}
               status={program.status}
             />
@@ -115,6 +116,7 @@ export function EnmangadoProgramCard({
                   <TableCell>
                     {canWrite ? (
                       <EnmangadoOrderStatusSelect
+                        key={order.status}
                         orderId={order.id}
                         status={order.status}
                       />

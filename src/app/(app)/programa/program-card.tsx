@@ -73,7 +73,11 @@ export function ProgramCard({
         <CardAction>
           <div className="flex items-center gap-1">
             {canWrite ? (
-              <ProgramStatusSelect programId={program.id} status={program.status} />
+              <ProgramStatusSelect
+                key={program.status}
+                programId={program.id}
+                status={program.status}
+              />
             ) : (
               <Badge variant="outline">{PROGRAM_STATUS_LABELS[program.status]}</Badge>
             )}
@@ -139,7 +143,11 @@ export function ProgramCard({
                   </TableCell>
                   <TableCell>
                     {canWrite ? (
-                      <OrderStatusSelect orderId={order.id} status={order.status} />
+                      <OrderStatusSelect
+                        key={order.status}
+                        orderId={order.id}
+                        status={order.status}
+                      />
                     ) : (
                       <Badge variant="outline">{order.status}</Badge>
                     )}
