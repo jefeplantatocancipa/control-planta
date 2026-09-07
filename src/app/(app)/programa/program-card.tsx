@@ -19,7 +19,7 @@ import {
 import { ProgramStatusSelect } from "./program-status-select";
 import { OrderStatusSelect } from "./order-status-select";
 import { NewOrderDialog } from "./new-order-dialog";
-import { DeleteButton } from "./delete-button";
+import { DeleteButton } from "@/components/delete-button";
 import { deleteOrder, deleteEnvasadoOrder, deleteProgram } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
 import type { Database, ProgramStatus } from "@/lib/supabase/types";

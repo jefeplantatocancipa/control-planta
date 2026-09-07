@@ -11,6 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { NewBacheDialog } from "./new-bache-dialog";
+import { DeleteButton } from "@/components/delete-button";
+import { deleteBache } from "./actions";
 import { formatDate } from "@/lib/format-date";
 import type { BacheStatus } from "@/lib/supabase/types";
 
@@ -27,7 +29,8 @@ const STATUS_VARIANTS: Record<BacheStatus, "default" | "outline" | "secondary"> 
 };
 
 export default async function BachesPage() {
-  await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const canDelete = profile.role === "jefe_planta";
   const supabase = await createClient();
 
   const [{ data: baches }, { data: products }, { data: orders }] =
@@ -67,6 +70,7 @@ export default async function BachesPage() {
             <TableHead>Iniciado</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
+            {canDelete && <TableHead className="sticky right-0 bg-card" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -95,11 +99,24 @@ export default async function BachesPage() {
                   Ver
                 </Link>
               </TableCell>
+              {canDelete && (
+                <TableCell className="sticky right-0 bg-card text-right">
+                  <DeleteButton
+                    action={deleteBache}
+                    id={bache.id}
+                    title="Eliminar bache"
+                    description={`Borra el bache ${bache.batch_code} y todas sus etapas registradas. Si ya tiene un envasado vinculado, no se va a poder eliminar hasta borrar ese envasado primero.`}
+                  />
+                </TableCell>
+              )}
             </TableRow>
           ))}
           {(baches ?? []).length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell
+                colSpan={canDelete ? 7 : 6}
+                className="text-center text-muted-foreground"
+              >
                 Sin baches todavía.
               </TableCell>
             </TableRow>

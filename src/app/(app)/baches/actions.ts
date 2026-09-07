@@ -106,6 +106,38 @@ export async function updateBacheStatus(
   return { success: true };
 }
 
+const DeleteBacheSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteBache(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteBacheSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("baches")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: este bache ya tiene un envasado vinculado. Borrá primero el envasado."
+          : "No se pudo eliminar el bache.",
+    };
+  }
+
+  revalidatePath("/baches");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Etapas del bache
 // ---------------------------------------------------------------------------

@@ -12,12 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ActionState } from "./actions";
+
+interface DeleteActionState {
+  error?: string;
+  success?: boolean;
+}
 
 type DeleteAction = (
-  state: ActionState,
+  state: DeleteActionState,
   formData: FormData,
-) => Promise<ActionState>;
+) => Promise<DeleteActionState>;
 
 function DeleteForm({
   action,
@@ -28,10 +32,10 @@ function DeleteForm({
   id: string;
   onSuccess: () => void;
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    action,
-    {},
-  );
+  const [state, formAction, pending] = useActionState<
+    DeleteActionState,
+    FormData
+  >(action, {});
 
   useEffect(() => {
     if (state.success) onSuccess();

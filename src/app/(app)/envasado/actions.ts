@@ -11,6 +11,38 @@ export interface ActionState {
   success?: boolean;
 }
 
+const DeleteEnvasadoSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteEnvasado(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteEnvasadoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("envasados")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: este envasado ya tiene vasos enmangados vinculados."
+          : "No se pudo eliminar el envasado.",
+    };
+  }
+
+  revalidatePath("/envasado");
+  return { success: true };
+}
+
 const StartEnvasadoSchema = z.object({
   bache_id: z.string().uuid({ message: "Elegí un bache." }),
   operario_id: z.string().uuid({ message: "Elegí quién realiza el envasado." }),

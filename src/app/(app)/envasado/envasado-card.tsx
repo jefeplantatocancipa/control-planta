@@ -16,7 +16,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { finalizarEnvasado, type ActionState } from "./actions";
+import { DeleteButton } from "@/components/delete-button";
+import { finalizarEnvasado, deleteEnvasado, type ActionState } from "./actions";
 import { TurnoPanel, type CorteDisplay } from "./turno-panel";
 import type { Database } from "@/lib/supabase/types";
 
@@ -122,6 +123,7 @@ export function EnvasadoCard({
   turnos,
   operarios,
   cortes,
+  canDelete,
 }: {
   recordId: string;
   bacheLabel: string;
@@ -131,6 +133,7 @@ export function EnvasadoCard({
   turnos: Turno[];
   operarios: Profile[];
   cortes: CorteDisplay[];
+  canDelete?: boolean;
 }) {
   const cortesCerrados = cortes.filter((c) => c.endedAt);
   const hayTurnoActivo = cortes.some((c) => !c.endedAt);
@@ -151,13 +154,23 @@ export function EnvasadoCard({
           {bacheLabel} · {presentacion}
         </CardTitle>
         <CardAction>
-          <Link
-            href={`/envasado/${recordId}/imprimir`}
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-            title="Imprimir informe"
-          >
-            <Printer className="size-4" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href={`/envasado/${recordId}/imprimir`}
+              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              title="Imprimir informe"
+            >
+              <Printer className="size-4" />
+            </Link>
+            {canDelete && (
+              <DeleteButton
+                action={deleteEnvasado}
+                id={recordId}
+                title="Eliminar envasado"
+                description="Borra este envasado con todos sus turnos, lecturas y estibas registradas."
+              />
+            )}
+          </div>
         </CardAction>
         <p className="text-sm text-muted-foreground">{operarioName}</p>
         {massBalanceKg !== undefined && (

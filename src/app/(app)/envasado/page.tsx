@@ -14,10 +14,13 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
 import { EnvasadoCard, type CorteDisplay } from "./envasado-card";
+import { DeleteButton } from "@/components/delete-button";
+import { deleteEnvasado } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnvasadoPage() {
-  await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const canDelete = profile.role === "jefe_planta";
   const supabase = await createClient();
 
   const [
@@ -236,6 +239,7 @@ export default async function EnvasadoPage() {
               turnos={turnos ?? []}
               operarios={operarios ?? []}
               cortes={cortesByEnvasado.get(envasado.id) ?? []}
+              canDelete={canDelete}
             />
           ))}
           {open.length === 0 && (
@@ -257,6 +261,7 @@ export default async function EnvasadoPage() {
               <TableHead>Operario</TableHead>
               <TableHead>Finalizado</TableHead>
               <TableHead />
+              {canDelete && <TableHead className="sticky right-0 bg-card" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -284,11 +289,24 @@ export default async function EnvasadoPage() {
                     <Printer className="size-4" />
                   </Link>
                 </TableCell>
+                {canDelete && (
+                  <TableCell className="sticky right-0 bg-card text-right">
+                    <DeleteButton
+                      action={deleteEnvasado}
+                      id={envasado.id}
+                      title="Eliminar envasado"
+                      description="Borra este envasado con todos sus turnos, lecturas y estibas registradas."
+                    />
+                  </TableCell>
+                )}
               </TableRow>
             ))}
             {closed.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={canDelete ? 9 : 8}
+                  className="text-center text-muted-foreground"
+                >
                   Sin envasados finalizados todavía.
                 </TableCell>
               </TableRow>
