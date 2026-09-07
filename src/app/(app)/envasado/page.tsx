@@ -266,7 +266,7 @@ export default async function EnvasadoPage() {
               <TableHead>Operario</TableHead>
               <TableHead>Finalizado</TableHead>
               <TableHead />
-              {canDelete && <TableHead className="sticky right-0 bg-card" />}
+              {canDelete && <TableHead className="sticky right-0 bg-background" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -295,7 +295,7 @@ export default async function EnvasadoPage() {
                   </Link>
                 </TableCell>
                 {canDelete && (
-                  <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
+                  <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
                     <DeleteButton
                       action={deleteEnvasado}
                       id={envasado.id}
