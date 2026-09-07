@@ -182,6 +182,98 @@ export async function updateOrderStatus(
   return { success: true };
 }
 
+const DeleteOrderSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteOrder(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteOrderSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("production_orders")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: ya hay baches vinculados a esta orden."
+          : "No se pudo eliminar la orden.",
+    };
+  }
+
+  revalidatePath("/programa");
+  return { success: true };
+}
+
+export async function deleteEnvasadoOrder(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteOrderSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("envasado_orders")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: ya hay envasados vinculados a esta orden."
+          : "No se pudo eliminar la orden de envasado.",
+    };
+  }
+
+  revalidatePath("/programa");
+  return { success: true };
+}
+
+export async function deleteProgram(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteOrderSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("production_programs")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: alguna de sus órdenes ya tiene baches o envasados vinculados."
+          : "No se pudo eliminar el programa.",
+    };
+  }
+
+  revalidatePath("/programa");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Importador de Excel: programa de Baches
 // ---------------------------------------------------------------------------

@@ -19,6 +19,8 @@ import {
 import { ProgramStatusSelect } from "./program-status-select";
 import { OrderStatusSelect } from "./order-status-select";
 import { NewOrderDialog } from "./new-order-dialog";
+import { DeleteButton } from "./delete-button";
+import { deleteOrder, deleteEnvasadoOrder, deleteProgram } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
 import type { Database, ProgramStatus } from "@/lib/supabase/types";
 
@@ -69,11 +71,21 @@ export function ProgramCard({
           <p className="text-sm text-muted-foreground">{program.notes}</p>
         )}
         <CardAction>
-          {canWrite ? (
-            <ProgramStatusSelect programId={program.id} status={program.status} />
-          ) : (
-            <Badge variant="outline">{PROGRAM_STATUS_LABELS[program.status]}</Badge>
-          )}
+          <div className="flex items-center gap-1">
+            {canWrite ? (
+              <ProgramStatusSelect programId={program.id} status={program.status} />
+            ) : (
+              <Badge variant="outline">{PROGRAM_STATUS_LABELS[program.status]}</Badge>
+            )}
+            {canWrite && (
+              <DeleteButton
+                action={deleteProgram}
+                id={program.id}
+                title="Eliminar programa"
+                description="Borra el programa de esta semana junto con todas sus órdenes de baches y de envasado. Si alguna ya tiene baches o envasados vinculados, no se va a poder eliminar."
+              />
+            )}
+          </div>
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -89,6 +101,7 @@ export function ProgramCard({
               <TableHead>Planeado (inicio–final)</TableHead>
               <TableHead>Real (inicio–final)</TableHead>
               <TableHead>Estado</TableHead>
+              {canWrite && <TableHead />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -129,12 +142,25 @@ export function ProgramCard({
                       <Badge variant="outline">{order.status}</Badge>
                     )}
                   </TableCell>
+                  {canWrite && (
+                    <TableCell className="text-right">
+                      <DeleteButton
+                        action={deleteOrder}
+                        id={order.id}
+                        title="Eliminar orden de producción"
+                        description={`Borra la orden ${order.orden_codigo ?? ""} del programa. Si ya tiene baches vinculados, no se va a poder eliminar.`}
+                      />
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
             {orders.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={canWrite ? 9 : 8}
+                  className="text-center text-muted-foreground"
+                >
                   Sin órdenes todavía.
                 </TableCell>
               </TableRow>
@@ -161,6 +187,7 @@ export function ProgramCard({
               <TableHead>Und. programadas</TableHead>
               <TableHead>Gramaje x und.</TableHead>
               <TableHead>Estado</TableHead>
+              {canWrite && <TableHead />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -185,12 +212,25 @@ export function ProgramCard({
                   <TableCell>
                     <Badge variant="outline">{order.status}</Badge>
                   </TableCell>
+                  {canWrite && (
+                    <TableCell className="text-right">
+                      <DeleteButton
+                        action={deleteEnvasadoOrder}
+                        id={order.id}
+                        title="Eliminar orden de envasado"
+                        description={`Borra la orden de envasado (${referencia ? referencia.sku : "sin referencia"}) del programa. Si ya tiene envasados vinculados, no se va a poder eliminar.`}
+                      />
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
             {envasadoOrders.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={canWrite ? 8 : 7}
+                  className="text-center text-muted-foreground"
+                >
                   Sin órdenes de envasado todavía.
                 </TableCell>
               </TableRow>
