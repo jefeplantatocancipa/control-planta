@@ -377,11 +377,12 @@ export async function importBachesProgram(
     const bachesRaw = columns["baches"] ? row.getCell(columns["baches"]).value : null;
     const bachesPlaneados =
       typeof bachesRaw === "number" ? bachesRaw : Number(bachesRaw) || null;
+    const scheduledYear = Number(scheduledDate.slice(0, 4));
     const horaInicio = columns["hora inicio"]
-      ? excelDateTimeToBogotaISO(row.getCell(columns["hora inicio"]).value)
+      ? excelDateTimeToBogotaISO(row.getCell(columns["hora inicio"]).value, scheduledYear)
       : null;
     const horaFinal = columns["hora final"]
-      ? excelDateTimeToBogotaISO(row.getCell(columns["hora final"]).value)
+      ? excelDateTimeToBogotaISO(row.getCell(columns["hora final"]).value, scheduledYear)
       : null;
 
     const week = mondayOfWeek(scheduledDate);
