@@ -104,14 +104,30 @@ export async function updateProgramStatus(
 // ---------------------------------------------------------------------------
 // Órdenes de producción
 // ---------------------------------------------------------------------------
+// La planta escribe HORA INICIO/FINAL en su hora local (Bogotá, sin
+// horario de verano); igual que en el importador de Excel, se interpreta
+// así y se convierte al instante UTC real antes de guardar.
+function bogotaLocalToISO(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const [datePart, timePart] = value.split("T");
+  if (!datePart || !timePart) return null;
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [h, min] = timePart.split(":").map(Number);
+  if ([y, m, d, h, min].some((n) => Number.isNaN(n))) return null;
+  return new Date(Date.UTC(y, m - 1, d, h + 5, min)).toISOString();
+}
+
 const OrderSchema = z.object({
   program_id: z.string().uuid(),
   product_id: z.string().uuid({ message: "Elegí un producto." }),
   scheduled_date: z.string().min(1, "La fecha es obligatoria."),
-  planned_quantity: z.coerce
+  orden_codigo: z.string().trim().optional(),
+  tanque: z.string().trim().optional(),
+  baches_planeados: z.coerce
     .number()
-    .positive("La cantidad debe ser mayor a 0."),
-  unit: z.string().trim().min(1, "La unidad es obligatoria."),
+    .int()
+    .positive("Los baches deben ser mayor a 0.")
+    .optional(),
 });
 
 export async function createOrder(
@@ -124,20 +140,33 @@ export async function createOrder(
     program_id: formData.get("program_id"),
     product_id: formData.get("product_id"),
     scheduled_date: formData.get("scheduled_date"),
-    planned_quantity: formData.get("planned_quantity"),
-    unit: formData.get("unit"),
+    orden_codigo: formData.get("orden_codigo") || undefined,
+    tanque: formData.get("tanque") || undefined,
+    baches_planeados: formData.get("baches_planeados") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("production_orders")
-    .insert(parsed.data);
+  const { error } = await supabase.from("production_orders").insert({
+    program_id: parsed.data.program_id,
+    product_id: parsed.data.product_id,
+    scheduled_date: parsed.data.scheduled_date,
+    orden_codigo: parsed.data.orden_codigo || null,
+    tanque: parsed.data.tanque || null,
+    baches_planeados: parsed.data.baches_planeados ?? null,
+    hora_inicio_planeada: bogotaLocalToISO(formData.get("hora_inicio_planeada")),
+    hora_final_planeada: bogotaLocalToISO(formData.get("hora_final_planeada")),
+  });
 
   if (error) {
-    return { error: "No se pudo crear la orden." };
+    return {
+      error:
+        error.code === "23505"
+          ? "Ya existe una orden con ese código."
+          : "No se pudo crear la orden.",
+    };
   }
 
   revalidatePath("/programa");

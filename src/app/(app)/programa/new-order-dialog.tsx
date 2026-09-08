@@ -48,6 +48,11 @@ function NewOrderForm({
       <input type="hidden" name="program_id" value={programId} />
 
       <div className="flex flex-col gap-2">
+        <Label htmlFor="orden_codigo">Orden de producción</Label>
+        <Input id="orden_codigo" name="orden_codigo" placeholder="Opcional" />
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Label htmlFor="product_id">Producto</Label>
         <Select
           name="product_id"
@@ -67,26 +72,46 @@ function NewOrderForm({
         </Select>
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="tanque">Tanque</Label>
+          <Input id="tanque" name="tanque" placeholder="Opcional" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="baches_planeados">Baches</Label>
+          <Input
+            id="baches_planeados"
+            name="baches_planeados"
+            type="number"
+            step="1"
+            min="1"
+            placeholder="Opcional"
+          />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="scheduled_date">Fecha programada</Label>
         <Input id="scheduled_date" name="scheduled_date" type="date" required />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="planned_quantity">Cantidad planeada</Label>
-        <Input
-          id="planned_quantity"
-          name="planned_quantity"
-          type="number"
-          step="0.01"
-          min="0"
-          required
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="unit">Unidad</Label>
-        <Input id="unit" name="unit" defaultValue="litros" required />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="hora_inicio_planeada">Hora inicio planeada</Label>
+          <Input
+            id="hora_inicio_planeada"
+            name="hora_inicio_planeada"
+            type="datetime-local"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="hora_final_planeada">Hora final planeada</Label>
+          <Input
+            id="hora_final_planeada"
+            name="hora_final_planeada"
+            type="datetime-local"
+          />
+        </div>
       </div>
 
       {state.error && (
@@ -121,7 +146,7 @@ export function NewOrderDialog({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nueva orden de producción</DialogTitle>
         </DialogHeader>
