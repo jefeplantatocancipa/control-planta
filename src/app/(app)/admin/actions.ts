@@ -84,7 +84,14 @@ export async function upsertProduct(
 const StageParameterSchema = z.object({
   key: z.string().trim().min(1),
   label: z.string().trim().min(1),
-  type: z.enum(["number", "text", "time"]),
+  type: z.enum([
+    "number",
+    "text",
+    "time",
+    "tanque",
+    "porcentaje",
+    "positivo_negativo",
+  ]),
 });
 
 const StageTemplateSchema = z.object({
