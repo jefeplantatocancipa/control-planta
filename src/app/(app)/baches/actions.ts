@@ -241,7 +241,9 @@ export async function finishStage(
   for (const param of template?.parameter_schema ?? []) {
     const raw = formData.get(`param__${param.key}`);
     if (raw === null || raw === "") continue;
-    parameters[param.key] = param.type === "number" ? Number(raw) : String(raw);
+    parameters[param.key] = param.type === "number" || param.type === "porcentaje"
+        ? Number(raw)
+        : String(raw);
   }
 
   if (template?.captures_insumos) {
@@ -319,7 +321,9 @@ export async function addReading(
   for (const param of template?.parameter_schema ?? []) {
     const raw = formData.get(`param__${param.key}`);
     if (raw === null || raw === "") continue;
-    reading[param.key] = param.type === "number" ? Number(raw) : String(raw);
+    reading[param.key] = param.type === "number" || param.type === "porcentaje"
+        ? Number(raw)
+        : String(raw);
   }
 
   const existingReadings = Array.isArray(record.parameters.lecturas)

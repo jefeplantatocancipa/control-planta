@@ -24,12 +24,85 @@ import {
 } from "@/components/ui/select";
 import { startStage, finishStage, addReading, type ActionState } from "../actions";
 import { formatTime } from "@/lib/format-date";
-import type { Database, StageReading } from "@/lib/supabase/types";
+import type { Database, StageParameterDef, StageReading } from "@/lib/supabase/types";
 
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
 type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+type Tanque = Database["public"]["Tables"]["tanques"]["Row"];
+
+const SELECT_CLASSNAME =
+  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm";
+
+// Un mismo <input>/<select> para todos los tipos de parámetro de etapa, así
+// la captura de valores (FinishStageForm) y de lecturas (AddReadingSection)
+// se comportan igual sin duplicar el switch por tipo.
+function ParamValueInput({
+  id,
+  param,
+  value,
+  onChange,
+  tanques,
+  className,
+}: {
+  id: string;
+  param: StageParameterDef;
+  value: string;
+  onChange: (value: string) => void;
+  tanques: Tanque[];
+  className?: string;
+}) {
+  if (param.type === "tanque") {
+    return (
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={className ? `${SELECT_CLASSNAME} ${className}` : SELECT_CLASSNAME}
+      >
+        <option value="">Elegí un tanque</option>
+        {tanques.map((tanque) => (
+          <option key={tanque.id} value={tanque.name}>
+            {tanque.name}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (param.type === "positivo_negativo") {
+    return (
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={className ? `${SELECT_CLASSNAME} ${className}` : SELECT_CLASSNAME}
+      >
+        <option value="">Elegí un resultado</option>
+        <option value="Positivo">Positivo</option>
+        <option value="Negativo">Negativo</option>
+      </select>
+    );
+  }
+
+  return (
+    <Input
+      id={id}
+      type={
+        param.type === "number" || param.type === "porcentaje"
+          ? "number"
+          : param.type === "time"
+            ? "time"
+            : "text"
+      }
+      step={param.type === "number" || param.type === "porcentaje" ? "0.01" : undefined}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={className}
+    />
+  );
+}
 
 interface RecipeInsumo {
   id: string;
@@ -50,6 +123,10 @@ interface InsumoDraft {
   // anterior (encadenada): acá solo hace falta marcar el checkbox, no
   // volver a tipearlos.
   prefilled: boolean;
+}
+
+function formatParamValue(type: StageParameterDef["type"], value: string | number) {
+  return type === "porcentaje" ? `${value}%` : value;
 }
 
 function durationLabel(startedAt: string, endedAt: string) {
@@ -294,7 +371,9 @@ function ReadingsTable({
               <td className="py-1 pr-3">{formatTime(reading.timestamp)}</td>
               {stage.parameter_schema.map((param) => (
                 <td key={param.key} className="py-1 pr-3">
-                  {reading[param.key] ?? "—"}
+                  {reading[param.key] !== undefined
+                    ? formatParamValue(param.type, reading[param.key])
+                    : "—"}
                 </td>
               ))}
             </tr>
@@ -351,10 +430,12 @@ function AddReadingSection({
   bacheId,
   stage,
   record,
+  tanques,
 }: {
   bacheId: string;
   stage: StageTemplate;
   record: StageRecord;
+  tanques: Tanque[];
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [formKey, setFormKey] = useState(0);
@@ -376,20 +457,14 @@ function AddReadingSection({
               >
                 {param.label}
               </Label>
-              <Input
+              <ParamValueInput
                 id={`reading-${record.id}-${param.key}`}
-                type={
-                  param.type === "number"
-                    ? "number"
-                    : param.type === "time"
-                      ? "time"
-                      : "text"
-                }
-                step={param.type === "number" ? "0.01" : undefined}
+                param={param}
                 value={values[param.key] ?? ""}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, [param.key]: e.target.value }))
+                onChange={(value) =>
+                  setValues((v) => ({ ...v, [param.key]: value }))
                 }
+                tanques={tanques}
                 className="w-32"
               />
             </div>
@@ -484,11 +559,13 @@ function FinishStageForm({
   stage,
   record,
   recipeInsumos,
+  tanques,
 }: {
   bacheId: string;
   stage: StageTemplate;
   record: StageRecord;
   recipeInsumos: RecipeInsumo[];
+  tanques: Tanque[];
 }) {
   const capturesInsumos = stage.captures_insumos;
   const capturesReadings = stage.captures_readings;
@@ -524,26 +601,25 @@ function FinishStageForm({
         stage.parameter_schema.map((param) => (
           <div key={param.key} className="flex flex-col gap-2">
             <Label htmlFor={`param-${record.id}-${param.key}`}>{param.label}</Label>
-            <Input
+            <ParamValueInput
               id={`param-${record.id}-${param.key}`}
-              type={
-                param.type === "number"
-                  ? "number"
-                  : param.type === "time"
-                    ? "time"
-                    : "text"
-              }
-              step={param.type === "number" ? "0.01" : undefined}
+              param={param}
               value={values[param.key] ?? ""}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, [param.key]: e.target.value }))
+              onChange={(value) =>
+                setValues((v) => ({ ...v, [param.key]: value }))
               }
+              tanques={tanques}
             />
           </div>
         ))}
 
       {capturesReadings && (
-        <AddReadingSection bacheId={bacheId} stage={stage} record={record} />
+        <AddReadingSection
+          bacheId={bacheId}
+          stage={stage}
+          record={record}
+          tanques={tanques}
+        />
       )}
 
       {capturesInsumos && (
@@ -592,7 +668,7 @@ function FinishStageForm({
             {stage.parameter_schema.map((param) =>
               values[param.key] ? (
                 <p key={param.key}>
-                  {param.label}: {values[param.key]}
+                  {param.label}: {formatParamValue(param.type, values[param.key])}
                 </p>
               ) : null,
             )}
@@ -640,6 +716,7 @@ export function StageCard({
   recipeInsumos,
   canAct,
   unlocked,
+  tanques,
 }: {
   bacheId: string;
   stage: StageTemplate;
@@ -648,6 +725,7 @@ export function StageCard({
   recipeInsumos: RecipeInsumo[];
   canAct: boolean;
   unlocked: boolean;
+  tanques: Tanque[];
 }) {
   const status = !record ? "not_started" : record.ended_at ? "done" : "in_progress";
   const operarioName = record
@@ -700,12 +778,15 @@ export function StageCard({
             </p>
             {paramEntries.length > 0 && (
               <ul className="list-inside list-disc">
-                {paramEntries.map(([key, value]) => (
-                  <li key={key}>
-                    {stage.parameter_schema.find((p) => p.key === key)?.label ?? key}:{" "}
-                    {value}
-                  </li>
-                ))}
+                {paramEntries.map(([key, value]) => {
+                  const param = stage.parameter_schema.find((p) => p.key === key);
+                  return (
+                    <li key={key}>
+                      {param?.label ?? key}:{" "}
+                      {param ? formatParamValue(param.type, value) : value}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {insumos && (
@@ -745,6 +826,7 @@ export function StageCard({
                 stage={stage}
                 record={record!}
                 recipeInsumos={recipeInsumos}
+                tanques={tanques}
               />
             ) : (
               <p className="text-sm text-muted-foreground">

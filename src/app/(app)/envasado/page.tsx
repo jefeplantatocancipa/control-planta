@@ -29,6 +29,7 @@ export default async function EnvasadoPage() {
     { data: products },
     { data: operarios },
     { data: insumosStages },
+    { data: allStages },
     { data: stageRecords },
     { data: envasadoOrders },
     { data: envasadoReferencias },
@@ -55,6 +56,10 @@ export default async function EnvasadoPage() {
       .select("id, sequence_order")
       .eq("captures_insumos", true),
     supabase
+      .from("process_stage_templates")
+      .select("id, product_id, name")
+      .eq("active", true),
+    supabase
       .from("bache_stage_records")
       .select("bache_id, stage_template_id, parameters"),
     supabase
@@ -72,13 +77,47 @@ export default async function EnvasadoPage() {
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
+
+  // Un bache no debería poder envasarse hasta que arrancó Enfriamiento (no
+  // tiene sentido empacar leche todavía caliente/sin procesar). Se resuelve
+  // la etapa "Enfriamiento" según las etapas propias del producto del bache
+  // (o las compartidas si el producto no tiene etapas propias), igual que
+  // en /baches/[id]. Si el producto no tiene una etapa llamada así, no se
+  // bloquea (evita romper productos con un flujo distinto).
+  const stagesByProduct = new Map<string, { id: string; name: string }[]>();
+  for (const stage of allStages ?? []) {
+    const key = stage.product_id ?? "__default__";
+    const list = stagesByProduct.get(key) ?? [];
+    list.push({ id: stage.id, name: stage.name });
+    stagesByProduct.set(key, list);
+  }
+  function enfriamientoStageId(productId: string): string | null {
+    const own = stagesByProduct.get(productId) ?? [];
+    const pool = own.length > 0 ? own : (stagesByProduct.get("__default__") ?? []);
+    return pool.find((s) => s.name.trim().toLowerCase() === "enfriamiento")?.id ?? null;
+  }
+  const startedStageKeys = new Set(
+    (stageRecords ?? []).map((r) => `${r.bache_id}:${r.stage_template_id}`),
+  );
+  function hasReachedEnfriamiento(bache: { id: string; product_id: string }) {
+    const stageId = enfriamientoStageId(bache.product_id);
+    if (!stageId) return true;
+    return startedStageKeys.has(`${bache.id}:${stageId}`);
+  }
+
   // El desplegable de "Iniciar envasado" se filtra por si queda producto sin
   // envasar (volumen_restante_litros), NO por el estado del bache: "el bache
   // ya terminó de producirse" (status) y "no queda producto para envasar"
   // (volumen restante) son cosas distintas — un bache recién "completado"
-  // (todas sus etapas listas) es justo el que hay que poder envasar.
+  // (todas sus etapas listas) es justo el que hay que poder envasar. Además
+  // debe haber llegado al menos a Enfriamiento.
   const bacheOptions = (baches ?? [])
-    .filter((bache) => bache.status !== "cancelado" && bache.volumen_restante_litros !== 0)
+    .filter(
+      (bache) =>
+        bache.status !== "cancelado" &&
+        bache.volumen_restante_litros !== 0 &&
+        hasReachedEnfriamiento(bache),
+    )
     .map((bache) => ({
       id: bache.id,
       label: [

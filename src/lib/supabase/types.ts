@@ -8,10 +8,18 @@ export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
 export type BacheStatus = "en_proceso" | "completado" | "cancelado";
 
+export type StageParameterType =
+  | "number"
+  | "text"
+  | "time"
+  | "tanque"
+  | "porcentaje"
+  | "positivo_negativo";
+
 export interface StageParameterDef {
   key: string;
   label: string;
-  type: "number" | "text" | "time";
+  type: StageParameterType;
 }
 
 export interface InsumoEntry {
@@ -95,6 +103,20 @@ export interface Database {
           active?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["insumos"]["Insert"]>;
+        Relationships: [];
+      };
+      tanques: {
+        Row: {
+          id: string;
+          name: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          active?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["tanques"]["Insert"]>;
         Relationships: [];
       };
       product_insumos: {

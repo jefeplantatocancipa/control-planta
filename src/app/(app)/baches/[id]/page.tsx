@@ -39,6 +39,7 @@ export default async function BacheDetailPage({
     { data: operarios },
     { data: productInsumos },
     { data: insumos },
+    { data: tanques },
   ] = await Promise.all([
     supabase.from("products").select("*").eq("id", bache.product_id).single(),
     supabase
@@ -54,6 +55,7 @@ export default async function BacheDetailPage({
       .select("*")
       .eq("product_id", bache.product_id),
     supabase.from("insumos").select("*").eq("active", true),
+    supabase.from("tanques").select("*").eq("active", true).order("name"),
   ]);
 
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
@@ -163,6 +165,7 @@ export default async function BacheDetailPage({
               recipeInsumos={recipeInsumosFor(stage)}
               canAct={canAct}
               unlocked={unlocked}
+              tanques={tanques ?? []}
             />
           );
         })}

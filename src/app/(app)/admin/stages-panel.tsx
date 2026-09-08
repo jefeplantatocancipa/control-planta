@@ -78,7 +78,7 @@ function ParameterEditor({
             value={param.type}
             onChange={(e) =>
               updateAt(index, {
-                type: e.target.value as "number" | "text" | "time",
+                type: e.target.value as StageParameterDef["type"],
               })
             }
             className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -86,6 +86,9 @@ function ParameterEditor({
             <option value="number">Número</option>
             <option value="text">Texto</option>
             <option value="time">Hora</option>
+            <option value="tanque">Tanque</option>
+            <option value="porcentaje">Porcentaje</option>
+            <option value="positivo_negativo">Positivo/Negativo</option>
           </select>
           <Button
             type="button"

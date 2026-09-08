@@ -444,6 +444,44 @@ export async function upsertInsumo(
   return { success: true };
 }
 
+// ---------------------------------------------------------------------------
+// Tanques
+// ---------------------------------------------------------------------------
+const TanqueSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "El nombre es obligatorio."),
+});
+
+export async function upsertTanque(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = TanqueSchema.safeParse({
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const active = formData.get("active") === "on";
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("tanques").update({ ...values, active }).eq("id", id)
+    : await supabase.from("tanques").insert({ ...values, active });
+
+  if (error) {
+    return { error: "No se pudo guardar el tanque." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 const RecipeSchema = z.object({
   product_id: z.string().uuid({ message: "Elegí un producto." }),
   insumo_ids: z.array(z.string().uuid()),

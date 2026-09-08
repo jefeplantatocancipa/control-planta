@@ -6,6 +6,7 @@ import { ProductsPanel } from "./products-panel";
 import { StagesPanel } from "./stages-panel";
 import { UsersPanel } from "./users-panel";
 import { InsumosPanel } from "./insumos-panel";
+import { TanquesPanel } from "./tanques-panel";
 import { EnvasadoReferenciasPanel } from "./envasado-referencias-panel";
 import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
 import { TurnosPanel } from "./turnos-panel";
@@ -24,6 +25,7 @@ export default async function AdminPage() {
     { data: envasadoInsumos },
     { data: envasadoReferenciaInsumos },
     { data: turnos },
+    { data: tanques },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
     supabase
@@ -37,6 +39,7 @@ export default async function AdminPage() {
     supabase.from("envasado_insumos").select("*").order("name"),
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").order("hora_inicio"),
+    supabase.from("tanques").select("*").order("name"),
   ]);
 
   return (
@@ -77,6 +80,8 @@ export default async function AdminPage() {
               referencias={envasadoReferencias ?? []}
               referenciaInsumos={envasadoReferenciaInsumos ?? []}
             />
+            <Separator />
+            <TanquesPanel tanques={tanques ?? []} />
           </div>
         </TabsContent>
         <TabsContent value="envasado">

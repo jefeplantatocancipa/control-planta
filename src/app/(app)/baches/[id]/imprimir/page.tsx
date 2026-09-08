@@ -29,10 +29,13 @@ function stageParameterEntries(stage: StageTemplate, record: StageRecord | undef
   if (!record) return [];
   return Object.entries(record.parameters)
     .filter(([key]) => key !== "insumos" && key !== "lecturas")
-    .map(([key, value]) => [
-      stage.parameter_schema.find((p) => p.key === key)?.label ?? key,
-      value,
-    ]) as [string, string | number][];
+    .map(([key, value]) => {
+      const param = stage.parameter_schema.find((p) => p.key === key);
+      return [
+        param?.label ?? key,
+        param?.type === "porcentaje" ? `${value}%` : value,
+      ];
+    }) as [string, string | number][];
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -57,7 +60,12 @@ function LecturasChart({
   lecturas: StageReading[];
 }) {
   const numericParams = stage.parameter_schema.filter((p) => p.type === "number");
-  const series = numericParams
+  // Si la etapa mide pH (ej. curva de fermentación), graficar solo eso: con
+  // varios parámetros juntos (pH, acidez, temperatura) la curva se vuelve
+  // ilegible por las escalas tan distintas entre sí.
+  const phParam = numericParams.find((p) => p.key.toLowerCase() === "ph");
+  const paramsToChart = phParam ? [phParam] : numericParams;
+  const series = paramsToChart
     .map((param) => ({
       key: param.key,
       label: param.label,
@@ -409,7 +417,11 @@ export default async function BacheReportPage({
                         </td>
                         {stage.parameter_schema.map((param) => (
                           <td key={param.key} className="py-0.5 pr-2">
-                            {reading[param.key] ?? "—"}
+                            {reading[param.key] !== undefined
+                              ? param.type === "porcentaje"
+                                ? `${reading[param.key]}%`
+                                : reading[param.key]
+                              : "—"}
                           </td>
                         ))}
                       </tr>
