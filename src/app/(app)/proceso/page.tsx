@@ -12,11 +12,27 @@ function timeSince(iso: string) {
   return `${hours} h ${rest} min`;
 }
 
+function durationLabel(startMs: number, endMs: number) {
+  const minutes = Math.round((endMs - startMs) / 60000);
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
+}
+
 export default async function ProcesoPage() {
   await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: proceso }, { data: templates }] = await Promise.all([
+  const [
+    { data: proceso },
+    { data: templates },
+    { data: envasadosAbiertos },
+    { data: allBaches },
+    { data: products },
+    { data: cortes },
+    { data: estibas },
+    { data: paradas },
+  ] = await Promise.all([
     supabase
       .from("v_proceso_actual")
       .select("*")
@@ -26,7 +42,56 @@ export default async function ProcesoPage() {
       .select("*")
       .eq("active", true)
       .order("sequence_order"),
+    supabase.from("envasados").select("*").is("ended_at", null),
+    supabase.from("baches").select("id, batch_code, product_id"),
+    supabase.from("products").select("id, name"),
+    supabase.from("envasado_cortes").select("id, envasado_id"),
+    supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
+    supabase.from("envasado_paradas").select("*"),
   ]);
+
+  const bachesById = new Map((allBaches ?? []).map((b) => [b.id, b]));
+  const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
+  const envasadoIdByCorte = new Map((cortes ?? []).map((c) => [c.id, c.envasado_id]));
+
+  const unidadesByEnvasado = new Map<string, number>();
+  for (const estiba of estibas ?? []) {
+    const envasadoId = envasadoIdByCorte.get(estiba.corte_id);
+    if (!envasadoId) continue;
+    unidadesByEnvasado.set(
+      envasadoId,
+      (unidadesByEnvasado.get(envasadoId) ?? 0) + (estiba.unidades_por_estiba ?? 0),
+    );
+  }
+
+  const paradasByEnvasado = new Map<string, { started_at: string; ended_at: string | null }[]>();
+  for (const parada of paradas ?? []) {
+    const list = paradasByEnvasado.get(parada.envasado_id) ?? [];
+    list.push({ started_at: parada.started_at, ended_at: parada.ended_at });
+    paradasByEnvasado.set(parada.envasado_id, list);
+  }
+
+  const envasadosEnCurso = (envasadosAbiertos ?? []).map((envasado) => {
+    const bache = bachesById.get(envasado.bache_id);
+    const tiempoParadasMs = (paradasByEnvasado.get(envasado.id) ?? []).reduce(
+      (sum, p) =>
+        sum +
+        (new Date(p.ended_at ?? new Date().toISOString()).getTime() -
+          new Date(p.started_at).getTime()),
+      0,
+    );
+    return {
+      id: envasado.id,
+      bacheLabel: bache
+        ? `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`
+        : "—",
+      presentacion: envasado.presentacion,
+      unidades: unidadesByEnvasado.get(envasado.id) ?? 0,
+      startedAt: envasado.started_at,
+      tiempoParadasMs,
+      hayParadaAbierta: (paradasByEnvasado.get(envasado.id) ?? []).some((p) => !p.ended_at),
+    };
+  });
 
   const totalStagesByProduct = new Map<string, number>();
   const defaultStageCount = (templates ?? []).filter((t) => t.product_id === null).length;
@@ -114,6 +179,43 @@ export default async function ProcesoPage() {
         {baches.length === 0 && (
           <p className="text-muted-foreground">No hay baches en proceso.</p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Envasado en curso</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {envasadosEnCurso.map((envasado) => (
+            <Card key={envasado.id}>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between gap-2 text-base">
+                  <span>{envasado.bacheLabel}</span>
+                  {envasado.hayParadaAbierta && (
+                    <Badge variant="outline">Parado</Badge>
+                  )}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">{envasado.presentacion}</p>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1 text-sm">
+                <p>
+                  Unidades envasadas:{" "}
+                  <span className="font-semibold">{envasado.unidades}</span>
+                </p>
+                <p className="text-muted-foreground">
+                  Inicio: hace {timeSince(envasado.startedAt)}
+                </p>
+                <p className="text-muted-foreground">
+                  Tiempo de paradas:{" "}
+                  {envasado.tiempoParadasMs > 0
+                    ? durationLabel(0, envasado.tiempoParadasMs)
+                    : "0 min"}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+          {envasadosEnCurso.length === 0 && (
+            <p className="text-muted-foreground">Sin envasados en curso.</p>
+          )}
+        </div>
       </div>
     </div>
   );

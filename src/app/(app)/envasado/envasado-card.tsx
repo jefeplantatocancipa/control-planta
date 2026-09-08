@@ -17,14 +17,28 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
-import { finalizarEnvasado, deleteEnvasado, type ActionState } from "./actions";
+import {
+  finalizarEnvasado,
+  deleteEnvasado,
+  iniciarParada,
+  finalizarParada,
+  type ActionState,
+} from "./actions";
 import { TurnoPanel, type CorteDisplay } from "./turno-panel";
+import { formatDateTime } from "@/lib/format-date";
 import type { Database } from "@/lib/supabase/types";
 
 type Turno = Database["public"]["Tables"]["turnos"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 export type { CorteDisplay, LecturaDisplay, EstibaDisplay } from "./turno-panel";
+
+export interface ParadaDisplay {
+  id: string;
+  motivo: string | null;
+  startedAt: string;
+  endedAt: string | null;
+}
 
 function FinalizarEnvasadoForm({
   recordId,
@@ -114,6 +128,141 @@ function FinalizarEnvasadoDialog({
   );
 }
 
+function durationLabel(startedAt: string, endedAt: string) {
+  const minutes = Math.round(
+    (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000,
+  );
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
+}
+
+function IniciarParadaForm({
+  envasadoId,
+  onSuccess,
+}: {
+  envasadoId: string;
+  onSuccess: () => void;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    iniciarParada,
+    {},
+  );
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form action={action} className="flex flex-col gap-3">
+      <input type="hidden" name="envasado_id" value={envasadoId} />
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`motivo-${envasadoId}`}>Motivo</Label>
+        <Input
+          id={`motivo-${envasadoId}`}
+          name="motivo"
+          placeholder="Ej: sin actividad, falla, cambio de referencia, descanso (opcional)"
+        />
+      </div>
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+      <DialogFooter>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Registrando..." : "Registrar parada"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+function IniciarParadaDialog({ envasadoId }: { envasadoId: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button size="sm" variant="outline">Parada</Button>} />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Registrar parada</DialogTitle>
+        </DialogHeader>
+        <IniciarParadaForm envasadoId={envasadoId} onSuccess={() => setOpen(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FinalizarParadaForm({ paradaId }: { paradaId: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    finalizarParada,
+    {},
+  );
+
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="id" value={paradaId} />
+      <Button type="submit" size="sm" disabled={pending} className="self-start">
+        {pending ? "Finalizando..." : "Finalizar parada"}
+      </Button>
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function ParadasSection({
+  envasadoId,
+  paradas,
+}: {
+  envasadoId: string;
+  paradas: ParadaDisplay[];
+}) {
+  const paradaAbierta = paradas.find((p) => !p.endedAt);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs font-normal text-muted-foreground">Paradas</Label>
+        {!paradaAbierta && <IniciarParadaDialog envasadoId={envasadoId} />}
+      </div>
+      {paradas.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Sin paradas registradas.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="py-1 pr-3 font-normal">Inicio</th>
+              <th className="py-1 pr-3 font-normal">Final</th>
+              <th className="py-1 pr-3 font-normal">Duración</th>
+              <th className="py-1 pr-3 font-normal">Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paradas.map((p) => (
+              <tr key={p.id} className="border-b last:border-0">
+                <td className="py-1 pr-3">{formatDateTime(p.startedAt)}</td>
+                <td className="py-1 pr-3">
+                  {p.endedAt ? formatDateTime(p.endedAt) : "En curso"}
+                </td>
+                <td className="py-1 pr-3">
+                  {durationLabel(p.startedAt, p.endedAt ?? new Date().toISOString())}
+                </td>
+                <td className="py-1 pr-3">{p.motivo || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {paradaAbierta && <FinalizarParadaForm paradaId={paradaAbierta.id} />}
+    </div>
+  );
+}
+
 export function EnvasadoCard({
   recordId,
   bacheLabel,
@@ -123,6 +272,7 @@ export function EnvasadoCard({
   turnos,
   operarios,
   cortes,
+  paradas,
   canDelete,
 }: {
   recordId: string;
@@ -133,6 +283,7 @@ export function EnvasadoCard({
   turnos: Turno[];
   operarios: Profile[];
   cortes: CorteDisplay[];
+  paradas: ParadaDisplay[];
   canDelete?: boolean;
 }) {
   const cortesCerrados = cortes.filter((c) => c.endedAt);
@@ -202,6 +353,8 @@ export function EnvasadoCard({
             )}
           </div>
         </div>
+
+        <ParadasSection envasadoId={recordId} paradas={paradas} />
 
         <TurnoPanel
           envasadoId={recordId}

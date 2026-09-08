@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { buttonVariants } from "@/components/ui/button";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
-import { EnvasadoCard, type CorteDisplay } from "./envasado-card";
+import { EnvasadoCard, type CorteDisplay, type ParadaDisplay } from "./envasado-card";
 import { DeleteButton } from "@/components/delete-button";
 import { deleteEnvasado } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
@@ -39,6 +39,7 @@ export default async function EnvasadoPage() {
     { data: cortes },
     { data: calidadLecturas },
     { data: estibas },
+    { data: paradas },
   ] = await Promise.all([
     supabase
       .from("envasados")
@@ -74,6 +75,7 @@ export default async function EnvasadoPage() {
     supabase.from("envasado_cortes").select("*").order("started_at"),
     supabase.from("envasado_calidad_lecturas").select("*").order("created_at"),
     supabase.from("envasado_estibas").select("*").order("inicio_estiba"),
+    supabase.from("envasado_paradas").select("*").order("started_at"),
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
@@ -195,6 +197,18 @@ export default async function EnvasadoPage() {
     cortesByEnvasado.set(corte.envasado_id, list);
   }
 
+  const paradasByEnvasado = new Map<string, ParadaDisplay[]>();
+  for (const parada of paradas ?? []) {
+    const list = paradasByEnvasado.get(parada.envasado_id) ?? [];
+    list.push({
+      id: parada.id,
+      motivo: parada.motivo,
+      startedAt: parada.started_at,
+      endedAt: parada.ended_at,
+    });
+    paradasByEnvasado.set(parada.envasado_id, list);
+  }
+
   const referenciasById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
   const envasadoOrderOptions = (envasadoOrders ?? []).map((order) => {
     const referencia = referenciasById.get(order.referencia_id);
@@ -283,6 +297,7 @@ export default async function EnvasadoPage() {
               turnos={turnos ?? []}
               operarios={operarios ?? []}
               cortes={cortesByEnvasado.get(envasado.id) ?? []}
+              paradas={paradasByEnvasado.get(envasado.id) ?? []}
               canDelete={canDelete}
             />
           ))}

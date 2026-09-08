@@ -517,3 +517,83 @@ export async function finalizarEstiba(
   revalidatePath("/envasado");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Paradas: a nivel del envasado (no del turno), porque pueden pasar con o
+// sin turno activo (línea sin actividad, entre turnos, falla, cambio de
+// referencia, descanso). Solo puede haber una parada abierta a la vez por
+// envasado.
+// ---------------------------------------------------------------------------
+const IniciarParadaSchema = z.object({
+  envasado_id: z.string().uuid(),
+  motivo: z.string().trim().optional(),
+});
+
+export async function iniciarParada(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = IniciarParadaSchema.safeParse({
+    envasado_id: formData.get("envasado_id"),
+    motivo: formData.get("motivo") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: abierta } = await supabase
+    .from("envasado_paradas")
+    .select("id")
+    .eq("envasado_id", parsed.data.envasado_id)
+    .is("ended_at", null)
+    .limit(1);
+  if (abierta && abierta.length > 0) {
+    return { error: "Ya hay una parada en curso." };
+  }
+
+  const { error } = await supabase.from("envasado_paradas").insert({
+    envasado_id: parsed.data.envasado_id,
+    motivo: parsed.data.motivo || null,
+    created_by: profile.id,
+  });
+
+  if (error) {
+    return { error: "No se pudo registrar la parada." };
+  }
+
+  revalidatePath("/envasado");
+  revalidatePath("/proceso");
+  return { success: true };
+}
+
+const FinalizarParadaSchema = z.object({ id: z.string().uuid() });
+
+export async function finalizarParada(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = FinalizarParadaSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("envasado_paradas")
+    .update({ ended_at: new Date().toISOString() })
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo finalizar la parada." };
+  }
+
+  revalidatePath("/envasado");
+  revalidatePath("/proceso");
+  return { success: true };
+}

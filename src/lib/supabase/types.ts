@@ -691,6 +691,28 @@ export interface Database {
         >;
         Relationships: [];
       };
+      envasado_paradas: {
+        Row: {
+          id: string;
+          envasado_id: string;
+          motivo: string | null;
+          started_at: string;
+          ended_at: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          envasado_id: string;
+          motivo?: string | null;
+          started_at?: string;
+          ended_at?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_paradas"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: {
       v_proceso_actual: {
