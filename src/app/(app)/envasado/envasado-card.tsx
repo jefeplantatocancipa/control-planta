@@ -183,7 +183,13 @@ function IniciarParadaDialog({ envasadoId }: { envasadoId: string }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline">Parada</Button>} />
+      <DialogTrigger
+        render={
+          <Button size="sm" variant="outline">
+            Registrar parada
+          </Button>
+        }
+      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Registrar parada</DialogTitle>
@@ -227,9 +233,21 @@ function ParadasSection({
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs font-normal text-muted-foreground">Paradas</Label>
+        <div>
+          <h3 className="text-sm font-semibold">Paradas de la línea</h3>
+          <p className="text-xs text-muted-foreground">
+            Tiempo sin envasar: falla, cambio de referencia, descanso, entre
+            turnos, etc.
+          </p>
+        </div>
         {!paradaAbierta && <IniciarParadaDialog envasadoId={envasadoId} />}
       </div>
+      {paradaAbierta && (
+        <p className="text-sm font-medium text-destructive">
+          Línea parada desde {formatDateTime(paradaAbierta.startedAt)}
+          {paradaAbierta.motivo ? ` — ${paradaAbierta.motivo}` : ""}
+        </p>
+      )}
       {paradas.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sin paradas registradas.</p>
       ) : (
@@ -303,9 +321,7 @@ export function EnvasadoCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          {bacheLabel} · {presentacion}
-        </CardTitle>
+        <CardTitle className="text-base">{bacheLabel}</CardTitle>
         <CardAction>
           <div className="flex items-center gap-1">
             <Link
@@ -325,6 +341,7 @@ export function EnvasadoCard({
             )}
           </div>
         </CardAction>
+        <p className="text-sm text-muted-foreground">{presentacion}</p>
         <p className="text-sm text-muted-foreground">
           {operarioName}
           {lote ? ` · Lote ${lote}` : ""}
@@ -337,25 +354,28 @@ export function EnvasadoCard({
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Unidades: <span className="font-semibold text-foreground">{totalUnidades}</span>
-              {" · "}
-              Desperdicio:{" "}
-              <span className="font-semibold text-foreground">{totalDesperdicio}</span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Suma de los turnos ya finalizados.
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <FinalizarEnvasadoDialog recordId={recordId} disabled={hayTurnoActivo} />
-            {hayTurnoActivo && (
-              <p className="text-xs text-muted-foreground">
-                Finalizá el turno activo antes de cerrar el envasado.
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold">Resumen del envasado</h3>
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Unidades: <span className="font-semibold text-foreground">{totalUnidades}</span>
+                {" · "}
+                Desperdicio:{" "}
+                <span className="font-semibold text-foreground">{totalDesperdicio}</span>
               </p>
-            )}
+              <p className="text-xs text-muted-foreground">
+                Suma de los turnos ya finalizados.
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <FinalizarEnvasadoDialog recordId={recordId} disabled={hayTurnoActivo} />
+              {hayTurnoActivo && (
+                <p className="text-xs text-muted-foreground">
+                  Finalizá el turno activo antes de cerrar el envasado.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

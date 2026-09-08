@@ -624,9 +624,14 @@ export function TurnoPanel({
     activo?.estibas.reduce((sum, e) => sum + (e.unidadesPorEstiba ?? 0), 0) ?? 0;
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-3">
-      <div className="flex items-center justify-between">
-        <Label>Turno de envasado</Label>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">Turno de envasado</h3>
+          <p className="text-xs text-muted-foreground">
+            Quién está envasando ahora, con su control de calidad y estibas.
+          </p>
+        </div>
         {!activo && (
           <IniciarTurnoDialog envasadoId={envasadoId} turnos={turnos} operarios={operarios} />
         )}
@@ -650,15 +655,25 @@ export function TurnoPanel({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label className="text-xs font-normal text-muted-foreground">
-              Control de calidad (cada hora)
-            </Label>
+            <div>
+              <Label className="text-xs font-semibold text-foreground">
+                Control de calidad
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Peso, sellado y fechado — una lectura por hora.
+              </p>
+            </div>
             <LecturasList lecturas={activo.lecturas} />
             <LecturaCalidadForm corteId={activo.id} />
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label className="text-xs font-normal text-muted-foreground">Estibas</Label>
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Estibas</Label>
+              <p className="text-xs text-muted-foreground">
+                Cuánto se demora armando cada estiba.
+              </p>
+            </div>
             <EstibasList estibas={activo.estibas} />
             {estibaAbierta ? (
               <FinalizarEstibaForm estibaId={estibaAbierta.id} />
@@ -671,19 +686,19 @@ export function TurnoPanel({
 
       {cerrados.length > 0 && (
         <div className="flex flex-col gap-2">
-          <Label className="text-xs font-normal text-muted-foreground">
-            Turnos finalizados
-          </Label>
+          <h3 className="text-sm font-semibold">Turnos finalizados</h3>
           {cerrados.map((c) => (
-            <div key={c.id} className="rounded-lg border p-2 text-xs">
-              <p className="font-semibold">{c.turnoName}</p>
+            <div key={c.id} className="rounded-lg border p-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold text-foreground">{c.turnoName}</p>
+                <p className="text-muted-foreground">
+                  {c.unidadesInicio} → {c.unidadesFinal} unidades
+                </p>
+              </div>
               <p className="text-muted-foreground">{c.operarios}</p>
-              <p>
-                {c.unidadesInicio} → {c.unidadesFinal} unidades
-                {c.desperdicio ? ` · Desperdicio: ${c.desperdicio}` : ""}
-              </p>
-              <p className="text-muted-foreground">
+              <p className="mt-1 text-muted-foreground">
                 {c.lecturas.length} lectura(s) de calidad · {c.estibas.length} estiba(s)
+                {c.desperdicio ? ` · Desperdicio: ${c.desperdicio}` : ""}
               </p>
               {c.observaciones && (
                 <p className="text-muted-foreground">Obs: {c.observaciones}</p>
