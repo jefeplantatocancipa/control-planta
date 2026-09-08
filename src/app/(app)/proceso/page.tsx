@@ -86,6 +86,7 @@ export default async function ProcesoPage() {
         ? `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`
         : "—",
       presentacion: envasado.presentacion,
+      lote: envasado.lote,
       unidades: unidadesByEnvasado.get(envasado.id) ?? 0,
       startedAt: envasado.started_at,
       tiempoParadasMs,
@@ -193,7 +194,10 @@ export default async function ProcesoPage() {
                     <Badge variant="outline">Parado</Badge>
                   )}
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">{envasado.presentacion}</p>
+                <p className="text-sm text-muted-foreground">
+                  {envasado.presentacion}
+                  {envasado.lote ? ` · Lote ${envasado.lote}` : ""}
+                </p>
               </CardHeader>
               <CardContent className="flex flex-col gap-1 text-sm">
                 <p>

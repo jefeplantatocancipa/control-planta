@@ -257,6 +257,11 @@ function StartEnvasadoForm({
       </div>
 
       <div className="flex flex-col gap-2">
+        <Label htmlFor="lote">Lote de envasado</Label>
+        <Input id="lote" name="lote" required />
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Label htmlFor="operario_id">Operario responsable</Label>
         <Select
           name="operario_id"

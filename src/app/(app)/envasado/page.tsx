@@ -292,6 +292,7 @@ export default async function EnvasadoPage() {
               recordId={envasado.id}
               bacheLabel={bacheLabels.get(envasado.bache_id) ?? "—"}
               presentacion={envasado.presentacion}
+              lote={envasado.lote}
               operarioName={operarioNames.get(envasado.operario_id) ?? "—"}
               massBalanceKg={massBalanceByBache.get(envasado.bache_id)?.kg}
               turnos={turnos ?? []}
@@ -314,6 +315,7 @@ export default async function EnvasadoPage() {
             <TableRow>
               <TableHead>Bache</TableHead>
               <TableHead>Presentación</TableHead>
+              <TableHead>Lote</TableHead>
               <TableHead>Insumos (kg)</TableHead>
               <TableHead>Unidades</TableHead>
               <TableHead>Mermas</TableHead>
@@ -330,6 +332,7 @@ export default async function EnvasadoPage() {
                   {bacheLabels.get(envasado.bache_id) ?? "—"}
                 </TableCell>
                 <TableCell>{envasado.presentacion}</TableCell>
+                <TableCell>{envasado.lote ?? "—"}</TableCell>
                 <TableCell>
                   {massBalanceByBache.get(envasado.bache_id)?.kg ?? "—"}
                 </TableCell>
@@ -363,7 +366,7 @@ export default async function EnvasadoPage() {
             {closed.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canDelete ? 9 : 8}
+                  colSpan={canDelete ? 10 : 9}
                   className="text-center text-muted-foreground"
                 >
                   Sin envasados finalizados todavía.

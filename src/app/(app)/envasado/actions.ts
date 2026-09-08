@@ -48,6 +48,7 @@ const StartEnvasadoSchema = z.object({
   operario_id: z.string().uuid({ message: "Elegí quién realiza el envasado." }),
   envasado_order_id: z.string().uuid().nullable(),
   presentacion: z.string().trim().min(1, "La presentación es obligatoria."),
+  lote: z.string().trim().min(1, "El lote es obligatorio."),
   insumos_observacion: z.string().trim().optional(),
 });
 
@@ -77,6 +78,7 @@ export async function startEnvasado(
     operario_id: formData.get("operario_id"),
     envasado_order_id: orderId && orderId !== NO_ORDER_VALUE ? orderId : null,
     presentacion: formData.get("presentacion"),
+    lote: formData.get("lote"),
     insumos_observacion: formData.get("insumos_observacion") || undefined,
   });
   if (!parsed.success) {
@@ -100,6 +102,7 @@ export async function startEnvasado(
       operario_id: parsed.data.operario_id,
       envasado_order_id: parsed.data.envasado_order_id,
       presentacion: parsed.data.presentacion,
+      lote: parsed.data.lote,
       insumos_observacion: parsed.data.insumos_observacion || null,
       cantidad_unidades: 0,
       cantidad_mermas: 0,

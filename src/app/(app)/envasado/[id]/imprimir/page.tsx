@@ -147,7 +147,7 @@ export default async function EnvasadoReportPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 rounded-md border p-2">
+      <div className="grid grid-cols-5 gap-3 rounded-md border p-2">
         <div>
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Lote</p>
           <p className="font-semibold">{bache.batch_code}</p>
@@ -159,6 +159,12 @@ export default async function EnvasadoReportPage({
           <p className="font-semibold">
             {product?.name ?? "—"} — {envasado.presentacion}
           </p>
+        </div>
+        <div>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
+            Lote de envasado
+          </p>
+          <p className="font-semibold">{envasado.lote ?? "—"}</p>
         </div>
         <div>
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground">Fecha</p>

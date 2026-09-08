@@ -426,6 +426,7 @@ export interface Database {
           operario_id: string;
           envasado_order_id: string | null;
           presentacion: string;
+          lote: string | null;
           cantidad_unidades: number;
           cantidad_mermas: number;
           insumos_observacion: string | null;
@@ -440,6 +441,7 @@ export interface Database {
           operario_id: string;
           envasado_order_id?: string | null;
           presentacion: string;
+          lote?: string | null;
           cantidad_unidades: number;
           cantidad_mermas?: number;
           insumos_observacion?: string | null;

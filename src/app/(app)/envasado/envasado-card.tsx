@@ -267,6 +267,7 @@ export function EnvasadoCard({
   recordId,
   bacheLabel,
   presentacion,
+  lote,
   operarioName,
   massBalanceKg,
   turnos,
@@ -278,6 +279,7 @@ export function EnvasadoCard({
   recordId: string;
   bacheLabel: string;
   presentacion: string;
+  lote: string | null;
   operarioName: string;
   massBalanceKg?: number;
   turnos: Turno[];
@@ -323,7 +325,10 @@ export function EnvasadoCard({
             )}
           </div>
         </CardAction>
-        <p className="text-sm text-muted-foreground">{operarioName}</p>
+        <p className="text-sm text-muted-foreground">
+          {operarioName}
+          {lote ? ` · Lote ${lote}` : ""}
+        </p>
         {massBalanceKg !== undefined && (
           <p className="text-sm text-muted-foreground">
             Insumos alistados: <span className="font-medium">{massBalanceKg} kg</span>{" "}
