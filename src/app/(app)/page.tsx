@@ -16,7 +16,7 @@ const CARDS: {
     title: "Proceso actual",
     description: "Tablero en vivo de los procesos de producción, etapa por etapa.",
     icon: Activity,
-    roles: ["jefe_planta", "supervisor", "operario"],
+    roles: ["jefe_planta", "supervisor", "operario", "planeacion"],
   },
   {
     href: "/baches",
@@ -44,7 +44,7 @@ const CARDS: {
     title: "Programa de producción",
     description: "Programa semanal y seguimiento de órdenes.",
     icon: ClipboardList,
-    roles: ["jefe_planta", "supervisor"],
+    roles: ["jefe_planta", "supervisor", "planeacion"],
   },
   {
     href: "/cumplimiento",

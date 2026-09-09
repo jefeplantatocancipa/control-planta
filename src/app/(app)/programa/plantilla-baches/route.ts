@@ -15,7 +15,7 @@ const HEADERS = [
 ];
 
 export async function GET() {
-  await requireRole(["jefe_planta", "supervisor"]);
+  await requireRole(["jefe_planta", "supervisor", "planeacion"]);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Programa Baches");

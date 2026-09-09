@@ -291,7 +291,7 @@ export async function deleteProductStages(
 const ProfileSchema = z.object({
   id: z.string().uuid(),
   full_name: z.string().trim().min(1, "El nombre es obligatorio."),
-  role: z.enum(["jefe_planta", "supervisor", "operario"] satisfies UserRole[]),
+  role: z.enum(["jefe_planta", "supervisor", "operario", "planeacion"] satisfies UserRole[]),
 });
 
 export async function updateProfile(
@@ -360,7 +360,7 @@ const CreateUserSchema = z
       .min(6, "La contraseña debe tener al menos 6 caracteres.")
       .optional()
       .or(z.literal("")),
-    role: z.enum(["jefe_planta", "supervisor", "operario"] satisfies UserRole[]),
+    role: z.enum(["jefe_planta", "supervisor", "operario", "planeacion"] satisfies UserRole[]),
   })
   .refine((data) => data.role === "operario" || (data.email && data.password), {
     message: "Correo y contraseña son obligatorios para ese rol.",

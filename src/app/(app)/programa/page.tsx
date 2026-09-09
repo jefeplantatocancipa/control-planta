@@ -6,7 +6,7 @@ import { ImportEnvasadoDialog } from "./import-envasado-dialog";
 import { ProgramCard } from "./program-card";
 
 export default async function ProgramaPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "planeacion"]);
   const supabase = await createClient();
 
   const [
@@ -37,7 +37,10 @@ export default async function ProgramaPage() {
       .not("production_order_id", "is", null),
   ]);
 
-  const canWrite = profile.role === "jefe_planta";
+  // Planeación arma/edita el programa igual que el jefe de planta, pero
+  // borrar (órdenes o el programa entero) queda exclusivo del jefe de planta.
+  const canWrite = profile.role === "jefe_planta" || profile.role === "planeacion";
+  const canDelete = profile.role === "jefe_planta";
 
   // Horas reales por orden: primer bache que arrancó / último que terminó,
   // de los baches ya vinculados a esa orden (production_order_id).
@@ -60,7 +63,8 @@ export default async function ProgramaPage() {
         <div>
           <h1 className="text-2xl font-semibold">Programa de producción</h1>
           <p className="text-muted-foreground">
-            El jefe de planta genera el programa semanal por producto.
+            El jefe de planta y Planeación generan el programa semanal por
+            producto.
           </p>
         </div>
         {canWrite && (
@@ -84,6 +88,7 @@ export default async function ProgramaPage() {
             products={products ?? []}
             envasadoReferencias={envasadoReferencias ?? []}
             canWrite={canWrite}
+            canDelete={canDelete}
             realTimesByOrder={realTimesByOrder}
           />
         ))}

@@ -31,13 +31,13 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Inicio", icon: LayoutDashboard, roles: ["jefe_planta", "supervisor", "operario"] },
-  { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario"] },
+  { href: "/", label: "Inicio", icon: LayoutDashboard, roles: ["jefe_planta", "supervisor", "operario", "planeacion"] },
+  { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario", "planeacion"] },
   { href: "/baches", label: "Baches", icon: Beaker, roles: ["jefe_planta", "supervisor"] },
   { href: "/envasado", label: "Envasado", icon: Package, roles: ["jefe_planta", "supervisor"] },
   { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor"] },
   { href: "/enmangado", label: "Enmangado", icon: Package, roles: ["jefe_planta", "supervisor"] },
-  { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor"] },
+  { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor", "planeacion"] },
   { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor"] },
   { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor"] },
   { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta"] },

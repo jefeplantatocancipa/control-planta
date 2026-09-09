@@ -37,6 +37,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   jefe_planta: "Jefe de planta",
   supervisor: "Supervisor",
   operario: "Operario",
+  planeacion: "Planeación",
 };
 
 function UserForm({

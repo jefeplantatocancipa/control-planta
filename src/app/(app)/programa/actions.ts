@@ -38,7 +38,7 @@ export async function createProgram(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const profile = await requireRole(["jefe_planta"]);
+  const profile = await requireRole(["jefe_planta", "planeacion"]);
 
   const parsed = ProgramSchema.safeParse({
     week_start_date: formData.get("week_start_date"),
@@ -77,7 +77,7 @@ export async function updateProgramStatus(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["jefe_planta"]);
+  await requireRole(["jefe_planta", "planeacion"]);
 
   const parsed = ProgramStatusSchema.safeParse({
     id: formData.get("id"),
@@ -134,7 +134,7 @@ export async function createOrder(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["jefe_planta"]);
+  await requireRole(["jefe_planta", "planeacion"]);
 
   const parsed = OrderSchema.safeParse({
     program_id: formData.get("program_id"),
@@ -187,7 +187,7 @@ export async function updateOrderStatus(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["jefe_planta"]);
+  await requireRole(["jefe_planta", "planeacion"]);
 
   const parsed = OrderStatusSchema.safeParse({
     id: formData.get("id"),
@@ -317,7 +317,7 @@ export async function importBachesProgram(
   _prevState: ImportActionState,
   formData: FormData,
 ): Promise<ImportActionState> {
-  const profile = await requireRole(["jefe_planta"]);
+  const profile = await requireRole(["jefe_planta", "planeacion"]);
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -485,7 +485,7 @@ export async function importEnvasadoProgram(
   _prevState: ImportActionState,
   formData: FormData,
 ): Promise<ImportActionState> {
-  const profile = await requireRole(["jefe_planta"]);
+  const profile = await requireRole(["jefe_planta", "planeacion"]);
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {

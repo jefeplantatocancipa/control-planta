@@ -50,6 +50,7 @@ export function ProgramCard({
   products,
   envasadoReferencias,
   canWrite,
+  canDelete,
   realTimesByOrder,
 }: {
   program: Program;
@@ -58,6 +59,7 @@ export function ProgramCard({
   products: Product[];
   envasadoReferencias: EnvasadoReferencia[];
   canWrite: boolean;
+  canDelete: boolean;
   realTimesByOrder?: Map<string, { start: string; end: string | null }>;
 }) {
   const productNames = new Map(products.map((p) => [p.id, p.name]));
@@ -81,7 +83,7 @@ export function ProgramCard({
             ) : (
               <Badge variant="outline">{PROGRAM_STATUS_LABELS[program.status]}</Badge>
             )}
-            {canWrite && (
+            {canDelete && (
               <DeleteButton
                 action={deleteProgram}
                 id={program.id}
@@ -105,7 +107,7 @@ export function ProgramCard({
               <TableHead>Planeado (inicio–final)</TableHead>
               <TableHead>Real (inicio–final)</TableHead>
               <TableHead>Estado</TableHead>
-              {canWrite && (
+              {canDelete && (
                 <TableHead className="sticky right-0 bg-card" />
               )}
             </TableRow>
@@ -152,7 +154,7 @@ export function ProgramCard({
                       <Badge variant="outline">{order.status}</Badge>
                     )}
                   </TableCell>
-                  {canWrite && (
+                  {canDelete && (
                     <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
                       <DeleteButton
                         action={deleteOrder}
@@ -168,7 +170,7 @@ export function ProgramCard({
             {orders.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canWrite ? 9 : 8}
+                  colSpan={canDelete ? 9 : 8}
                   className="text-center text-muted-foreground"
                 >
                   Sin órdenes todavía.
@@ -197,7 +199,7 @@ export function ProgramCard({
               <TableHead>Und. programadas</TableHead>
               <TableHead>Gramaje x und.</TableHead>
               <TableHead>Estado</TableHead>
-              {canWrite && (
+              {canDelete && (
                 <TableHead className="sticky right-0 bg-card" />
               )}
             </TableRow>
@@ -224,7 +226,7 @@ export function ProgramCard({
                   <TableCell>
                     <Badge variant="outline">{order.status}</Badge>
                   </TableCell>
-                  {canWrite && (
+                  {canDelete && (
                     <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
                       <DeleteButton
                         action={deleteEnvasadoOrder}
@@ -240,7 +242,7 @@ export function ProgramCard({
             {envasadoOrders.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canWrite ? 8 : 7}
+                  colSpan={canDelete ? 8 : 7}
                   className="text-center text-muted-foreground"
                 >
                   Sin órdenes de envasado todavía.

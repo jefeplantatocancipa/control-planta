@@ -2,7 +2,7 @@
 // Cuando el proyecto Supabase esté enlazado, se pueden regenerar con:
 //   npx supabase gen types typescript --project-id <id> > src/lib/supabase/types.ts
 
-export type UserRole = "jefe_planta" | "supervisor" | "operario";
+export type UserRole = "jefe_planta" | "supervisor" | "operario" | "planeacion";
 export type ProcessType = "bache";
 export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
