@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EncajadoCard, type EstibaDisplay } from "./encajado-card";
-import { formatDateTime } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
 
 export default async function EncajadoPage() {
   await requireRole(["jefe_planta", "supervisor"]);
@@ -23,7 +23,7 @@ export default async function EncajadoPage() {
     { data: estibas },
   ] = await Promise.all([
     supabase.from("encajados").select("*").order("created_at", { ascending: false }),
-    supabase.from("envasados").select("id, presentacion"),
+    supabase.from("envasados").select("id, presentacion, cantidad_unidades, started_at"),
     supabase.from("baches").select("id, batch_code, product_id"),
     supabase.from("products").select("id, name"),
     supabase.from("encajado_estibas").select("*").order("inicio_estiba"),
@@ -50,15 +50,20 @@ export default async function EncajadoPage() {
     return `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`;
   }
 
-  const cards = (encajados ?? []).map((encajado) => ({
-    id: encajado.id,
-    bacheLabel: bacheLabel(encajado.bache_id),
-    presentacion: envasadosById.get(encajado.envasado_id)?.presentacion ?? "—",
-    lote: encajado.lote,
-    startedAt: encajado.started_at,
-    endedAt: encajado.ended_at,
-    estibas: estibasByEncajado.get(encajado.id) ?? [],
-  }));
+  const cards = (encajados ?? []).map((encajado) => {
+    const envasado = envasadosById.get(encajado.envasado_id);
+    return {
+      id: encajado.id,
+      bacheLabel: bacheLabel(encajado.bache_id),
+      presentacion: envasado?.presentacion ?? "—",
+      unidadesEnvasadas: envasado?.cantidad_unidades ?? 0,
+      fechaEnvasado: envasado?.started_at ?? null,
+      lote: encajado.lote,
+      startedAt: encajado.started_at,
+      endedAt: encajado.ended_at,
+      estibas: estibasByEncajado.get(encajado.id) ?? [],
+    };
+  });
 
   const pendientes = cards.filter((c) => !c.startedAt);
   const enCurso = cards.filter((c) => c.startedAt && !c.endedAt);
@@ -106,6 +111,8 @@ export default async function EncajadoPage() {
               <TableHead>Bache</TableHead>
               <TableHead>Presentación</TableHead>
               <TableHead>Lote</TableHead>
+              <TableHead>Fecha de envasado</TableHead>
+              <TableHead>Unidades envasadas</TableHead>
               <TableHead>Estibas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
@@ -117,6 +124,8 @@ export default async function EncajadoPage() {
                 <TableCell className="font-medium">{c.bacheLabel}</TableCell>
                 <TableCell>{c.presentacion}</TableCell>
                 <TableCell>{c.lote ?? "—"}</TableCell>
+                <TableCell>{c.fechaEnvasado ? formatDate(c.fechaEnvasado) : "—"}</TableCell>
+                <TableCell>{c.unidadesEnvasadas}</TableCell>
                 <TableCell>{c.estibas.length}</TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
@@ -124,7 +133,7 @@ export default async function EncajadoPage() {
             ))}
             {finalizados.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   Sin encajados finalizados todavía.
                 </TableCell>
               </TableRow>

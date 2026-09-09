@@ -227,15 +227,6 @@ export async function finalizarEnvasado(
     return { error: "No se pudo finalizar el envasado." };
   }
 
-  // El encajado no tiene programa propio: se crea automáticamente acá, al
-  // cerrar el envasado, y arranca "pendiente" (sin started_at) hasta que
-  // alguien lo inicie desde /encajado.
-  await supabase.from("encajados").insert({
-    envasado_id: parsed.data.record_id,
-    bache_id: envasado.bache_id,
-    created_by: profile.id,
-  });
-
   // Esto solo actualiza volumen_restante_litros (cuánto queda por envasar),
   // nunca el status del bache: ese campo lo controla el jefe de planta desde
   // la propia página del bache para indicar si ya terminó de producirse.
@@ -257,6 +248,22 @@ export async function finalizarEnvasado(
       .from("envasado_orders")
       .update({ status: "completado" })
       .eq("id", envasado.envasado_order_id);
+  }
+
+  // El encajado no tiene programa propio: se crea automáticamente acá, al
+  // cerrar el envasado, y arranca "pendiente" (sin started_at) hasta que
+  // alguien lo inicia desde /encajado. Va al final porque lo importante
+  // (cerrar el envasado, actualizar bache y orden) ya se guardó arriba.
+  const { error: encajadoError } = await supabase.from("encajados").insert({
+    envasado_id: parsed.data.record_id,
+    bache_id: envasado.bache_id,
+    created_by: profile.id,
+  });
+  if (encajadoError) {
+    return {
+      error:
+        "El envasado se finalizó, pero no se pudo generar el encajado. Avisá para revisarlo.",
+    };
   }
 
   revalidatePath("/envasado");

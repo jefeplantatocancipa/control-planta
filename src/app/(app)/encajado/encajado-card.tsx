@@ -12,7 +12,7 @@ import {
   finalizarEncajado,
   type ActionState,
 } from "./actions";
-import { formatTime, formatDateTime } from "@/lib/format-date";
+import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
 
 export interface EstibaDisplay {
   id: string;
@@ -24,6 +24,8 @@ export interface EncajadoDisplay {
   id: string;
   bacheLabel: string;
   presentacion: string;
+  unidadesEnvasadas: number;
+  fechaEnvasado: string | null;
   lote: string | null;
   startedAt: string | null;
   endedAt: string | null;
@@ -150,6 +152,8 @@ export function EncajadoCard({
   id,
   bacheLabel,
   presentacion,
+  unidadesEnvasadas,
+  fechaEnvasado,
   lote,
   startedAt,
   endedAt,
@@ -163,6 +167,10 @@ export function EncajadoCard({
         <CardTitle className="text-base">
           {bacheLabel} · {presentacion}
         </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          {unidadesEnvasadas} unidades envasadas
+          {fechaEnvasado ? ` · ${formatDate(fechaEnvasado)}` : ""}
+        </p>
         {lote && <p className="text-sm text-muted-foreground">Lote: {lote}</p>}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
