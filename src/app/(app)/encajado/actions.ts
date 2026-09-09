@@ -46,6 +46,33 @@ export async function iniciarEncajado(
   return { success: true };
 }
 
+export async function deleteEncajado(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = IniciarEncajadoSchema.pick({ id: true }).safeParse({
+    id: formData.get("id"),
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("encajados")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo eliminar el encajado." };
+  }
+
+  revalidatePath("/encajado");
+  return { success: true };
+}
+
 const IdSchema = z.object({ id: z.string().uuid() });
 
 export async function iniciarEstibaEncajado(

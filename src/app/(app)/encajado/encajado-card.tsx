@@ -4,12 +4,14 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DeleteButton } from "@/components/delete-button";
 import {
   iniciarEncajado,
   iniciarEstibaEncajado,
   finalizarEstibaEncajado,
   finalizarEncajado,
+  deleteEncajado,
   type ActionState,
 } from "./actions";
 import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
@@ -30,6 +32,7 @@ export interface EncajadoDisplay {
   startedAt: string | null;
   endedAt: string | null;
   estibas: EstibaDisplay[];
+  canDelete?: boolean;
 }
 
 function IniciarEncajadoForm({ encajadoId }: { encajadoId: string }) {
@@ -158,6 +161,7 @@ export function EncajadoCard({
   startedAt,
   endedAt,
   estibas,
+  canDelete,
 }: EncajadoDisplay) {
   const estibaAbierta = estibas.find((e) => !e.finalEstiba);
 
@@ -167,6 +171,16 @@ export function EncajadoCard({
         <CardTitle className="text-base">
           {bacheLabel} · {presentacion}
         </CardTitle>
+        {canDelete && (
+          <CardAction>
+            <DeleteButton
+              action={deleteEncajado}
+              id={id}
+              title="Eliminar encajado"
+              description="Borra este encajado con sus estibas registradas."
+            />
+          </CardAction>
+        )}
         <p className="text-sm text-muted-foreground">
           {unidadesEnvasadas} unidades envasadas
           {fechaEnvasado ? ` · ${formatDate(fechaEnvasado)}` : ""}

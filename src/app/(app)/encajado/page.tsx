@@ -9,10 +9,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EncajadoCard, type EstibaDisplay } from "./encajado-card";
+import { DeleteButton } from "@/components/delete-button";
+import { deleteEncajado } from "./actions";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 
 export default async function EncajadoPage() {
-  await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const canDelete = profile.role === "jefe_planta";
   const supabase = await createClient();
 
   const [
@@ -62,6 +65,7 @@ export default async function EncajadoPage() {
       startedAt: encajado.started_at,
       endedAt: encajado.ended_at,
       estibas: estibasByEncajado.get(encajado.id) ?? [],
+      canDelete,
     };
   });
 
@@ -116,11 +120,12 @@ export default async function EncajadoPage() {
               <TableHead>Estibas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
+              {canDelete && <TableHead className="sticky right-0 bg-background" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {finalizados.map((c) => (
-              <TableRow key={c.id}>
+              <TableRow key={c.id} className="group">
                 <TableCell className="font-medium">{c.bacheLabel}</TableCell>
                 <TableCell>{c.presentacion}</TableCell>
                 <TableCell>{c.lote ?? "—"}</TableCell>
@@ -129,11 +134,24 @@ export default async function EncajadoPage() {
                 <TableCell>{c.estibas.length}</TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
+                {canDelete && (
+                  <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
+                    <DeleteButton
+                      action={deleteEncajado}
+                      id={c.id}
+                      title="Eliminar encajado"
+                      description="Borra este encajado con sus estibas registradas."
+                    />
+                  </TableCell>
+                )}
               </TableRow>
             ))}
             {finalizados.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={canDelete ? 9 : 8}
+                  className="text-center text-muted-foreground"
+                >
                   Sin encajados finalizados todavía.
                 </TableCell>
               </TableRow>
