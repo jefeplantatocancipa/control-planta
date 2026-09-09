@@ -19,6 +19,7 @@ import {
 import { ProgramStatusSelect } from "./program-status-select";
 import { OrderStatusSelect } from "./order-status-select";
 import { NewOrderDialog } from "./new-order-dialog";
+import { NewEnvasadoOrderDialog } from "./new-envasado-order-dialog";
 import { DeleteButton } from "@/components/delete-button";
 import { deleteOrder, deleteEnvasadoOrder, deleteProgram } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
@@ -251,6 +252,14 @@ export function ProgramCard({
             )}
           </TableBody>
         </Table>
+        {canWrite && (
+          <div className="flex justify-end">
+            <NewEnvasadoOrderDialog
+              programId={program.id}
+              referencias={envasadoReferencias}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

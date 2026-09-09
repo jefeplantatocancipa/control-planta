@@ -173,6 +173,55 @@ export async function createOrder(
   return { success: true };
 }
 
+const EnvasadoOrderSchema = z.object({
+  program_id: z.string().uuid(),
+  referencia_id: z.string().uuid({ message: "Elegí una referencia." }),
+  scheduled_date: z.string().min(1, "La fecha es obligatoria."),
+  linea: z.string().trim().optional(),
+  planned_quantity: z.coerce
+    .number()
+    .positive("Las unidades programadas deben ser mayores a 0."),
+});
+
+export async function createEnvasadoOrder(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "planeacion"]);
+
+  const parsed = EnvasadoOrderSchema.safeParse({
+    program_id: formData.get("program_id"),
+    referencia_id: formData.get("referencia_id"),
+    scheduled_date: formData.get("scheduled_date"),
+    linea: formData.get("linea") || undefined,
+    planned_quantity: formData.get("planned_quantity"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("envasado_orders").insert({
+    program_id: parsed.data.program_id,
+    referencia_id: parsed.data.referencia_id,
+    scheduled_date: parsed.data.scheduled_date,
+    linea: parsed.data.linea || null,
+    planned_quantity: parsed.data.planned_quantity,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23505"
+          ? "Ya existe una orden de envasado para esa referencia, línea y fecha."
+          : "No se pudo crear la orden de envasado.",
+    };
+  }
+
+  revalidatePath("/programa");
+  return { success: true };
+}
+
 const OrderStatusSchema = z.object({
   id: z.string().uuid(),
   status: z.enum([
