@@ -442,9 +442,15 @@ export default async function BacheReportPage({
         })}
       </div>
 
-      <div className="mt-4 flex items-end justify-between border-t pt-2 text-[10px] text-muted-foreground">
-        <p>Firma responsable: ______________________________</p>
-        <p>fasalact food innovation</p>
+      <div className="mt-4 border-t pt-2 text-[10px] text-muted-foreground">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+          <p>Firma Supervisor turno A: ________________________</p>
+          <p>Firma Supervisor turno B: ________________________</p>
+          <p>Firma Supervisor turno C: ________________________</p>
+          <p>Firma Calidad: ________________________</p>
+          <p>Firma Jefe de Planta: ________________________</p>
+        </div>
+        <p className="mt-2 text-right">fasalact food innovation</p>
       </div>
     </div>
   );
