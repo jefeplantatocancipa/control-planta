@@ -260,6 +260,34 @@ export async function updateOrderStatus(
   return { success: true };
 }
 
+export async function updateEnvasadoOrderStatus(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "planeacion"]);
+
+  const parsed = OrderStatusSchema.safeParse({
+    id: formData.get("id"),
+    status: formData.get("status"),
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("envasado_orders")
+    .update({ status: parsed.data.status })
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo actualizar el estado de la orden de envasado." };
+  }
+
+  revalidatePath("/programa");
+  return { success: true };
+}
+
 const DeleteOrderSchema = z.object({ id: z.string().uuid() });
 
 export async function deleteOrder(

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { ProgramStatusSelect } from "./program-status-select";
 import { OrderStatusSelect } from "./order-status-select";
+import { EnvasadoOrderStatusSelect } from "./envasado-order-status-select";
 import { NewOrderDialog } from "./new-order-dialog";
 import { NewEnvasadoOrderDialog } from "./new-envasado-order-dialog";
 import { DeleteButton } from "@/components/delete-button";
@@ -225,7 +226,15 @@ export function ProgramCard({
                     {referencia ? `${referencia.peso_unitario} g` : "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{order.status}</Badge>
+                    {canWrite ? (
+                      <EnvasadoOrderStatusSelect
+                        key={order.status}
+                        orderId={order.id}
+                        status={order.status}
+                      />
+                    ) : (
+                      <Badge variant="outline">{order.status}</Badge>
+                    )}
                   </TableCell>
                   {canDelete && (
                     <TableCell className="sticky right-0 bg-card text-right group-hover:bg-muted/50">
