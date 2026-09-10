@@ -94,14 +94,29 @@ export default async function ProcesoPage() {
     };
   });
 
-  const totalStagesByProduct = new Map<string, number>();
-  const defaultStageCount = (templates ?? []).filter((t) => t.product_id === null).length;
+  // El "número de etapa" que se muestra tiene que ser la posición de la
+  // etapa dentro de la lista ordenada del producto, no su sequence_order
+  // crudo: ese campo puede tener huecos (se corre al insertar/reordenar
+  // etapas en Administración y nunca se compacta), así que un bache podía
+  // mostrar "Etapa 23/12" con una lista de solo 12 etapas.
+  const stagesByProductId = new Map<string, string[]>();
   for (const template of templates ?? []) {
-    if (!template.product_id) continue;
-    totalStagesByProduct.set(
-      template.product_id,
-      (totalStagesByProduct.get(template.product_id) ?? 0) + 1,
-    );
+    const key = template.product_id ?? "__default__";
+    const list = stagesByProductId.get(key) ?? [];
+    list.push(template.id);
+    stagesByProductId.set(key, list);
+  }
+  function stageListFor(productId: string) {
+    const own = stagesByProductId.get(productId) ?? [];
+    return own.length > 0 ? own : (stagesByProductId.get("__default__") ?? []);
+  }
+  function totalStagesFor(productId: string) {
+    return stageListFor(productId).length || 8;
+  }
+  function stageRank(productId: string, stageId: string | null) {
+    if (!stageId) return 0;
+    const index = stageListFor(productId).indexOf(stageId);
+    return index === -1 ? 0 : index + 1;
   }
 
   const baches = proceso ?? [];
@@ -117,9 +132,8 @@ export default async function ProcesoPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {baches.map((bache) => {
-          const totalStages =
-            totalStagesByProduct.get(bache.product_id) || defaultStageCount || 8;
-          const current = bache.sequence_order ?? 0;
+          const totalStages = totalStagesFor(bache.product_id);
+          const current = stageRank(bache.product_id, bache.stage_id);
           const inProgress = current > 0 && !bache.stage_ended_at;
           const allDone = current === totalStages && Boolean(bache.stage_ended_at);
 
