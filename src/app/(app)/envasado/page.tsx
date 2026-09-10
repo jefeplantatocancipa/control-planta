@@ -139,6 +139,13 @@ export default async function EnvasadoPage() {
     ]),
   );
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
+  // Solo operario/supervisor son seleccionables como "operario responsable";
+  // jefe_planta y planeación no aparecen en el desplegable (pero sí se
+  // siguen resolviendo sus nombres arriba, por si quedaron en registros
+  // viejos de antes de este filtro).
+  const operariosSeleccionables = (operarios ?? []).filter(
+    (o) => o.role === "operario" || o.role === "supervisor",
+  );
 
   const turnoNames = new Map((turnos ?? []).map((t) => [t.id, t.name]));
 
@@ -276,7 +283,7 @@ export default async function EnvasadoPage() {
         </div>
         <StartEnvasadoDialog
           baches={bacheOptions}
-          operarios={operarios ?? []}
+          operarios={operariosSeleccionables}
           envasadoOrders={envasadoOrderOptions}
           envasadoInsumos={envasadoInsumos ?? []}
           recipeByReferencia={recipeByReferencia}
@@ -296,7 +303,7 @@ export default async function EnvasadoPage() {
               operarioName={operarioNames.get(envasado.operario_id) ?? "—"}
               massBalanceKg={massBalanceByBache.get(envasado.bache_id)?.kg}
               turnos={turnos ?? []}
-              operarios={operarios ?? []}
+              operarios={operariosSeleccionables}
               cortes={cortesByEnvasado.get(envasado.id) ?? []}
               paradas={paradasByEnvasado.get(envasado.id) ?? []}
               canDelete={canDelete}

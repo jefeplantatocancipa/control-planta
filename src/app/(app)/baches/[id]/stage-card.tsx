@@ -838,7 +838,13 @@ export function StageCard({
 
         {status === "not_started" &&
           (canAct && unlocked ? (
-            <StartStageForm bacheId={bacheId} stage={stage} operarios={operarios} />
+            <StartStageForm
+              bacheId={bacheId}
+              stage={stage}
+              operarios={operarios.filter(
+                (o) => o.role === "operario" || o.role === "supervisor",
+              )}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">
               {unlocked ? "Sin iniciar." : "Esperando la etapa anterior."}

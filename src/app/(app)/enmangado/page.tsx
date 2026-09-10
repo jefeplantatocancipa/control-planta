@@ -48,6 +48,10 @@ export default async function EnmangadoPage() {
   const referenciaList = referencias ?? [];
   const referenciaNames = new Map(referenciaList.map((r) => [r.id, r.name]));
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
+  // Solo operario/supervisor son seleccionables como "operario responsable".
+  const operariosSeleccionables = (operarios ?? []).filter(
+    (o) => o.role === "operario" || o.role === "supervisor",
+  );
 
   const openOrders = (orders ?? []).filter((o) =>
     ["pendiente", "en_proceso"].includes(o.status),
@@ -96,7 +100,7 @@ export default async function EnmangadoPage() {
             <NewEnmangadoDialog
               referencias={referenciaList.filter((r) => r.active)}
               orders={orderOptions}
-              operarios={operarios ?? []}
+              operarios={operariosSeleccionables}
             />
           </div>
           <Table>
