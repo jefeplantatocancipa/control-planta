@@ -55,6 +55,7 @@ export function ProgramCard({
   canWrite,
   canDelete,
   realTimesByOrder,
+  envasadoRealByOrder,
 }: {
   program: Program;
   orders: Order[];
@@ -64,6 +65,7 @@ export function ProgramCard({
   canWrite: boolean;
   canDelete: boolean;
   realTimesByOrder?: Map<string, { start: string; end: string | null }>;
+  envasadoRealByOrder?: Map<string, { start: string; end: string | null; unidades: number }>;
 }) {
   const productNames = new Map(products.map((p) => [p.id, p.name]));
   const referenciasById = new Map(envasadoReferencias.map((r) => [r.id, r]));
@@ -206,6 +208,9 @@ export function ProgramCard({
               <TableHead>Fecha</TableHead>
               <TableHead>Und. programadas</TableHead>
               <TableHead>Gramaje x und.</TableHead>
+              <TableHead>Real (inicio–final)</TableHead>
+              <TableHead>Und. envasadas</TableHead>
+              <TableHead>Kg envasados</TableHead>
               <TableHead>Estado</TableHead>
               {canDelete && (
                 <TableHead className="sticky right-0 bg-card" />
@@ -215,6 +220,11 @@ export function ProgramCard({
           <TableBody>
             {envasadoOrders.map((order) => {
               const referencia = referenciasById.get(order.referencia_id);
+              const real = envasadoRealByOrder?.get(order.id);
+              const kgEnvasados =
+                real && referencia
+                  ? (real.unidades * referencia.peso_unitario) / 1000
+                  : null;
               return (
                 <TableRow key={order.id} className="group">
                   <TableCell className="font-medium">
@@ -230,6 +240,14 @@ export function ProgramCard({
                   <TableCell>{order.planned_quantity}</TableCell>
                   <TableCell>
                     {referencia ? `${referencia.peso_unitario} g` : "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {real ? formatDateTime(real.start) : "—"}
+                    {real?.end ? ` – ${formatDateTime(real.end)}` : ""}
+                  </TableCell>
+                  <TableCell>{real ? real.unidades : "—"}</TableCell>
+                  <TableCell>
+                    {kgEnvasados !== null ? `${kgEnvasados.toFixed(1)} kg` : "—"}
                   </TableCell>
                   <TableCell>
                     {canWrite ? (
@@ -263,7 +281,7 @@ export function ProgramCard({
             {envasadoOrders.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canDelete ? 8 : 7}
+                  colSpan={canDelete ? 11 : 10}
                   className="text-center text-muted-foreground"
                 >
                   Sin órdenes de envasado todavía.

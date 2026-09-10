@@ -16,6 +16,7 @@ export default async function ProgramaPage() {
     { data: products },
     { data: envasadoReferencias },
     { data: baches },
+    { data: envasadosReales },
   ] = await Promise.all([
     supabase
       .from("production_programs")
@@ -35,6 +36,10 @@ export default async function ProgramaPage() {
       .from("baches")
       .select("production_order_id, started_at, completed_at")
       .not("production_order_id", "is", null),
+    supabase
+      .from("envasados")
+      .select("envasado_order_id, cantidad_unidades, started_at, ended_at")
+      .not("envasado_order_id", "is", null),
   ]);
 
   // Planeación arma/edita el programa igual que el jefe de planta, pero
@@ -55,6 +60,28 @@ export default async function ProgramaPage() {
         ? bache.completed_at
         : current.end;
     realTimesByOrder.set(bache.production_order_id, { start, end });
+  }
+
+  // Cumplimiento real por orden de envasado: unidades envasadas (suma, por
+  // si más de un envasado terminó ligado a la misma orden) y el rango de
+  // inicio/final de los envasados ya vinculados a esa orden.
+  const envasadoRealByOrder = new Map<
+    string,
+    { start: string; end: string | null; unidades: number }
+  >();
+  for (const envasado of envasadosReales ?? []) {
+    if (!envasado.envasado_order_id) continue;
+    const current = envasadoRealByOrder.get(envasado.envasado_order_id);
+    const start =
+      !current || envasado.started_at < current.start
+        ? envasado.started_at
+        : current.start;
+    const end =
+      !current?.end || (envasado.ended_at && envasado.ended_at > current.end)
+        ? envasado.ended_at
+        : current.end;
+    const unidades = (current?.unidades ?? 0) + (envasado.cantidad_unidades ?? 0);
+    envasadoRealByOrder.set(envasado.envasado_order_id, { start, end, unidades });
   }
 
   return (
@@ -90,6 +117,7 @@ export default async function ProgramaPage() {
             canWrite={canWrite}
             canDelete={canDelete}
             realTimesByOrder={realTimesByOrder}
+            envasadoRealByOrder={envasadoRealByOrder}
           />
         ))}
         {(programs ?? []).length === 0 && (
