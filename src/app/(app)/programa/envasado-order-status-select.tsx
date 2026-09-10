@@ -2,14 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { updateEnvasadoOrderStatus, type ActionState } from "./actions";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_CLASSES } from "./order-status-styles";
 import type { OrderStatus } from "@/lib/supabase/types";
-
-const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  pendiente: "Pendiente",
-  en_proceso: "En proceso",
-  completado: "Completado",
-  cancelado: "Cancelado",
-};
 
 // Controlado a propósito: ver el comentario en order-status-select.tsx. El
 // padre le pasa key={status} para reiniciar el estado local si cambia.
@@ -36,7 +30,7 @@ export function EnvasadoOrderStatusSelect({
           setValue(e.target.value as OrderStatus);
           e.currentTarget.form?.requestSubmit();
         }}
-        className="h-7 rounded-lg border border-input bg-transparent px-2 text-xs"
+        className={`h-7 rounded-lg border px-2 text-xs font-medium ${ORDER_STATUS_CLASSES[value]}`}
       >
         {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
           <option key={value} value={value}>

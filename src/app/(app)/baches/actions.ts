@@ -64,7 +64,19 @@ export async function createBache(
     };
   }
 
+  // La orden pasa a "en proceso" en cuanto se crea el primer bache contra
+  // ella. Solo si seguía "pendiente": no pisa un estado que ya se haya
+  // tocado a mano (ej. cancelado).
+  if (parsed.data.production_order_id) {
+    await supabase
+      .from("production_orders")
+      .update({ status: "en_proceso" })
+      .eq("id", parsed.data.production_order_id)
+      .eq("status", "pendiente");
+  }
+
   revalidatePath("/baches");
+  revalidatePath("/programa");
   redirect(`/baches/${data.id}`);
 }
 
@@ -88,6 +100,13 @@ export async function updateBacheStatus(
   }
 
   const supabase = await createClient();
+
+  const { data: bacheAntes } = await supabase
+    .from("baches")
+    .select("production_order_id")
+    .eq("id", parsed.data.id)
+    .single();
+
   const { error } = await supabase
     .from("baches")
     .update({
@@ -101,8 +120,36 @@ export async function updateBacheStatus(
     return { error: "No se pudo actualizar el bache." };
   }
 
+  // Si ya no queda ningún bache de esa orden en proceso (todos completados
+  // o cancelados, y al menos uno completado), y se cumplió la cantidad de
+  // baches planeados (si la orden la tiene), la orden pasa a "completada"
+  // sola. Nunca se auto-cancela: eso lo decide el jefe de planta a mano.
+  if (parsed.data.status === "completado" && bacheAntes?.production_order_id) {
+    const orderId = bacheAntes.production_order_id;
+    const [{ data: order }, { data: siblings }] = await Promise.all([
+      supabase
+        .from("production_orders")
+        .select("baches_planeados")
+        .eq("id", orderId)
+        .single(),
+      supabase.from("baches").select("status").eq("production_order_id", orderId),
+    ]);
+    const activos = (siblings ?? []).filter((s) => s.status !== "cancelado");
+    const completados = activos.filter((s) => s.status === "completado").length;
+    const todosListos = activos.length > 0 && activos.every((s) => s.status === "completado");
+    const cumpleCantidad = !order?.baches_planeados || completados >= order.baches_planeados;
+
+    if (todosListos && cumpleCantidad) {
+      await supabase
+        .from("production_orders")
+        .update({ status: "completado" })
+        .eq("id", orderId);
+    }
+  }
+
   revalidatePath(`/baches/${parsed.data.id}`);
   revalidatePath("/baches");
+  revalidatePath("/programa");
   return { success: true };
 }
 

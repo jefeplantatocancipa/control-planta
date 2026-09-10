@@ -21,6 +21,7 @@ import { OrderStatusSelect } from "./order-status-select";
 import { EnvasadoOrderStatusSelect } from "./envasado-order-status-select";
 import { NewOrderDialog } from "./new-order-dialog";
 import { NewEnvasadoOrderDialog } from "./new-envasado-order-dialog";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_CLASSES } from "./order-status-styles";
 import { DeleteButton } from "@/components/delete-button";
 import { deleteOrder, deleteEnvasadoOrder, deleteProgram } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
@@ -153,7 +154,12 @@ export function ProgramCard({
                         status={order.status}
                       />
                     ) : (
-                      <Badge variant="outline">{order.status}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={ORDER_STATUS_CLASSES[order.status]}
+                      >
+                        {ORDER_STATUS_LABELS[order.status]}
+                      </Badge>
                     )}
                   </TableCell>
                   {canDelete && (
@@ -233,7 +239,12 @@ export function ProgramCard({
                         status={order.status}
                       />
                     ) : (
-                      <Badge variant="outline">{order.status}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={ORDER_STATUS_CLASSES[order.status]}
+                      >
+                        {ORDER_STATUS_LABELS[order.status]}
+                      </Badge>
                     )}
                   </TableCell>
                   {canDelete && (
