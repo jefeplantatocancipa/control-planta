@@ -40,6 +40,7 @@ export default async function EnvasadoPage() {
     { data: calidadLecturas },
     { data: estibas },
     { data: paradas },
+    { data: insumosUso },
   ] = await Promise.all([
     supabase
       .from("envasados")
@@ -76,6 +77,9 @@ export default async function EnvasadoPage() {
     supabase.from("envasado_calidad_lecturas").select("*").order("created_at"),
     supabase.from("envasado_estibas").select("*").order("inicio_estiba"),
     supabase.from("envasado_paradas").select("*").order("started_at"),
+    supabase
+      .from("envasado_insumos_uso")
+      .select("id, envasado_id, envasado_insumo_id, inventario_inicial"),
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
@@ -148,6 +152,23 @@ export default async function EnvasadoPage() {
   );
 
   const turnoNames = new Map((turnos ?? []).map((t) => [t.id, t.name]));
+
+  // Insumos usados por envasado, para pedir el inventario final al cerrar
+  // (el inicial ya se capturó al iniciar el envasado).
+  const envasadoInsumoNames = new Map((envasadoInsumos ?? []).map((i) => [i.id, i.name]));
+  const insumosUsoByEnvasado = new Map<
+    string,
+    { id: string; nombre: string; inventarioInicial: number | null }[]
+  >();
+  for (const uso of insumosUso ?? []) {
+    const list = insumosUsoByEnvasado.get(uso.envasado_id) ?? [];
+    list.push({
+      id: uso.id,
+      nombre: envasadoInsumoNames.get(uso.envasado_insumo_id) ?? "—",
+      inventarioInicial: uso.inventario_inicial,
+    });
+    insumosUsoByEnvasado.set(uso.envasado_id, list);
+  }
 
   const lecturasByCorte = new Map<string, CorteDisplay["lecturas"]>();
   for (const lectura of calidadLecturas ?? []) {
@@ -306,6 +327,7 @@ export default async function EnvasadoPage() {
               operarios={operariosSeleccionables}
               cortes={cortesByEnvasado.get(envasado.id) ?? []}
               paradas={paradasByEnvasado.get(envasado.id) ?? []}
+              insumosUso={insumosUsoByEnvasado.get(envasado.id) ?? []}
               canDelete={canDelete}
             />
           ))}

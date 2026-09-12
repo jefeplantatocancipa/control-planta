@@ -545,7 +545,8 @@ export interface Database {
           lote: string | null;
           fecha_vencimiento: string | null;
           proveedor: string | null;
-          cantidad_usada: number | null;
+          inventario_inicial: number | null;
+          inventario_final: number | null;
           unidad_medida: string | null;
           desperdicio: number | null;
           created_at: string;
@@ -556,7 +557,8 @@ export interface Database {
           lote?: string | null;
           fecha_vencimiento?: string | null;
           proveedor?: string | null;
-          cantidad_usada?: number | null;
+          inventario_inicial?: number | null;
+          inventario_final?: number | null;
           unidad_medida?: string | null;
           desperdicio?: number | null;
         };

@@ -57,9 +57,7 @@ const InsumoUsoSchema = z.object({
   lote: z.string().trim().optional(),
   fecha_vencimiento: z.string().trim().optional(),
   proveedor: z.string().trim().optional(),
-  cantidad_usada: z.coerce.number().optional(),
-  unidad_medida: z.string().trim().optional(),
-  desperdicio: z.coerce.number().optional(),
+  inventario_inicial: z.coerce.number().optional(),
 });
 
 const InsumosUsoArraySchema = z
@@ -122,9 +120,7 @@ export async function startEnvasado(
       lote: i.lote || null,
       fecha_vencimiento: i.fecha_vencimiento || null,
       proveedor: i.proveedor || null,
-      cantidad_usada: i.cantidad_usada ?? null,
-      unidad_medida: i.unidad_medida || null,
-      desperdicio: i.desperdicio ?? null,
+      inventario_inicial: i.inventario_inicial ?? null,
     })),
   );
 
@@ -154,6 +150,12 @@ const FinalizarEnvasadoSchema = z.object({
   volumen_restante: z.coerce.number().min(0).optional(),
 });
 
+const InsumoFinalSchema = z.object({
+  id: z.string().uuid(),
+  inventario_final: z.coerce.number(),
+});
+const InsumosFinalArraySchema = z.array(InsumoFinalSchema);
+
 export async function finalizarEnvasado(
   _prevState: ActionState,
   formData: FormData,
@@ -167,6 +169,13 @@ export async function finalizarEnvasado(
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const insumosFinalParsed = InsumosFinalArraySchema.safeParse(
+    JSON.parse(String(formData.get("insumos_final") || "[]")),
+  );
+  if (!insumosFinalParsed.success) {
+    return { error: "Inventario final inválido." };
   }
 
   const supabase = await createClient();
@@ -188,6 +197,38 @@ export async function finalizarEnvasado(
     .limit(1);
   if (activo && activo.length > 0) {
     return { error: "Finalizá el turno activo antes de cerrar el envasado." };
+  }
+
+  // El inventario final de cada insumo usado es obligatorio para poder
+  // cerrar el envasado (así queda el consumo real: inicial - final).
+  const { data: usosDelEnvasado } = await supabase
+    .from("envasado_insumos_uso")
+    .select("id")
+    .eq("envasado_id", parsed.data.record_id);
+
+  const finalById = new Map(
+    insumosFinalParsed.data.map((i) => [i.id, i.inventario_final]),
+  );
+  const faltaInventarioFinal = (usosDelEnvasado ?? []).some(
+    (uso) => !finalById.has(uso.id),
+  );
+  if (faltaInventarioFinal) {
+    return {
+      error: "Falta el inventario final de algún insumo usado en el envasado.",
+    };
+  }
+
+  const updates = await Promise.all(
+    insumosFinalParsed.data.map((i) =>
+      supabase
+        .from("envasado_insumos_uso")
+        .update({ inventario_final: i.inventario_final })
+        .eq("id", i.id)
+        .eq("envasado_id", parsed.data.record_id),
+    ),
+  );
+  if (updates.some((u) => u.error)) {
+    return { error: "No se pudo guardar el inventario final de los insumos." };
   }
 
   // Las unidades totales son la suma de lo que dio cada estiba (dato real,

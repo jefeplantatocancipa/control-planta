@@ -40,11 +40,19 @@ export interface ParadaDisplay {
   endedAt: string | null;
 }
 
+export interface InsumoUsoDisplay {
+  id: string;
+  nombre: string;
+  inventarioInicial: number | null;
+}
+
 function FinalizarEnvasadoForm({
   recordId,
+  insumosUso,
   onSuccess,
 }: {
   recordId: string;
+  insumosUso: InsumoUsoDisplay[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -52,14 +60,55 @@ function FinalizarEnvasadoForm({
     {},
   );
   const [bacheTerminado, setBacheTerminado] = useState("true");
+  const [inventariosFinales, setInventariosFinales] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
 
+  const faltanInventarios = insumosUso.some((i) => !inventariosFinales[i.id]);
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="record_id" value={recordId} />
+      <input
+        type="hidden"
+        name="insumos_final"
+        value={JSON.stringify(
+          insumosUso
+            .filter((i) => inventariosFinales[i.id])
+            .map((i) => ({ id: i.id, inventario_final: inventariosFinales[i.id] })),
+        )}
+      />
+
+      {insumosUso.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <Label>Inventario final de insumos</Label>
+          {insumosUso.map((insumo) => (
+            <div key={insumo.id} className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm">{insumo.nombre}</p>
+                {insumo.inventarioInicial !== null && (
+                  <p className="text-xs text-muted-foreground">
+                    Inventario inicial: {insumo.inventarioInicial}
+                  </p>
+                )}
+              </div>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-28"
+                value={inventariosFinales[insumo.id] ?? ""}
+                onChange={(e) =>
+                  setInventariosFinales((v) => ({ ...v, [insumo.id]: e.target.value }))
+                }
+                required
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="bache_terminado">¿Se terminó de envasar este bache?</Label>
@@ -98,7 +147,7 @@ function FinalizarEnvasadoForm({
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || faltanInventarios}>
           {pending ? "Finalizando..." : "Finalizar envasado"}
         </Button>
       </DialogFooter>
@@ -108,9 +157,11 @@ function FinalizarEnvasadoForm({
 
 function FinalizarEnvasadoDialog({
   recordId,
+  insumosUso,
   disabled,
 }: {
   recordId: string;
+  insumosUso: InsumoUsoDisplay[];
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -118,11 +169,15 @@ function FinalizarEnvasadoDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm" disabled={disabled}>Finalizar envasado</Button>} />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Finalizar envasado</DialogTitle>
         </DialogHeader>
-        <FinalizarEnvasadoForm recordId={recordId} onSuccess={() => setOpen(false)} />
+        <FinalizarEnvasadoForm
+          recordId={recordId}
+          insumosUso={insumosUso}
+          onSuccess={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -292,6 +347,7 @@ export function EnvasadoCard({
   operarios,
   cortes,
   paradas,
+  insumosUso,
   canDelete,
 }: {
   recordId: string;
@@ -304,6 +360,7 @@ export function EnvasadoCard({
   operarios: Profile[];
   cortes: CorteDisplay[];
   paradas: ParadaDisplay[];
+  insumosUso: InsumoUsoDisplay[];
   canDelete?: boolean;
 }) {
   const cortesCerrados = cortes.filter((c) => c.endedAt);
@@ -369,7 +426,11 @@ export function EnvasadoCard({
               </p>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <FinalizarEnvasadoDialog recordId={recordId} disabled={hayTurnoActivo} />
+              <FinalizarEnvasadoDialog
+                recordId={recordId}
+                insumosUso={insumosUso}
+                disabled={hayTurnoActivo}
+              />
               {hayTurnoActivo && (
                 <p className="text-xs text-muted-foreground">
                   Finalizá el turno activo antes de cerrar el envasado.
