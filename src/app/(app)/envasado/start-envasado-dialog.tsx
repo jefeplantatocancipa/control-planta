@@ -39,11 +39,6 @@ interface EnvasadoOrderOption {
   referenciaId: string;
 }
 
-interface EnvasadoReferenciaOption {
-  id: string;
-  label: string;
-}
-
 interface InsumoUsoDraft {
   envasado_insumo_id: string;
   nombre: string;
@@ -147,7 +142,6 @@ function StartEnvasadoForm({
   baches,
   operarios,
   envasadoOrders,
-  envasadoReferencias,
   envasadoInsumos,
   recipeByReferencia,
   onSuccess,
@@ -155,7 +149,6 @@ function StartEnvasadoForm({
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
-  envasadoReferencias: EnvasadoReferenciaOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
   onSuccess: () => void;
@@ -265,34 +258,7 @@ function StartEnvasadoForm({
         />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="referencia_id">Referencia (para calcular kg empacados)</Label>
-        <Select
-          name="referencia_id"
-          value={referenciaId}
-          onValueChange={(value) => setReferenciaId(value ?? NO_ORDER_VALUE)}
-          items={[
-            { value: NO_ORDER_VALUE, label: "Sin referencia" },
-            ...envasadoReferencias.map((r) => ({ value: r.id, label: r.label })),
-          ]}
-        >
-          <SelectTrigger id="referencia_id" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_ORDER_VALUE}>Sin referencia</SelectItem>
-            {envasadoReferencias.map((r) => (
-              <SelectItem key={r.id} value={r.id}>
-                {r.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Se usa para calcular los kg empacados (unidades × peso unitario) y
-          compararlos contra el balance de masa en el informe.
-        </p>
-      </div>
+      <input type="hidden" name="referencia_id" value={referenciaId} />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="lote">Lote de envasado</Label>
@@ -377,14 +343,12 @@ export function StartEnvasadoDialog({
   baches,
   operarios,
   envasadoOrders,
-  envasadoReferencias,
   envasadoInsumos,
   recipeByReferencia,
 }: {
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
-  envasadoReferencias: EnvasadoReferenciaOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
 }) {
@@ -401,7 +365,6 @@ export function StartEnvasadoDialog({
           baches={baches}
           operarios={operarios}
           envasadoOrders={envasadoOrders}
-          envasadoReferencias={envasadoReferencias}
           envasadoInsumos={envasadoInsumos}
           recipeByReferencia={recipeByReferencia}
           onSuccess={() => setOpen(false)}
