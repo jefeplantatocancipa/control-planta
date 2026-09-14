@@ -263,11 +263,23 @@ export default async function BacheReportPage({
   const pesoUnitarioByLabel = new Map(
     (envasadoReferencias ?? []).map((r) => [`${r.sku} — ${r.name}`, r.peso_unitario]),
   );
+  // El sku puede haber cambiado desde que se guardó la presentación (texto
+  // libre, congelado al momento del envasado), así que como último recurso
+  // se compara solo el nombre -- la parte después del "—" -- que es mucho
+  // más estable que el sku.
+  const pesoUnitarioByName = new Map(
+    (envasadoReferencias ?? []).map((r) => [r.name, r.peso_unitario]),
+  );
   function pesoUnitarioDe(e: NonNullable<typeof envasados>[number]) {
     if (e.referencia_id && pesoUnitarioById.has(e.referencia_id)) {
       return pesoUnitarioById.get(e.referencia_id)!;
     }
-    return pesoUnitarioByLabel.get(e.presentacion) ?? null;
+    if (pesoUnitarioByLabel.has(e.presentacion)) {
+      return pesoUnitarioByLabel.get(e.presentacion)!;
+    }
+    const parts = e.presentacion.split(" — ");
+    const nameGuess = (parts.length > 1 ? parts.slice(1).join(" — ") : e.presentacion).trim();
+    return pesoUnitarioByName.get(nameGuess) ?? null;
   }
   const envasadosConPeso = (envasados ?? [])
     .map((e) => ({ e, peso: pesoUnitarioDe(e) }))
