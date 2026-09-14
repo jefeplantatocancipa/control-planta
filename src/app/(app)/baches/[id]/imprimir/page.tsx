@@ -191,7 +191,7 @@ export default async function BacheReportPage({
     supabase.from("bache_stage_records").select("*").eq("bache_id", bache.id),
     supabase.from("profiles").select("*"),
     supabase.from("envasados").select("*").eq("bache_id", bache.id),
-    supabase.from("envasado_referencias").select("id, peso_unitario"),
+    supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
   ]);
 
   let stages = ownTemplates.data ?? [];
@@ -232,11 +232,6 @@ export default async function BacheReportPage({
     (sum, e) => sum + e.cantidad_unidades,
     0,
   );
-  const totalMermas = (envasados ?? []).reduce((sum, e) => sum + e.cantidad_mermas, 0);
-  const tasaMermas =
-    totalUnidades + totalMermas > 0
-      ? Math.round((totalMermas / (totalUnidades + totalMermas)) * 1000) / 10
-      : 0;
 
   // Balance de masa total del bache: se toma la última etapa con checklist
   // de insumos (ej. Mezcla), igual que en /envasado, porque ahí queda
@@ -255,25 +250,33 @@ export default async function BacheReportPage({
     );
   }
 
-  // Kg empacados = unidades envasadas x peso unitario de la referencia. Si
-  // algún envasado no tiene referencia vinculada (dato viejo, anterior a
-  // esta función, o cargado sin elegirla), el total queda parcial y se
-  // avisa en vez de mostrar un número engañoso.
-  const pesoUnitarioByReferencia = new Map(
+  // Kg empacados = unidades envasadas x peso unitario de la referencia. Los
+  // envasados nuevos ya traen referencia_id; los viejos (de antes de esa
+  // función) no lo tienen, así que se intenta resolver por el texto de la
+  // presentación (que para los que vinieron de una orden es exactamente
+  // "sku — nombre"). Si no se puede resolver ninguna forma, ese envasado
+  // queda afuera y el total se marca como parcial en vez de inventar un
+  // número.
+  const pesoUnitarioById = new Map(
     (envasadoReferencias ?? []).map((r) => [r.id, r.peso_unitario]),
   );
-  const envasadosConReferencia = (envasados ?? []).filter(
-    (e) => e.referencia_id && pesoUnitarioByReferencia.has(e.referencia_id),
+  const pesoUnitarioByLabel = new Map(
+    (envasadoReferencias ?? []).map((r) => [`${r.sku} — ${r.name}`, r.peso_unitario]),
   );
+  function pesoUnitarioDe(e: NonNullable<typeof envasados>[number]) {
+    if (e.referencia_id && pesoUnitarioById.has(e.referencia_id)) {
+      return pesoUnitarioById.get(e.referencia_id)!;
+    }
+    return pesoUnitarioByLabel.get(e.presentacion) ?? null;
+  }
+  const envasadosConPeso = (envasados ?? [])
+    .map((e) => ({ e, peso: pesoUnitarioDe(e) }))
+    .filter((x): x is { e: NonNullable<typeof envasados>[number]; peso: number } => x.peso !== null);
   const kgEmpacadosParcial =
-    (envasados ?? []).length > 0 &&
-    envasadosConReferencia.length < (envasados ?? []).length;
+    (envasados ?? []).length > 0 && envasadosConPeso.length < (envasados ?? []).length;
   const kgEmpacados =
-    envasadosConReferencia.length > 0
-      ? envasadosConReferencia.reduce(
-          (sum, e) => sum + e.cantidad_unidades * (pesoUnitarioByReferencia.get(e.referencia_id!) ?? 0),
-          0,
-        )
+    envasadosConPeso.length > 0
+      ? envasadosConPeso.reduce((sum, { e, peso }) => sum + e.cantidad_unidades * peso, 0)
       : null;
 
   const mermaMasaKg =
@@ -348,14 +351,9 @@ export default async function BacheReportPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <StatTile label="Tiempo total del proceso" value={totalTimeLabel} />
         <StatTile label="Unidades envasadas" value={String(totalUnidades)} />
-        <StatTile label="Mermas" value={String(totalMermas)} />
-        <StatTile label="Tasa de mermas" value={`${tasaMermas}%`} />
-      </div>
-
-      <div className="grid grid-cols-4 gap-3">
         <StatTile
           label="Insumos (kg)"
           value={totalInsumosKg !== null ? `${totalInsumosKg.toFixed(2)} kg` : "—"}
