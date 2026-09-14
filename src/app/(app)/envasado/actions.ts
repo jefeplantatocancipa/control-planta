@@ -227,8 +227,11 @@ export async function finalizarEnvasado(
         .eq("envasado_id", parsed.data.record_id),
     ),
   );
-  if (updates.some((u) => u.error)) {
-    return { error: "No se pudo guardar el inventario final de los insumos." };
+  const failedUpdate = updates.find((u) => u.error);
+  if (failedUpdate) {
+    return {
+      error: `No se pudo guardar el inventario final de los insumos: ${failedUpdate.error?.message ?? "error desconocido"}`,
+    };
   }
 
   // Las unidades totales son la suma de lo que dio cada estiba (dato real,
