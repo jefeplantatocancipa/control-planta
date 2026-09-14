@@ -81,6 +81,19 @@ function ProductForm({
       <Label className="flex items-center gap-2">
         <input
           type="checkbox"
+          name="requiere_envasado"
+          defaultChecked={product?.requiere_envasado ?? true}
+          className="size-4"
+        />
+        Se envasa
+      </Label>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Si se desmarca (ej. cremado), sus baches no aparecen para elegir en
+        &quot;Iniciar envasado&quot;.
+      </p>
+      <Label className="flex items-center gap-2">
+        <input
+          type="checkbox"
           name="active"
           defaultChecked={product?.active ?? true}
           className="size-4"
@@ -136,9 +149,14 @@ export function ProductsPanel({ products }: { products: Product[] }) {
               <TableCell>{product.name}</TableCell>
               <TableCell>{product.unit}</TableCell>
               <TableCell>
-                <Badge variant={product.active ? "default" : "outline"}>
-                  {product.active ? "Activo" : "Inactivo"}
-                </Badge>
+                <div className="flex flex-wrap gap-1">
+                  <Badge variant={product.active ? "default" : "outline"}>
+                    {product.active ? "Activo" : "Inactivo"}
+                  </Badge>
+                  {!product.requiere_envasado && (
+                    <Badge variant="outline">No se envasa</Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-right">
                 <Button

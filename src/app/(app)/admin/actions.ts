@@ -60,11 +60,15 @@ export async function upsertProduct(
 
   const { id, ...values } = parsed.data;
   const active = formData.get("active") === "on";
+  const requiere_envasado = formData.get("requiere_envasado") === "on";
   const supabase = await createClient();
 
   const { error } = id
-    ? await supabase.from("products").update({ ...values, active }).eq("id", id)
-    : await supabase.from("products").insert({ ...values, active });
+    ? await supabase
+        .from("products")
+        .update({ ...values, active, requiere_envasado })
+        .eq("id", id)
+    : await supabase.from("products").insert({ ...values, active, requiere_envasado });
 
   if (error) {
     return {

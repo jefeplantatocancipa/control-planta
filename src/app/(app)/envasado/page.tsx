@@ -89,6 +89,9 @@ export default async function EnvasadoPage() {
   const firmasByCorte = new Map((corteFirmas ?? []).map((f) => [f.corte_id, f]));
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
+  const productRequiresEnvasado = new Map(
+    (products ?? []).map((p) => [p.id, p.requiere_envasado]),
+  );
 
   // Un bache no debería poder envasarse hasta que arrancó Enfriamiento (no
   // tiene sentido empacar leche todavía caliente/sin procesar). Se resuelve
@@ -128,7 +131,8 @@ export default async function EnvasadoPage() {
       (bache) =>
         bache.status !== "cancelado" &&
         bache.volumen_restante_litros !== 0 &&
-        hasReachedEnfriamiento(bache),
+        hasReachedEnfriamiento(bache) &&
+        productRequiresEnvasado.get(bache.product_id) !== false,
     )
     .map((bache) => ({
       id: bache.id,
