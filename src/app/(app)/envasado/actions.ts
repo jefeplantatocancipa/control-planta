@@ -403,7 +403,7 @@ export async function finalizarCorteTurno(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
 
   const parsed = FinalizarTurnoSchema.safeParse({
     corte_id: formData.get("corte_id"),
@@ -424,6 +424,7 @@ export async function finalizarCorteTurno(
       unidades_final: parsed.data.unidades_final,
       desperdicio: parsed.data.desperdicio ?? null,
       observaciones: parsed.data.observaciones || null,
+      closed_by: profile.id,
     })
     .eq("id", parsed.data.corte_id);
 

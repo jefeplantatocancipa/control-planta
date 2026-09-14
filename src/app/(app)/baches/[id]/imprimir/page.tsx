@@ -337,7 +337,8 @@ export default async function BacheReportPage({
                       <th className="py-0.5 pr-2 font-normal">Operario</th>
                       <th className="py-0.5 pr-2 font-normal">Inicio</th>
                       <th className="py-0.5 pr-2 font-normal">Final</th>
-                      <th className="py-0.5 font-normal">Tiempo total</th>
+                      <th className="py-0.5 pr-2 font-normal">Tiempo total</th>
+                      <th className="py-0.5 font-normal">Firmado por</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -349,10 +350,13 @@ export default async function BacheReportPage({
                       <td className="py-0.5 pr-2">
                         {record.ended_at ? formatTime(record.ended_at) : "—"}
                       </td>
-                      <td className="py-0.5">
+                      <td className="py-0.5 pr-2">
                         {record.ended_at
                           ? durationLabel(record.started_at, record.ended_at)
                           : "En curso"}
+                      </td>
+                      <td className="py-0.5">
+                        {record.closed_by ? (operarioNames.get(record.closed_by) ?? "—") : "—"}
                       </td>
                     </tr>
                   </tbody>

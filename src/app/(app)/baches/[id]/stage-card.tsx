@@ -916,6 +916,12 @@ export function StageCard({
               {operarioName ?? "—"} · {formatTime(record.started_at)}–
               {formatTime(record.ended_at)} ({durationLabel(record.started_at, record.ended_at)})
             </p>
+            {record.closed_by && (
+              <p>
+                Firmado por:{" "}
+                {operarios.find((o) => o.id === record.closed_by)?.full_name ?? "—"}
+              </p>
+            )}
             {paramEntries.length > 0 && (
               <ul className="list-inside list-disc">
                 {paramEntries.map(([key, value]) => {

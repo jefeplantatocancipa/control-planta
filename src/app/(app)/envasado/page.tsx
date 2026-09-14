@@ -225,6 +225,7 @@ export default async function EnvasadoPage() {
       observaciones: corte.observaciones,
       lecturas: lecturasByCorte.get(corte.id) ?? [],
       estibas: estibasByCorte.get(corte.id) ?? [],
+      closedByNombre: corte.closed_by ? (operarioNames.get(corte.closed_by) ?? "—") : null,
       firma: (() => {
         const f = firmasByCorte.get(corte.id);
         if (!f) return null;

@@ -250,7 +250,7 @@ export async function finishStage(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
 
   const parsed = FinishStageSchema.safeParse({
     record_id: formData.get("record_id"),
@@ -311,6 +311,7 @@ export async function finishStage(
       ended_at: new Date().toISOString(),
       parameters,
       notes: parsed.data.notes || null,
+      closed_by: profile.id,
     })
     .eq("id", parsed.data.record_id);
 

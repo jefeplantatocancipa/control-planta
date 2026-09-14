@@ -281,6 +281,12 @@ export default async function EnvasadoReportPage({
                     <td className="py-0.5 pr-2 text-muted-foreground">Desperdicio</td>
                     <td className="py-0.5 font-medium">{corte.desperdicio ?? "—"}</td>
                   </tr>
+                  <tr className="border-b border-dashed">
+                    <td className="py-0.5 pr-2 text-muted-foreground">Firmado por</td>
+                    <td className="py-0.5 font-medium">
+                      {corte.closed_by ? (operarioNames.get(corte.closed_by) ?? "—") : "—"}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
 

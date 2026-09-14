@@ -73,6 +73,7 @@ export interface CorteDisplay {
   lecturas: LecturaDisplay[];
   estibas: EstibaDisplay[];
   firma: FirmaDisplay | null;
+  closedByNombre: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -831,6 +832,9 @@ export function TurnoPanel({
                 </p>
               </div>
               <p className="text-muted-foreground">{c.operarios}</p>
+              {c.closedByNombre && (
+                <p className="text-muted-foreground">Firmado por: {c.closedByNombre}</p>
+              )}
               <p className="mt-1 text-muted-foreground">
                 {c.lecturas.length} lectura(s) de calidad · {c.estibas.length} estiba(s)
                 {c.desperdicio ? ` · Desperdicio: ${c.desperdicio}` : ""}

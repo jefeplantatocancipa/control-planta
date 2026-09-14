@@ -406,6 +406,7 @@ export interface Database {
           ended_at: string | null;
           parameters: StageRecordParameters;
           notes: string | null;
+          closed_by: string | null;
           created_by: string;
           created_at: string;
         };
@@ -417,6 +418,7 @@ export interface Database {
           ended_at?: string | null;
           parameters?: StageRecordParameters;
           notes?: string | null;
+          closed_by?: string | null;
           created_by: string;
         };
         Update: Partial<
@@ -586,6 +588,7 @@ export interface Database {
           unidades_final: number | null;
           desperdicio: number | null;
           observaciones: string | null;
+          closed_by: string | null;
           created_by: string;
           created_at: string;
         };
@@ -601,6 +604,7 @@ export interface Database {
           unidades_final?: number | null;
           desperdicio?: number | null;
           observaciones?: string | null;
+          closed_by?: string | null;
           created_by: string;
         };
         Update: Partial<
