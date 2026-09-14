@@ -286,9 +286,12 @@ export default async function BacheReportPage({
     .filter((x): x is { e: NonNullable<typeof envasados>[number]; peso: number } => x.peso !== null);
   const kgEmpacadosParcial =
     (envasados ?? []).length > 0 && envasadosConPeso.length < (envasados ?? []).length;
+  // peso_unitario está en gramos (ver Administración → Envasado); el
+  // balance de masa de insumos está en kg, así que hay que convertir antes
+  // de comparar.
   const kgEmpacados =
     envasadosConPeso.length > 0
-      ? envasadosConPeso.reduce((sum, { e, peso }) => sum + e.cantidad_unidades * peso, 0)
+      ? envasadosConPeso.reduce((sum, { e, peso }) => sum + (e.cantidad_unidades * peso) / 1000, 0)
       : null;
 
   const mermaMasaKg =
