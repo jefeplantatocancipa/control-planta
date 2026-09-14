@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { startStage, finishStage, addReading, type ActionState } from "../actions";
+import {
+  startStage,
+  finishStage,
+  addReading,
+  firmarEtapaBache,
+  type ActionState,
+} from "../actions";
 import { formatTime } from "@/lib/format-date";
 import type { Database, StageParameterDef, StageReading } from "@/lib/supabase/types";
 
@@ -706,6 +712,136 @@ function FinishStageForm({
 }
 
 // ---------------------------------------------------------------------------
+// Firma de calidad (aprobación posterior al cierre de la etapa; nunca
+// bloquea ni condiciona el proceso, que sigue su curso igual)
+// ---------------------------------------------------------------------------
+export interface FirmaDisplay {
+  aprobado: boolean;
+  observaciones: string | null;
+  firmadoPorNombre: string;
+  firmadoAt: string;
+}
+
+function FirmarEtapaForm({
+  stageRecordId,
+  bacheId,
+  onSuccess,
+}: {
+  stageRecordId: string;
+  bacheId: string;
+  onSuccess: () => void;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    firmarEtapaBache,
+    {},
+  );
+  const [observaciones, setObservaciones] = useState("");
+  const [aprobado, setAprobado] = useState("true");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form ref={formRef} action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="stage_record_id" value={stageRecordId} />
+      <input type="hidden" name="bache_id" value={bacheId} />
+      <input type="hidden" name="aprobado" value={aprobado} />
+      <Input
+        placeholder="Observaciones (opcional)"
+        value={observaciones}
+        onChange={(e) => setObservaciones(e.target.value)}
+        name="observaciones"
+      />
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending}
+          onClick={() => {
+            setAprobado("true");
+            formRef.current?.requestSubmit();
+          }}
+        >
+          Aprobar
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={pending}
+          onClick={() => {
+            setAprobado("false");
+            formRef.current?.requestSubmit();
+          }}
+        >
+          Rechazar
+        </Button>
+      </div>
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function FirmaSection({
+  stageRecordId,
+  bacheId,
+  firma,
+  canFirmar,
+}: {
+  stageRecordId: string;
+  bacheId: string;
+  firma: FirmaDisplay | null;
+  canFirmar: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (firma && !editing) {
+    return (
+      <div className="flex flex-col gap-1 rounded-lg border p-2 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <Badge variant={firma.aprobado ? "secondary" : "destructive"}>
+            {firma.aprobado ? "Aprobado por calidad" : "Rechazado por calidad"}
+          </Badge>
+          {canFirmar && (
+            <button
+              type="button"
+              className="text-muted-foreground underline"
+              onClick={() => setEditing(true)}
+            >
+              Corregir
+            </button>
+          )}
+        </div>
+        <p className="text-muted-foreground">
+          {firma.firmadoPorNombre} · {formatTime(firma.firmadoAt)}
+        </p>
+        {firma.observaciones && <p>Obs: {firma.observaciones}</p>}
+      </div>
+    );
+  }
+
+  if (!canFirmar) {
+    return (
+      <p className="text-xs text-muted-foreground">Pendiente de firma de calidad.</p>
+    );
+  }
+
+  return (
+    <FirmarEtapaForm
+      stageRecordId={stageRecordId}
+      bacheId={bacheId}
+      onSuccess={() => setEditing(false)}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Tarjeta de etapa
 // ---------------------------------------------------------------------------
 export function StageCard({
@@ -717,6 +853,8 @@ export function StageCard({
   canAct,
   unlocked,
   tanques,
+  firma,
+  canFirmar,
 }: {
   bacheId: string;
   stage: StageTemplate;
@@ -726,6 +864,8 @@ export function StageCard({
   canAct: boolean;
   unlocked: boolean;
   tanques: Tanque[];
+  firma?: FirmaDisplay | null;
+  canFirmar?: boolean;
 }) {
   const status = !record ? "not_started" : record.ended_at ? "done" : "in_progress";
   const operarioName = record
@@ -812,6 +952,12 @@ export function StageCard({
               </div>
             )}
             {record.notes && <p>Notas: {record.notes}</p>}
+            <FirmaSection
+              stageRecordId={record.id}
+              bacheId={bacheId}
+              firma={firma ?? null}
+              canFirmar={Boolean(canFirmar)}
+            />
           </div>
         )}
 

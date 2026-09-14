@@ -21,7 +21,7 @@ export default async function BacheDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "calidad"]);
   const { id } = await params;
   const supabase = await createClient();
 
@@ -41,6 +41,8 @@ export default async function BacheDetailPage({
     { data: productInsumos },
     { data: insumos },
     { data: tanques },
+    { data: firmas },
+    { data: allProfiles },
   ] = await Promise.all([
     supabase.from("products").select("*").eq("id", bache.product_id).single(),
     supabase
@@ -57,7 +59,12 @@ export default async function BacheDetailPage({
       .eq("product_id", bache.product_id),
     supabase.from("insumos").select("*").eq("active", true),
     supabase.from("tanques").select("*").eq("active", true).order("name"),
+    supabase.from("bache_stage_firmas").select("*"),
+    supabase.from("profiles").select("id, full_name"),
   ]);
+
+  const firmasByStageRecord = new Map((firmas ?? []).map((f) => [f.stage_record_id, f]));
+  const profileNames = new Map((allProfiles ?? []).map((p) => [p.id, p.full_name]));
 
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
   const productRecipeInsumos = (productInsumos ?? [])
@@ -79,7 +86,10 @@ export default async function BacheDetailPage({
     (records ?? []).map((record) => [record.stage_template_id, record]),
   );
 
-  const canAct = bache.status === "en_proceso";
+  const canAct =
+    bache.status === "en_proceso" &&
+    (profile.role === "jefe_planta" || profile.role === "supervisor");
+  const canFirmar = profile.role === "jefe_planta" || profile.role === "calidad";
   const allStagesDone =
     stages.length > 0 &&
     stages.every((stage) => recordsByStage.get(stage.id)?.ended_at);
@@ -156,6 +166,8 @@ export default async function BacheDetailPage({
           const unlocked =
             index === 0 || Boolean(recordsByStage.get(previousStage!.id)?.ended_at);
 
+          const firma = record ? firmasByStageRecord.get(record.id) ?? null : null;
+
           return (
             <StageCard
               key={stage.id}
@@ -167,6 +179,17 @@ export default async function BacheDetailPage({
               canAct={canAct}
               unlocked={unlocked}
               tanques={tanques ?? []}
+              firma={
+                firma
+                  ? {
+                      aprobado: firma.aprobado,
+                      observaciones: firma.observaciones,
+                      firmadoPorNombre: profileNames.get(firma.firmado_por) ?? "—",
+                      firmadoAt: firma.firmado_at,
+                    }
+                  : null
+              }
+              canFirmar={canFirmar}
             />
           );
         })}

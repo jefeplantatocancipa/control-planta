@@ -19,8 +19,10 @@ import { deleteEnvasado } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnvasadoPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "calidad"]);
   const canDelete = profile.role === "jefe_planta";
+  const canExecute = profile.role === "jefe_planta" || profile.role === "supervisor";
+  const canFirmar = profile.role === "jefe_planta" || profile.role === "calidad";
   const supabase = await createClient();
 
   const [
@@ -41,6 +43,7 @@ export default async function EnvasadoPage() {
     { data: estibas },
     { data: paradas },
     { data: insumosUso },
+    { data: corteFirmas },
   ] = await Promise.all([
     supabase
       .from("envasados")
@@ -80,7 +83,10 @@ export default async function EnvasadoPage() {
     supabase
       .from("envasado_insumos_uso")
       .select("id, envasado_id, envasado_insumo_id, inventario_inicial"),
+    supabase.from("envasado_corte_firmas").select("*"),
   ]);
+
+  const firmasByCorte = new Map((corteFirmas ?? []).map((f) => [f.corte_id, f]));
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
 
@@ -219,6 +225,16 @@ export default async function EnvasadoPage() {
       observaciones: corte.observaciones,
       lecturas: lecturasByCorte.get(corte.id) ?? [],
       estibas: estibasByCorte.get(corte.id) ?? [],
+      firma: (() => {
+        const f = firmasByCorte.get(corte.id);
+        if (!f) return null;
+        return {
+          aprobado: f.aprobado,
+          observaciones: f.observaciones,
+          firmadoPorNombre: operarioNames.get(f.firmado_por) ?? "—",
+          firmadoAt: f.firmado_at,
+        };
+      })(),
     };
     const list = cortesByEnvasado.get(corte.envasado_id) ?? [];
     list.push(display);
@@ -302,13 +318,15 @@ export default async function EnvasadoPage() {
             día.
           </p>
         </div>
-        <StartEnvasadoDialog
-          baches={bacheOptions}
-          operarios={operariosSeleccionables}
-          envasadoOrders={envasadoOrderOptions}
-          envasadoInsumos={envasadoInsumos ?? []}
-          recipeByReferencia={recipeByReferencia}
-        />
+        {canExecute && (
+          <StartEnvasadoDialog
+            baches={bacheOptions}
+            operarios={operariosSeleccionables}
+            envasadoOrders={envasadoOrderOptions}
+            envasadoInsumos={envasadoInsumos ?? []}
+            recipeByReferencia={recipeByReferencia}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -329,6 +347,8 @@ export default async function EnvasadoPage() {
               paradas={paradasByEnvasado.get(envasado.id) ?? []}
               insumosUso={insumosUsoByEnvasado.get(envasado.id) ?? []}
               canDelete={canDelete}
+              canExecute={canExecute}
+              canFirmar={canFirmar}
             />
           ))}
           {open.length === 0 && (

@@ -651,3 +651,47 @@ export async function finalizarParada(
   revalidatePath("/proceso");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Firma de calidad (aprobación de turno) -- se hace después de cerrado el
+// turno, nunca lo bloquea ni lo condiciona.
+// ---------------------------------------------------------------------------
+const FirmarCorteSchema = z.object({
+  corte_id: z.string().uuid(),
+  aprobado: z.enum(["true", "false"]).transform((v) => v === "true"),
+  observaciones: z.string().trim().optional(),
+});
+
+export async function firmarCorteEnvasado(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "calidad"]);
+
+  const parsed = FirmarCorteSchema.safeParse({
+    corte_id: formData.get("corte_id"),
+    aprobado: formData.get("aprobado"),
+    observaciones: formData.get("observaciones"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("envasado_corte_firmas").upsert(
+    {
+      corte_id: parsed.data.corte_id,
+      aprobado: parsed.data.aprobado,
+      observaciones: parsed.data.observaciones || null,
+      firmado_por: profile.id,
+    },
+    { onConflict: "corte_id" },
+  );
+
+  if (error) {
+    return { error: "No se pudo guardar la firma." };
+  }
+
+  revalidatePath("/envasado");
+  return { success: true };
+}

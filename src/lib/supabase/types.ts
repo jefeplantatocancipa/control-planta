@@ -2,7 +2,12 @@
 // Cuando el proyecto Supabase esté enlazado, se pueden regenerar con:
 //   npx supabase gen types typescript --project-id <id> > src/lib/supabase/types.ts
 
-export type UserRole = "jefe_planta" | "supervisor" | "operario" | "planeacion";
+export type UserRole =
+  | "jefe_planta"
+  | "supervisor"
+  | "operario"
+  | "planeacion"
+  | "calidad";
 export type ProcessType = "bache";
 export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
@@ -714,6 +719,46 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["envasado_paradas"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      bache_stage_firmas: {
+        Row: {
+          id: string;
+          stage_record_id: string;
+          aprobado: boolean;
+          observaciones: string | null;
+          firmado_por: string;
+          firmado_at: string;
+        };
+        Insert: {
+          stage_record_id: string;
+          aprobado: boolean;
+          observaciones?: string | null;
+          firmado_por: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["bache_stage_firmas"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      envasado_corte_firmas: {
+        Row: {
+          id: string;
+          corte_id: string;
+          aprobado: boolean;
+          observaciones: string | null;
+          firmado_por: string;
+          firmado_at: string;
+        };
+        Insert: {
+          corte_id: string;
+          aprobado: boolean;
+          observaciones?: string | null;
+          firmado_por: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_corte_firmas"]["Insert"]
         >;
         Relationships: [];
       };

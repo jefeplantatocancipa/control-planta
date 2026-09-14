@@ -29,8 +29,9 @@ const STATUS_VARIANTS: Record<BacheStatus, "default" | "outline" | "secondary"> 
 };
 
 export default async function BachesPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "calidad"]);
   const canDelete = profile.role === "jefe_planta";
+  const canWrite = profile.role === "jefe_planta" || profile.role === "supervisor";
   const supabase = await createClient();
 
   const [{ data: baches }, { data: products }, { data: orders }] =
@@ -58,7 +59,9 @@ export default async function BachesPage() {
             Crear baches y capturar cada etapa del proceso.
           </p>
         </div>
-        <NewBacheDialog products={(products ?? []).filter((p) => p.active)} orders={orders ?? []} />
+        {canWrite && (
+          <NewBacheDialog products={(products ?? []).filter((p) => p.active)} orders={orders ?? []} />
+        )}
       </div>
 
       <Table>

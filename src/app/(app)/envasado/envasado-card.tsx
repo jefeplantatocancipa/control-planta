@@ -279,9 +279,11 @@ function FinalizarParadaForm({ paradaId }: { paradaId: string }) {
 function ParadasSection({
   envasadoId,
   paradas,
+  canExecute,
 }: {
   envasadoId: string;
   paradas: ParadaDisplay[];
+  canExecute: boolean;
 }) {
   const paradaAbierta = paradas.find((p) => !p.endedAt);
 
@@ -295,7 +297,7 @@ function ParadasSection({
             turnos, etc.
           </p>
         </div>
-        {!paradaAbierta && <IniciarParadaDialog envasadoId={envasadoId} />}
+        {canExecute && !paradaAbierta && <IniciarParadaDialog envasadoId={envasadoId} />}
       </div>
       {paradaAbierta && (
         <p className="text-sm font-medium text-destructive">
@@ -331,7 +333,7 @@ function ParadasSection({
           </tbody>
         </table>
       )}
-      {paradaAbierta && <FinalizarParadaForm paradaId={paradaAbierta.id} />}
+      {canExecute && paradaAbierta && <FinalizarParadaForm paradaId={paradaAbierta.id} />}
     </div>
   );
 }
@@ -349,6 +351,8 @@ export function EnvasadoCard({
   paradas,
   insumosUso,
   canDelete,
+  canExecute = true,
+  canFirmar = false,
 }: {
   recordId: string;
   bacheLabel: string;
@@ -362,6 +366,8 @@ export function EnvasadoCard({
   paradas: ParadaDisplay[];
   insumosUso: InsumoUsoDisplay[];
   canDelete?: boolean;
+  canExecute?: boolean;
+  canFirmar?: boolean;
 }) {
   const cortesCerrados = cortes.filter((c) => c.endedAt);
   const hayTurnoActivo = cortes.some((c) => !c.endedAt);
@@ -425,28 +431,32 @@ export function EnvasadoCard({
                 Suma de los turnos ya finalizados.
               </p>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <FinalizarEnvasadoDialog
-                recordId={recordId}
-                insumosUso={insumosUso}
-                disabled={hayTurnoActivo}
-              />
-              {hayTurnoActivo && (
-                <p className="text-xs text-muted-foreground">
-                  Finalizá el turno activo antes de cerrar el envasado.
-                </p>
-              )}
-            </div>
+            {canExecute && (
+              <div className="flex flex-col items-end gap-1">
+                <FinalizarEnvasadoDialog
+                  recordId={recordId}
+                  insumosUso={insumosUso}
+                  disabled={hayTurnoActivo}
+                />
+                {hayTurnoActivo && (
+                  <p className="text-xs text-muted-foreground">
+                    Finalizá el turno activo antes de cerrar el envasado.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        <ParadasSection envasadoId={recordId} paradas={paradas} />
+        <ParadasSection envasadoId={recordId} paradas={paradas} canExecute={canExecute} />
 
         <TurnoPanel
           envasadoId={recordId}
           turnos={turnos}
           operarios={operarios}
           cortes={cortes}
+          canExecute={canExecute}
+          canFirmar={canFirmar}
         />
       </CardContent>
     </Card>

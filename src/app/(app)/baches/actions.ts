@@ -322,6 +322,52 @@ export async function finishStage(
   return { success: true };
 }
 
+// ---------------------------------------------------------------------------
+// Firma de calidad (aprobación de etapa) -- se hace después de cerrada la
+// etapa, nunca la bloquea ni la condiciona.
+// ---------------------------------------------------------------------------
+const FirmarEtapaSchema = z.object({
+  stage_record_id: z.string().uuid(),
+  bache_id: z.string().uuid(),
+  aprobado: z.enum(["true", "false"]).transform((v) => v === "true"),
+  observaciones: z.string().trim().optional(),
+});
+
+export async function firmarEtapaBache(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "calidad"]);
+
+  const parsed = FirmarEtapaSchema.safeParse({
+    stage_record_id: formData.get("stage_record_id"),
+    bache_id: formData.get("bache_id"),
+    aprobado: formData.get("aprobado"),
+    observaciones: formData.get("observaciones"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("bache_stage_firmas").upsert(
+    {
+      stage_record_id: parsed.data.stage_record_id,
+      aprobado: parsed.data.aprobado,
+      observaciones: parsed.data.observaciones || null,
+      firmado_por: profile.id,
+    },
+    { onConflict: "stage_record_id" },
+  );
+
+  if (error) {
+    return { error: "No se pudo guardar la firma." };
+  }
+
+  revalidatePath(`/baches/${parsed.data.bache_id}`);
+  return { success: true };
+}
+
 const AddReadingSchema = z.object({
   record_id: z.string().uuid(),
   bache_id: z.string().uuid(),

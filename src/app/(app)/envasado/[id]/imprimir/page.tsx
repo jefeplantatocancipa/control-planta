@@ -28,7 +28,7 @@ export default async function EnvasadoReportPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["jefe_planta", "supervisor"]);
+  await requireRole(["jefe_planta", "supervisor", "calidad"]);
   const { id } = await params;
   const supabase = await createClient();
 

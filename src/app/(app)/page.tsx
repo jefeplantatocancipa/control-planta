@@ -23,14 +23,14 @@ const CARDS: {
     title: "Preparación de baches",
     description: "Registrar y consultar baches en proceso.",
     icon: Beaker,
-    roles: ["jefe_planta", "supervisor"],
+    roles: ["jefe_planta", "supervisor", "calidad"],
   },
   {
     href: "/envasado",
     title: "Envasado del bache",
     description: "Registrar unidades envasadas por bache.",
     icon: Package,
-    roles: ["jefe_planta", "supervisor"],
+    roles: ["jefe_planta", "supervisor", "calidad"],
   },
   {
     href: "/enmangado",

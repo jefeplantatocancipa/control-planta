@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ import {
   addCalidadLectura,
   iniciarEstiba,
   finalizarEstiba,
+  firmarCorteEnvasado,
   type ActionState,
 } from "./actions";
 import { NO_ORDER_VALUE } from "./constants";
@@ -52,6 +53,13 @@ export interface EstibaDisplay {
   unidadesPorEstiba: number | null;
 }
 
+export interface FirmaDisplay {
+  aprobado: boolean;
+  observaciones: string | null;
+  firmadoPorNombre: string;
+  firmadoAt: string;
+}
+
 export interface CorteDisplay {
   id: string;
   turnoName: string;
@@ -64,6 +72,7 @@ export interface CorteDisplay {
   observaciones: string | null;
   lecturas: LecturaDisplay[];
   estibas: EstibaDisplay[];
+  firma: FirmaDisplay | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -604,6 +613,125 @@ function FinalizarTurnoDialog({
 }
 
 // ---------------------------------------------------------------------------
+// Firma de calidad (aprobación posterior al cierre del turno; nunca bloquea
+// ni condiciona el proceso, que sigue su curso igual)
+// ---------------------------------------------------------------------------
+function FirmarCorteForm({
+  corteId,
+  onSuccess,
+}: {
+  corteId: string;
+  onSuccess: () => void;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    firmarCorteEnvasado,
+    {},
+  );
+  const [observaciones, setObservaciones] = useState("");
+  const [aprobado, setAprobado] = useState("true");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form ref={formRef} action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="corte_id" value={corteId} />
+      <input type="hidden" name="aprobado" value={aprobado} />
+      <Input
+        placeholder="Observaciones (opcional)"
+        value={observaciones}
+        onChange={(e) => setObservaciones(e.target.value)}
+        name="observaciones"
+        className="h-8 text-xs"
+      />
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending}
+          onClick={() => {
+            setAprobado("true");
+            formRef.current?.requestSubmit();
+          }}
+        >
+          Aprobar
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={pending}
+          onClick={() => {
+            setAprobado("false");
+            formRef.current?.requestSubmit();
+          }}
+        >
+          Rechazar
+        </Button>
+      </div>
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function FirmaCorteSection({
+  corteId,
+  firma,
+  canFirmar,
+}: {
+  corteId: string;
+  firma: FirmaDisplay | null;
+  canFirmar: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (firma && !editing) {
+    return (
+      <div className="mt-2 flex flex-col gap-1 rounded-lg border p-2 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <Badge variant={firma.aprobado ? "default" : "destructive"}>
+            {firma.aprobado ? "Aprobado por calidad" : "Rechazado por calidad"}
+          </Badge>
+          {canFirmar && (
+            <button
+              type="button"
+              className="text-muted-foreground underline"
+              onClick={() => setEditing(true)}
+            >
+              Corregir
+            </button>
+          )}
+        </div>
+        <p className="text-muted-foreground">
+          {firma.firmadoPorNombre} · {formatTime(firma.firmadoAt)}
+        </p>
+        {firma.observaciones && <p>Obs: {firma.observaciones}</p>}
+      </div>
+    );
+  }
+
+  if (!canFirmar) {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Pendiente de firma de calidad.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <FirmarCorteForm corteId={corteId} onSuccess={() => setEditing(false)} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Panel principal
 // ---------------------------------------------------------------------------
 export function TurnoPanel({
@@ -611,11 +739,15 @@ export function TurnoPanel({
   turnos,
   operarios,
   cortes,
+  canExecute = true,
+  canFirmar = false,
 }: {
   envasadoId: string;
   turnos: Turno[];
   operarios: Profile[];
   cortes: CorteDisplay[];
+  canExecute?: boolean;
+  canFirmar?: boolean;
 }) {
   const activo = cortes.find((c) => !c.endedAt);
   const cerrados = cortes.filter((c) => c.endedAt);
@@ -632,7 +764,7 @@ export function TurnoPanel({
             Quién está envasando ahora, con su control de calidad y estibas.
           </p>
         </div>
-        {!activo && (
+        {canExecute && !activo && (
           <IniciarTurnoDialog envasadoId={envasadoId} turnos={turnos} operarios={operarios} />
         )}
       </div>
@@ -647,11 +779,13 @@ export function TurnoPanel({
                 inicio {activo.unidadesInicio}
               </p>
             </div>
-            <FinalizarTurnoDialog
-              corteId={activo.id}
-              unidadesInicio={activo.unidadesInicio}
-              totalUnidadesEstibas={totalUnidadesEstibas}
-            />
+            {canExecute && (
+              <FinalizarTurnoDialog
+                corteId={activo.id}
+                unidadesInicio={activo.unidadesInicio}
+                totalUnidadesEstibas={totalUnidadesEstibas}
+              />
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -664,7 +798,7 @@ export function TurnoPanel({
               </p>
             </div>
             <LecturasList lecturas={activo.lecturas} />
-            <LecturaCalidadForm corteId={activo.id} />
+            {canExecute && <LecturaCalidadForm corteId={activo.id} />}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -675,11 +809,12 @@ export function TurnoPanel({
               </p>
             </div>
             <EstibasList estibas={activo.estibas} />
-            {estibaAbierta ? (
-              <FinalizarEstibaForm estibaId={estibaAbierta.id} />
-            ) : (
-              <IniciarEstibaForm corteId={activo.id} />
-            )}
+            {canExecute &&
+              (estibaAbierta ? (
+                <FinalizarEstibaForm estibaId={estibaAbierta.id} />
+              ) : (
+                <IniciarEstibaForm corteId={activo.id} />
+              ))}
           </div>
         </div>
       )}
@@ -703,6 +838,7 @@ export function TurnoPanel({
               {c.observaciones && (
                 <p className="text-muted-foreground">Obs: {c.observaciones}</p>
               )}
+              <FirmaCorteSection corteId={c.id} firma={c.firma} canFirmar={canFirmar} />
             </div>
           ))}
         </div>
