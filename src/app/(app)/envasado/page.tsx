@@ -259,6 +259,9 @@ export default async function EnvasadoPage() {
   }
 
   const referenciasById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
+  const envasadoReferenciaOptions = (envasadoReferencias ?? [])
+    .filter((r) => r.active)
+    .map((r) => ({ id: r.id, label: `${r.sku} — ${r.name}` }));
   const envasadoOrderOptions = (envasadoOrders ?? []).map((order) => {
     const referencia = referenciasById.get(order.referencia_id);
     const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
@@ -328,6 +331,7 @@ export default async function EnvasadoPage() {
             baches={bacheOptions}
             operarios={operariosSeleccionables}
             envasadoOrders={envasadoOrderOptions}
+            envasadoReferencias={envasadoReferenciaOptions}
             envasadoInsumos={envasadoInsumos ?? []}
             recipeByReferencia={recipeByReferencia}
           />

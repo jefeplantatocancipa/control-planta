@@ -180,6 +180,7 @@ export default async function BacheReportPage({
     { data: records },
     { data: operarios },
     { data: envasados },
+    { data: envasadoReferencias },
   ] = await Promise.all([
     supabase.from("products").select("*").eq("id", bache.product_id).single(),
     supabase
@@ -190,6 +191,7 @@ export default async function BacheReportPage({
     supabase.from("bache_stage_records").select("*").eq("bache_id", bache.id),
     supabase.from("profiles").select("*"),
     supabase.from("envasados").select("*").eq("bache_id", bache.id),
+    supabase.from("envasado_referencias").select("id, peso_unitario"),
   ]);
 
   let stages = ownTemplates.data ?? [];
@@ -235,6 +237,51 @@ export default async function BacheReportPage({
     totalUnidades + totalMermas > 0
       ? Math.round((totalMermas / (totalUnidades + totalMermas)) * 1000) / 10
       : 0;
+
+  // Balance de masa total del bache: se toma la última etapa con checklist
+  // de insumos (ej. Mezcla), igual que en /envasado, porque ahí queda
+  // confirmado lo que realmente se agregó al proceso.
+  let totalInsumosKg: number | null = null;
+  let totalInsumosOrder = -1;
+  for (const record of records ?? []) {
+    const stage = stages.find((s) => s.id === record.stage_template_id);
+    if (!stage || !stage.captures_insumos || !record.ended_at) continue;
+    if (!Array.isArray(record.parameters.insumos)) continue;
+    if (stage.sequence_order <= totalInsumosOrder) continue;
+    totalInsumosOrder = stage.sequence_order;
+    totalInsumosKg = record.parameters.insumos.reduce(
+      (sum, i) => sum + (Number(i.peso) || 0),
+      0,
+    );
+  }
+
+  // Kg empacados = unidades envasadas x peso unitario de la referencia. Si
+  // algún envasado no tiene referencia vinculada (dato viejo, anterior a
+  // esta función, o cargado sin elegirla), el total queda parcial y se
+  // avisa en vez de mostrar un número engañoso.
+  const pesoUnitarioByReferencia = new Map(
+    (envasadoReferencias ?? []).map((r) => [r.id, r.peso_unitario]),
+  );
+  const envasadosConReferencia = (envasados ?? []).filter(
+    (e) => e.referencia_id && pesoUnitarioByReferencia.has(e.referencia_id),
+  );
+  const kgEmpacadosParcial =
+    (envasados ?? []).length > 0 &&
+    envasadosConReferencia.length < (envasados ?? []).length;
+  const kgEmpacados =
+    envasadosConReferencia.length > 0
+      ? envasadosConReferencia.reduce(
+          (sum, e) => sum + e.cantidad_unidades * (pesoUnitarioByReferencia.get(e.referencia_id!) ?? 0),
+          0,
+        )
+      : null;
+
+  const mermaMasaKg =
+    totalInsumosKg !== null && kgEmpacados !== null ? totalInsumosKg - kgEmpacados : null;
+  const mermaMasaPct =
+    mermaMasaKg !== null && totalInsumosKg && totalInsumosKg > 0
+      ? Math.round((mermaMasaKg / totalInsumosKg) * 1000) / 10
+      : null;
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3 bg-white p-4 text-xs print:p-0">
@@ -307,6 +354,35 @@ export default async function BacheReportPage({
         <StatTile label="Mermas" value={String(totalMermas)} />
         <StatTile label="Tasa de mermas" value={`${tasaMermas}%`} />
       </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        <StatTile
+          label="Insumos (kg)"
+          value={totalInsumosKg !== null ? `${totalInsumosKg.toFixed(2)} kg` : "—"}
+        />
+        <StatTile
+          label="Kg empacados"
+          value={
+            kgEmpacados !== null
+              ? `${kgEmpacados.toFixed(2)} kg${kgEmpacadosParcial ? " (parcial)" : ""}`
+              : "—"
+          }
+        />
+        <StatTile
+          label="Merma de masa"
+          value={mermaMasaKg !== null ? `${mermaMasaKg.toFixed(2)} kg` : "—"}
+        />
+        <StatTile
+          label="Tasa de merma de masa"
+          value={mermaMasaPct !== null ? `${mermaMasaPct}%` : "—"}
+        />
+      </div>
+      {kgEmpacadosParcial && (
+        <p className="-mt-2 text-[9px] text-muted-foreground">
+          * Kg empacados parcial: algún envasado de este bache no tiene
+          referencia vinculada, así que no entra en el cálculo.
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5">
         {stages.map((stage) => {

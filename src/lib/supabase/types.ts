@@ -434,6 +434,7 @@ export interface Database {
           bache_id: string;
           operario_id: string;
           envasado_order_id: string | null;
+          referencia_id: string | null;
           presentacion: string;
           lote: string | null;
           cantidad_unidades: number;
@@ -449,6 +450,7 @@ export interface Database {
           bache_id: string;
           operario_id: string;
           envasado_order_id?: string | null;
+          referencia_id?: string | null;
           presentacion: string;
           lote?: string | null;
           cantidad_unidades: number;

@@ -47,6 +47,7 @@ const StartEnvasadoSchema = z.object({
   bache_id: z.string().uuid({ message: "Elegí un bache." }),
   operario_id: z.string().uuid({ message: "Elegí quién realiza el envasado." }),
   envasado_order_id: z.string().uuid().nullable(),
+  referencia_id: z.string().uuid().nullable(),
   presentacion: z.string().trim().min(1, "La presentación es obligatoria."),
   lote: z.string().trim().min(1, "El lote es obligatorio."),
   insumos_observacion: z.string().trim().optional(),
@@ -71,10 +72,12 @@ export async function startEnvasado(
   const profile = await requireRole(["jefe_planta", "supervisor"]);
 
   const orderId = formData.get("envasado_order_id");
+  const referenciaId = formData.get("referencia_id");
   const parsed = StartEnvasadoSchema.safeParse({
     bache_id: formData.get("bache_id"),
     operario_id: formData.get("operario_id"),
     envasado_order_id: orderId && orderId !== NO_ORDER_VALUE ? orderId : null,
+    referencia_id: referenciaId && referenciaId !== NO_ORDER_VALUE ? referenciaId : null,
     presentacion: formData.get("presentacion"),
     lote: formData.get("lote"),
     insumos_observacion: formData.get("insumos_observacion") || undefined,
@@ -99,6 +102,7 @@ export async function startEnvasado(
       bache_id: parsed.data.bache_id,
       operario_id: parsed.data.operario_id,
       envasado_order_id: parsed.data.envasado_order_id,
+      referencia_id: parsed.data.referencia_id,
       presentacion: parsed.data.presentacion,
       lote: parsed.data.lote,
       insumos_observacion: parsed.data.insumos_observacion || null,

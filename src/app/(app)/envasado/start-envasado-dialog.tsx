@@ -39,6 +39,11 @@ interface EnvasadoOrderOption {
   referenciaId: string;
 }
 
+interface EnvasadoReferenciaOption {
+  id: string;
+  label: string;
+}
+
 interface InsumoUsoDraft {
   envasado_insumo_id: string;
   nombre: string;
@@ -142,6 +147,7 @@ function StartEnvasadoForm({
   baches,
   operarios,
   envasadoOrders,
+  envasadoReferencias,
   envasadoInsumos,
   recipeByReferencia,
   onSuccess,
@@ -149,6 +155,7 @@ function StartEnvasadoForm({
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
+  envasadoReferencias: EnvasadoReferenciaOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
   onSuccess: () => void;
@@ -158,6 +165,7 @@ function StartEnvasadoForm({
     {},
   );
   const [orderId, setOrderId] = useState(NO_ORDER_VALUE);
+  const [referenciaId, setReferenciaId] = useState(NO_ORDER_VALUE);
   const [presentacion, setPresentacion] = useState("");
   const [insumos, setInsumos] = useState<InsumoUsoDraft[]>(
     buildInsumoDrafts(envasadoInsumos),
@@ -174,6 +182,7 @@ function StartEnvasadoForm({
     const order = envasadoOrders.find((o) => o.id === value);
     if (!order) return;
     setPresentacion(order.presentacion);
+    setReferenciaId(order.referenciaId);
 
     const receta = recipeByReferencia[order.referenciaId];
     if (receta && receta.length > 0) {
@@ -254,6 +263,35 @@ function StartEnvasadoForm({
           onChange={(e) => setPresentacion(e.target.value)}
           required
         />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="referencia_id">Referencia (para calcular kg empacados)</Label>
+        <Select
+          name="referencia_id"
+          value={referenciaId}
+          onValueChange={(value) => setReferenciaId(value ?? NO_ORDER_VALUE)}
+          items={[
+            { value: NO_ORDER_VALUE, label: "Sin referencia" },
+            ...envasadoReferencias.map((r) => ({ value: r.id, label: r.label })),
+          ]}
+        >
+          <SelectTrigger id="referencia_id" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_ORDER_VALUE}>Sin referencia</SelectItem>
+            {envasadoReferencias.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Se usa para calcular los kg empacados (unidades × peso unitario) y
+          compararlos contra el balance de masa en el informe.
+        </p>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -339,12 +377,14 @@ export function StartEnvasadoDialog({
   baches,
   operarios,
   envasadoOrders,
+  envasadoReferencias,
   envasadoInsumos,
   recipeByReferencia,
 }: {
   baches: BacheOption[];
   operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
+  envasadoReferencias: EnvasadoReferenciaOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
 }) {
@@ -361,6 +401,7 @@ export function StartEnvasadoDialog({
           baches={baches}
           operarios={operarios}
           envasadoOrders={envasadoOrders}
+          envasadoReferencias={envasadoReferencias}
           envasadoInsumos={envasadoInsumos}
           recipeByReferencia={recipeByReferencia}
           onSuccess={() => setOpen(false)}
