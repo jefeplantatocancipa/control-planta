@@ -40,13 +40,7 @@ function StatusButton({
   );
 }
 
-export function BacheStatusActions({
-  bacheId,
-  allStagesDone,
-}: {
-  bacheId: string;
-  allStagesDone: boolean;
-}) {
+export function BacheStatusActions({ bacheId }: { bacheId: string }) {
   return (
     <div className="flex gap-2">
       <StatusButton
@@ -55,14 +49,6 @@ export function BacheStatusActions({
         label="Cancelar bache"
         pendingLabel="Cancelando..."
         variant="destructive"
-      />
-      <StatusButton
-        bacheId={bacheId}
-        status="completado"
-        label="Completar bache"
-        pendingLabel="Completando..."
-        variant="default"
-        disabled={!allStagesDone}
       />
     </div>
   );

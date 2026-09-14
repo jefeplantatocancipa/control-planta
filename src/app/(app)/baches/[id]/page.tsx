@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { StageCard } from "./stage-card";
 import { BacheStatusActions } from "./bache-status-actions";
+import { FinalizarBacheBanner } from "./finalizar-bache-banner";
 import type { BacheStatus } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -142,11 +143,11 @@ export default async function BacheDetailPage({
               Imprimir informe
             </Link>
           </div>
-          {canAct && (
-            <BacheStatusActions bacheId={bache.id} allStagesDone={allStagesDone} />
-          )}
+          {canAct && <BacheStatusActions bacheId={bache.id} />}
         </div>
       </div>
+
+      {canAct && allStagesDone && <FinalizarBacheBanner bacheId={bache.id} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stages.map((stage, index) => {
