@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateProfile, createUser, type ActionState } from "./actions";
+import { updateProfile, createUser, resetUserPassword, type ActionState } from "./actions";
 import type { Database, UserRole } from "@/lib/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -190,6 +190,53 @@ function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+function ResetPasswordForm({
+  profile,
+  onSuccess,
+}: {
+  profile: Profile;
+  onSuccess: () => void;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    resetUserPassword,
+    {},
+  );
+
+  useEffect(() => {
+    if (state.success) onSuccess();
+  }, [state.success, onSuccess]);
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <input type="hidden" name="id" value={profile.id} />
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="new_password_reset">Nueva contraseña para {profile.full_name}</Label>
+        <Input
+          id="new_password_reset"
+          name="password"
+          type="password"
+          minLength={6}
+          required
+          autoFocus
+        />
+        <p className="text-xs text-muted-foreground">
+          Se la das a la persona directamente; no se envía por correo ni SMS.
+        </p>
+      </div>
+      {state.error && (
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+      <DialogFooter>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Cambiando..." : "Cambiar contraseña"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export function UsersPanel({
   profiles,
   currentUserId,
@@ -200,6 +247,8 @@ export function UsersPanel({
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState<Profile | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -237,6 +286,16 @@ export function UsersPanel({
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setResetting(profile);
+                    setResetOpen(true);
+                  }}
+                >
+                  Contraseña
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -281,6 +340,21 @@ export function UsersPanel({
             <DialogTitle>Nuevo usuario</DialogTitle>
           </DialogHeader>
           <CreateUserForm onSuccess={() => setCreateOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar contraseña</DialogTitle>
+          </DialogHeader>
+          {resetting && (
+            <ResetPasswordForm
+              key={resetting.id}
+              profile={resetting}
+              onSuccess={() => setResetOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

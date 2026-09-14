@@ -338,6 +338,37 @@ export async function updateProfile(
   return { success: true };
 }
 
+const ResetPasswordSchema = z.object({
+  id: z.string().uuid(),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
+});
+
+export async function resetUserPassword(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = ResetPasswordSchema.safeParse({
+    id: formData.get("id"),
+    password: formData.get("password"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(parsed.data.id, {
+    password: parsed.data.password,
+  });
+
+  if (error) {
+    return { error: "No se pudo cambiar la contraseña." };
+  }
+
+  return { success: true };
+}
+
 function slugify(text: string) {
   return text
     .normalize("NFD")
