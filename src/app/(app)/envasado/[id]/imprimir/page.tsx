@@ -67,7 +67,7 @@ export default async function EnvasadoReportPage({
   ]);
 
   const corteIds = (cortes ?? []).map((c) => c.id);
-  const [{ data: lecturas }, { data: estibas }] = await Promise.all([
+  const [{ data: lecturas }, { data: estibas }, { data: corteFirmas }] = await Promise.all([
     corteIds.length > 0
       ? supabase
           .from("envasado_calidad_lecturas")
@@ -81,6 +81,9 @@ export default async function EnvasadoReportPage({
           .select("*")
           .in("corte_id", corteIds)
           .order("inicio_estiba")
+      : Promise.resolve({ data: [] as never[] }),
+    corteIds.length > 0
+      ? supabase.from("envasado_corte_firmas").select("*").in("corte_id", corteIds)
       : Promise.resolve({ data: [] as never[] }),
   ]);
 
@@ -99,6 +102,10 @@ export default async function EnvasadoReportPage({
     list.push(e);
     estibasByCorte.set(e.corte_id, list);
   }
+  const firmasByCorte = new Map((corteFirmas ?? []).map((f) => [f.corte_id, f]));
+  const calidadSignatures = Array.from(
+    new Set((corteFirmas ?? []).map((f) => operarioNames.get(f.firmado_por) ?? "—")),
+  ).join(", ");
 
   const cortesCerrados = (cortes ?? []).filter((c) => c.ended_at);
   // Las unidades envasadas son la suma de lo que dio cada estiba (dato
@@ -341,6 +348,32 @@ export default async function EnvasadoReportPage({
               {corte.observaciones && (
                 <p className="mt-1 text-muted-foreground">Obs: {corte.observaciones}</p>
               )}
+
+              {corte.ended_at &&
+                (() => {
+                  const firma = firmasByCorte.get(corte.id);
+                  return (
+                    <p className="mt-1">
+                      Firma de calidad:{" "}
+                      {firma ? (
+                        <span
+                          className={
+                            firma.aprobado
+                              ? "font-medium text-primary"
+                              : "font-medium text-destructive"
+                          }
+                        >
+                          {firma.aprobado ? "Aprobado" : "Rechazado"} por{" "}
+                          {operarioNames.get(firma.firmado_por) ?? "—"} —{" "}
+                          {formatDateTime(firma.firmado_at)}
+                          {firma.observaciones ? ` (${firma.observaciones})` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Pendiente</span>
+                      )}
+                    </p>
+                  );
+                })()}
             </div>
           );
         })}
@@ -354,7 +387,16 @@ export default async function EnvasadoReportPage({
           <p>Firma Supervisor turno A: ________________________</p>
           <p>Firma Supervisor turno B: ________________________</p>
           <p>Firma Supervisor turno C: ________________________</p>
-          <p>Firma Calidad: ________________________</p>
+          <p>
+            Firma Calidad:{" "}
+            {calidadSignatures ? (
+              <span className="font-medium text-foreground">
+                {calidadSignatures} (firmado digitalmente en el sistema)
+              </span>
+            ) : (
+              "________________________"
+            )}
+          </p>
           <p>Firma Jefe de Planta: ________________________</p>
         </div>
         <p className="mt-2 text-right">fasalact food innovation</p>

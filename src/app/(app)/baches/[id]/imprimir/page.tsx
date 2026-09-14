@@ -207,6 +207,16 @@ export default async function BacheReportPage({
   );
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
 
+  const recordIds = (records ?? []).map((r) => r.id);
+  const { data: firmas } =
+    recordIds.length > 0
+      ? await supabase.from("bache_stage_firmas").select("*").in("stage_record_id", recordIds)
+      : { data: [] as Database["public"]["Tables"]["bache_stage_firmas"]["Row"][] };
+  const firmasByRecord = new Map((firmas ?? []).map((f) => [f.stage_record_id, f]));
+  const calidadSignatures = Array.from(
+    new Set((firmas ?? []).map((f) => operarioNames.get(f.firmado_por) ?? "—")),
+  ).join(", ");
+
   const lastEndedAt = (records ?? []).reduce<string | null>((latest, r) => {
     if (!r.ended_at) return latest;
     return !latest || r.ended_at > latest ? r.ended_at : latest;
@@ -437,6 +447,32 @@ export default async function BacheReportPage({
               {record?.notes && (
                 <p className="mt-1 text-muted-foreground">Notas: {record.notes}</p>
               )}
+
+              {record?.ended_at &&
+                (() => {
+                  const firma = firmasByRecord.get(record.id);
+                  return (
+                    <p className="mt-1">
+                      Firma de calidad:{" "}
+                      {firma ? (
+                        <span
+                          className={
+                            firma.aprobado
+                              ? "font-medium text-primary"
+                              : "font-medium text-destructive"
+                          }
+                        >
+                          {firma.aprobado ? "Aprobado" : "Rechazado"} por{" "}
+                          {operarioNames.get(firma.firmado_por) ?? "—"} —{" "}
+                          {formatDateTime(firma.firmado_at)}
+                          {firma.observaciones ? ` (${firma.observaciones})` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Pendiente</span>
+                      )}
+                    </p>
+                  );
+                })()}
             </div>
           );
         })}
@@ -447,7 +483,16 @@ export default async function BacheReportPage({
           <p>Firma Supervisor turno A: ________________________</p>
           <p>Firma Supervisor turno B: ________________________</p>
           <p>Firma Supervisor turno C: ________________________</p>
-          <p>Firma Calidad: ________________________</p>
+          <p>
+            Firma Calidad:{" "}
+            {calidadSignatures ? (
+              <span className="font-medium text-foreground">
+                {calidadSignatures} (firmado digitalmente en el sistema)
+              </span>
+            ) : (
+              "________________________"
+            )}
+          </p>
           <p>Firma Jefe de Planta: ________________________</p>
         </div>
         <p className="mt-2 text-right">fasalact food innovation</p>
