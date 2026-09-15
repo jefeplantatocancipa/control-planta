@@ -16,7 +16,7 @@ const CARDS: {
     title: "Proceso actual",
     description: "Tablero en vivo de los procesos de producción, etapa por etapa.",
     icon: Activity,
-    roles: ["jefe_planta", "supervisor", "operario", "planeacion"],
+    roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad"],
   },
   {
     href: "/baches",

@@ -32,7 +32,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", icon: LayoutDashboard, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad"] },
-  { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario", "planeacion"] },
+  { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad"] },
   { href: "/baches", label: "Baches", icon: Beaker, roles: ["jefe_planta", "supervisor", "calidad"] },
   { href: "/envasado", label: "Envasado", icon: Package, roles: ["jefe_planta", "supervisor", "calidad"] },
   { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor"] },
