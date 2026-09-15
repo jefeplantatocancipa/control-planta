@@ -250,6 +250,34 @@ export default async function BacheReportPage({
     );
   }
 
+  // Productos que no se envasan (ej. cremado, ver Administración →
+  // Productos → "Se envasa"): no hay unidades ni referencia para calcular
+  // el peso empacado, así que el valor a comparar contra el balance de
+  // masa es el parámetro "Kg" capturado en la última etapa que lo tenga
+  // (ej. Empaque), no las unidades envasadas.
+  const productoSinEnvasado = product?.requiere_envasado === false;
+
+  function kgFinalDeEtapa(): number | null {
+    let best: { order: number; kg: number } | null = null;
+    for (const record of records ?? []) {
+      if (!record.ended_at) continue;
+      const stage = stages.find((s) => s.id === record.stage_template_id);
+      if (!stage) continue;
+      const kgParam = stage.parameter_schema.find(
+        (p) => p.label.trim().toLowerCase() === "kg",
+      );
+      if (!kgParam) continue;
+      const raw = record.parameters[kgParam.key];
+      if (raw === undefined) continue;
+      const kg = Number(raw);
+      if (Number.isNaN(kg)) continue;
+      if (!best || stage.sequence_order > best.order) {
+        best = { order: stage.sequence_order, kg };
+      }
+    }
+    return best ? best.kg : null;
+  }
+
   // Kg empacados = unidades envasadas x peso unitario de la referencia. Los
   // envasados nuevos ya traen referencia_id; los viejos (de antes de esa
   // función) no lo tienen, así que se intenta resolver por el texto de la
@@ -285,12 +313,16 @@ export default async function BacheReportPage({
     .map((e) => ({ e, peso: pesoUnitarioDe(e) }))
     .filter((x): x is { e: NonNullable<typeof envasados>[number]; peso: number } => x.peso !== null);
   const kgEmpacadosParcial =
-    (envasados ?? []).length > 0 && envasadosConPeso.length < (envasados ?? []).length;
+    !productoSinEnvasado &&
+    (envasados ?? []).length > 0 &&
+    envasadosConPeso.length < (envasados ?? []).length;
+  const kgEmpacadosLabel = productoSinEnvasado ? "Kg empaque (etapa final)" : "Kg empacados";
   // peso_unitario está en gramos (ver Administración → Envasado); el
   // balance de masa de insumos está en kg, así que hay que convertir antes
   // de comparar.
-  const kgEmpacados =
-    envasadosConPeso.length > 0
+  const kgEmpacados = productoSinEnvasado
+    ? kgFinalDeEtapa()
+    : envasadosConPeso.length > 0
       ? envasadosConPeso.reduce((sum, { e, peso }) => sum + (e.cantidad_unidades * peso) / 1000, 0)
       : null;
 
@@ -374,7 +406,7 @@ export default async function BacheReportPage({
           value={totalInsumosKg !== null ? `${totalInsumosKg.toFixed(2)} kg` : "—"}
         />
         <StatTile
-          label="Kg empacados"
+          label={kgEmpacadosLabel}
           value={
             kgEmpacados !== null
               ? `${kgEmpacados.toFixed(2)} kg${kgEmpacadosParcial ? " (parcial)" : ""}`
@@ -394,6 +426,12 @@ export default async function BacheReportPage({
         <p className="-mt-2 text-[9px] text-muted-foreground">
           * Kg empacados parcial: algún envasado de este bache no tiene
           referencia vinculada, así que no entra en el cálculo.
+        </p>
+      )}
+      {productoSinEnvasado && kgEmpacados === null && (
+        <p className="-mt-2 text-[9px] text-muted-foreground">
+          * No se encontró un parámetro &quot;Kg&quot; en ninguna etapa
+          completada de este bache.
         </p>
       )}
 
