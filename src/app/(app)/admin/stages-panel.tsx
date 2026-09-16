@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useActionState } from "react";
+import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";

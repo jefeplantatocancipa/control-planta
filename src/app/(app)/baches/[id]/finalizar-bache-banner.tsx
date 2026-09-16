@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { updateBacheStatus, type ActionState } from "../actions";

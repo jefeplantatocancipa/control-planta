@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useActionState } from "react";
+import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import Link from "next/link";
 import { Printer } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";

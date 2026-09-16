@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import { updateOrderStatus, type ActionState } from "./actions";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_CLASSES } from "./order-status-styles";
 import type { OrderStatus } from "@/lib/supabase/types";

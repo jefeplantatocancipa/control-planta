@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useActionState } from "react";
+import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,7 @@ function ImportEnvasadoForm() {
   const [state, action, pending] = useActionState<ImportActionState, FormData>(
     importEnvasadoProgram,
     {},
+    60000,
   );
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import { updateEnmangadoProgramStatus, type ActionState } from "./actions";
 import type { ProgramStatus } from "@/lib/supabase/types";
 
