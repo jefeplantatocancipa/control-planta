@@ -29,7 +29,7 @@ const STATUS_VARIANTS: Record<BacheStatus, "default" | "outline" | "secondary"> 
 };
 
 export default async function BachesPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor", "calidad"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "calidad", "asistente_adm"]);
   const canDelete = profile.role === "jefe_planta";
   const canWrite = profile.role === "jefe_planta" || profile.role === "supervisor";
   const supabase = await createClient();

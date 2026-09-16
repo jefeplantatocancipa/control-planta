@@ -114,23 +114,31 @@ function ProductForm({
   );
 }
 
-export function ProductsPanel({ products }: { products: Product[] }) {
+export function ProductsPanel({
+  products,
+  canWrite = true,
+}: {
+  products: Product[];
+  canWrite?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Nuevo producto
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            Nuevo producto
+          </Button>
+        </div>
+      )}
 
       <Table>
         <TableHeader>
@@ -159,16 +167,18 @@ export function ProductsPanel({ products }: { products: Product[] }) {
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(product);
-                    setOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
+                {canWrite && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(product);
+                      setOpen(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

@@ -19,7 +19,7 @@ import { deleteEnvasado } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnvasadoPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor", "calidad"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "calidad", "asistente_adm"]);
   const canDelete = profile.role === "jefe_planta";
   const canExecute = profile.role === "jefe_planta" || profile.role === "supervisor";
   const canFirmar = profile.role === "jefe_planta" || profile.role === "calidad";

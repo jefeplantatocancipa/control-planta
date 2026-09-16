@@ -370,11 +370,13 @@ function StagesTable({
   stages,
   onEdit,
   titleAction,
+  canWrite,
 }: {
   title: string;
   stages: StageTemplate[];
   onEdit: (stage: StageTemplate) => void;
   titleAction?: ReactNode;
+  canWrite: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -411,9 +413,11 @@ function StagesTable({
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => onEdit(stage)}>
-                    Editar
-                  </Button>
+                  {canWrite && (
+                    <Button variant="ghost" size="sm" onClick={() => onEdit(stage)}>
+                      Editar
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -426,9 +430,11 @@ function StagesTable({
 export function StagesPanel({
   stages,
   products,
+  canWrite = true,
 }: {
   stages: StageTemplate[];
   products: Product[];
+  canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StageTemplate | null>(null);
@@ -449,25 +455,28 @@ export function StagesPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Nueva etapa
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            Nueva etapa
+          </Button>
+        </div>
+      )}
 
-      <CloneStagesForm eligibleProducts={eligibleProducts} />
+      {canWrite && <CloneStagesForm eligibleProducts={eligibleProducts} />}
 
       {groups.has("all") && (
         <StagesTable
           title="Todos los productos (secuencia compartida)"
           stages={groups.get("all")!}
           onEdit={openEdit}
+          canWrite={canWrite}
         />
       )}
 
@@ -479,11 +488,14 @@ export function StagesPanel({
             title={product.name}
             stages={groups.get(product.id)!}
             onEdit={openEdit}
+            canWrite={canWrite}
             titleAction={
-              <DeleteProductStagesButton
-                productId={product.id}
-                productName={product.name}
-              />
+              canWrite && (
+                <DeleteProductStagesButton
+                  productId={product.id}
+                  productName={product.name}
+                />
+              )
             }
           />
         ))}

@@ -301,6 +301,7 @@ const ProfileSchema = z.object({
     "operario",
     "planeacion",
     "calidad",
+    "asistente_adm",
   ] satisfies UserRole[]),
 });
 
@@ -407,6 +408,7 @@ const CreateUserSchema = z
     "operario",
     "planeacion",
     "calidad",
+    "asistente_adm",
   ] satisfies UserRole[]),
   })
   .refine((data) => data.role === "operario" || (data.email && data.password), {

@@ -39,6 +39,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   operario: "Operario",
   planeacion: "Planeación",
   calidad: "Calidad",
+  asistente_adm: "Asistente Adm",
 };
 
 function UserForm({
@@ -248,10 +249,12 @@ export function UsersPanel({
   profiles,
   currentUserId,
   emailsById,
+  canWrite = true,
 }: {
   profiles: Profile[];
   currentUserId: string;
   emailsById: Record<string, string | null>;
+  canWrite?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
@@ -261,14 +264,16 @@ export function UsersPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => setCreateOpen(true)}
-        >
-          Nuevo usuario
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
+            Nuevo usuario
+          </Button>
+        </div>
+      )}
 
       <Table>
         <TableHeader>
@@ -295,26 +300,30 @@ export function UsersPanel({
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setResetting(profile);
-                    setResetOpen(true);
-                  }}
-                >
-                  Contraseña
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(profile);
-                    setEditOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
+                {canWrite && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setResetting(profile);
+                        setResetOpen(true);
+                      }}
+                    >
+                      Contraseña
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(profile);
+                        setEditOpen(true);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                  </>
+                )}
               </TableCell>
             </TableRow>
           ))}

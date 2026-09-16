@@ -17,7 +17,7 @@ import { ReferenciasPanel } from "./referencias-panel";
 import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnmangadoPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
   const supabase = await createClient();
 
   const [
@@ -45,6 +45,7 @@ export default async function EnmangadoPage() {
   ]);
 
   const canWrite = profile.role === "jefe_planta";
+  const canCapture = profile.role === "jefe_planta" || profile.role === "supervisor";
   const referenciaList = referencias ?? [];
   const referenciaNames = new Map(referenciaList.map((r) => [r.id, r.name]));
   const operarioNames = new Map((operarios ?? []).map((o) => [o.id, o.full_name]));
@@ -96,13 +97,15 @@ export default async function EnmangadoPage() {
         </TabsList>
 
         <TabsContent value="captura" className="flex flex-col gap-4">
-          <div className="flex justify-end">
-            <NewEnmangadoDialog
-              referencias={referenciaList.filter((r) => r.active)}
-              orders={orderOptions}
-              operarios={operariosSeleccionables}
-            />
-          </div>
+          {canCapture && (
+            <div className="flex justify-end">
+              <NewEnmangadoDialog
+                referencias={referenciaList.filter((r) => r.active)}
+                orders={orderOptions}
+                operarios={operariosSeleccionables}
+              />
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>

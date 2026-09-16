@@ -7,7 +7,8 @@ export type UserRole =
   | "supervisor"
   | "operario"
   | "planeacion"
-  | "calidad";
+  | "calidad"
+  | "asistente_adm";
 export type ProcessType = "bache";
 export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";

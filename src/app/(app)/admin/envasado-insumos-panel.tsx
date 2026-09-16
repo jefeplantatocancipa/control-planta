@@ -115,10 +115,12 @@ function RecipeEditor({
   referencias,
   insumos,
   recipeByReferencia,
+  canWrite,
 }: {
   referencias: EnvasadoReferencia[];
   insumos: EnvasadoInsumo[];
   recipeByReferencia: Map<string, Set<string>>;
+  canWrite: boolean;
 }) {
   const [referenciaId, setReferenciaId] = useState(referencias[0]?.id ?? "");
   const [checked, setChecked] = useState<Set<string>>(
@@ -181,6 +183,7 @@ function RecipeEditor({
               className="size-4"
               checked={checked.has(insumo.id)}
               onChange={() => toggle(insumo.id)}
+              disabled={!canWrite}
             />
             {insumo.name}
           </label>
@@ -197,9 +200,11 @@ function RecipeEditor({
           {state.error}
         </p>
       )}
-      <Button type="submit" disabled={pending || !referenciaId} className="self-start">
-        {pending ? "Guardando..." : "Guardar receta"}
-      </Button>
+      {canWrite && (
+        <Button type="submit" disabled={pending || !referenciaId} className="self-start">
+          {pending ? "Guardando..." : "Guardar receta"}
+        </Button>
+      )}
       {state.success && (
         <p className="text-sm text-muted-foreground">Receta guardada.</p>
       )}
@@ -211,10 +216,12 @@ export function EnvasadoInsumosPanel({
   insumos,
   referencias,
   referenciaInsumos,
+  canWrite = true,
 }: {
   insumos: EnvasadoInsumo[];
   referencias: EnvasadoReferencia[];
   referenciaInsumos: { referencia_id: string; envasado_insumo_id: string }[];
+  canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EnvasadoInsumo | null>(null);
@@ -236,18 +243,20 @@ export function EnvasadoInsumosPanel({
             iniciar un envasado.
           </p>
         </div>
-        <div className="flex gap-2">
-          <ImportEnvasadoInsumosDialog />
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            Nuevo insumo
-          </Button>
-        </div>
+        {canWrite && (
+          <div className="flex gap-2">
+            <ImportEnvasadoInsumosDialog />
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              Nuevo insumo
+            </Button>
+          </div>
+        )}
       </div>
 
       <Table>
@@ -272,16 +281,18 @@ export function EnvasadoInsumosPanel({
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(insumo);
-                    setOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
+                {canWrite && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(insumo);
+                      setOpen(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}
@@ -310,6 +321,7 @@ export function EnvasadoInsumosPanel({
             referencias={referencias}
             insumos={insumos}
             recipeByReferencia={recipeByReferencia}
+            canWrite={canWrite}
           />
         ) : (
           <p className="text-sm text-muted-foreground">

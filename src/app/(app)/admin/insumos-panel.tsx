@@ -89,10 +89,12 @@ function RecipeEditor({
   products,
   insumos,
   recipeByProduct,
+  canWrite,
 }: {
   products: Product[];
   insumos: Insumo[];
   recipeByProduct: Map<string, Set<string>>;
+  canWrite: boolean;
 }) {
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [checked, setChecked] = useState<Set<string>>(
@@ -155,6 +157,7 @@ function RecipeEditor({
               className="size-4"
               checked={checked.has(insumo.id)}
               onChange={() => toggle(insumo.id)}
+              disabled={!canWrite}
             />
             {insumo.name}
           </label>
@@ -171,9 +174,11 @@ function RecipeEditor({
           {state.error}
         </p>
       )}
-      <Button type="submit" disabled={pending || !productId} className="self-start">
-        {pending ? "Guardando..." : "Guardar receta"}
-      </Button>
+      {canWrite && (
+        <Button type="submit" disabled={pending || !productId} className="self-start">
+          {pending ? "Guardando..." : "Guardar receta"}
+        </Button>
+      )}
       {state.success && (
         <p className="text-sm text-muted-foreground">Receta guardada.</p>
       )}
@@ -185,10 +190,12 @@ export function InsumosPanel({
   insumos,
   products,
   productInsumos,
+  canWrite = true,
 }: {
   insumos: Insumo[];
   products: Product[];
   productInsumos: { product_id: string; insumo_id: string }[];
+  canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Insumo | null>(null);
@@ -211,15 +218,17 @@ export function InsumosPanel({
               etc.), usados en Alistamiento de insumos y Mezcla.
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            Nuevo insumo
-          </Button>
+          {canWrite && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              Nuevo insumo
+            </Button>
+          )}
         </div>
 
         <Table>
@@ -240,16 +249,18 @@ export function InsumosPanel({
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditing(insumo);
-                      setOpen(true);
-                    }}
-                  >
-                    Editar
-                  </Button>
+                  {canWrite && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(insumo);
+                        setOpen(true);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -279,6 +290,7 @@ export function InsumosPanel({
             products={products}
             insumos={insumos}
             recipeByProduct={recipeByProduct}
+            canWrite={canWrite}
           />
         ) : (
           <p className="text-sm text-muted-foreground">

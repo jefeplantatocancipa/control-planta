@@ -33,6 +33,7 @@ export interface EncajadoDisplay {
   endedAt: string | null;
   estibas: EstibaDisplay[];
   canDelete?: boolean;
+  canExecute?: boolean;
 }
 
 function IniciarEncajadoForm({ encajadoId }: { encajadoId: string }) {
@@ -162,6 +163,7 @@ export function EncajadoCard({
   endedAt,
   estibas,
   canDelete,
+  canExecute = true,
 }: EncajadoDisplay) {
   const estibaAbierta = estibas.find((e) => !e.finalEstiba);
 
@@ -188,7 +190,7 @@ export function EncajadoCard({
         {lote && <p className="text-sm text-muted-foreground">Lote: {lote}</p>}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {!startedAt && <IniciarEncajadoForm encajadoId={id} />}
+        {!startedAt && canExecute && <IniciarEncajadoForm encajadoId={id} />}
 
         {startedAt && (
           <>
@@ -201,6 +203,7 @@ export function EncajadoCard({
               <Label className="text-xs font-normal text-muted-foreground">Estibas</Label>
               <EstibasList estibas={estibas} />
               {!endedAt &&
+                canExecute &&
                 (estibaAbierta ? (
                   <FinalizarEstibaForm estibaId={estibaAbierta.id} />
                 ) : (
@@ -208,7 +211,7 @@ export function EncajadoCard({
                 ))}
             </div>
 
-            {!endedAt && (
+            {!endedAt && canExecute && (
               <div className="flex flex-col items-end gap-1">
                 <FinalizarEncajadoForm encajadoId={id} />
                 {estibaAbierta && (

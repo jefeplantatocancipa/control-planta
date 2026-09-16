@@ -14,8 +14,9 @@ import { deleteEncajado } from "./actions";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 
 export default async function EncajadoPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
   const canDelete = profile.role === "jefe_planta";
+  const canExecute = profile.role === "jefe_planta" || profile.role === "supervisor";
   const supabase = await createClient();
 
   const [
@@ -66,6 +67,7 @@ export default async function EncajadoPage() {
       endedAt: encajado.ended_at,
       estibas: estibasByEncajado.get(encajado.id) ?? [],
       canDelete,
+      canExecute,
     };
   });
 

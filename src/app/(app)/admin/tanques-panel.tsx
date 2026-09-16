@@ -72,7 +72,13 @@ function TanqueForm({
   );
 }
 
-export function TanquesPanel({ tanques }: { tanques: Tanque[] }) {
+export function TanquesPanel({
+  tanques,
+  canWrite = true,
+}: {
+  tanques: Tanque[];
+  canWrite?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tanque | null>(null);
 
@@ -86,15 +92,17 @@ export function TanquesPanel({ tanques }: { tanques: Tanque[] }) {
             (parámetro de tipo &quot;Tanque&quot;).
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Nuevo tanque
-        </Button>
+        {canWrite && (
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            Nuevo tanque
+          </Button>
+        )}
       </div>
 
       <Table>
@@ -115,16 +123,18 @@ export function TanquesPanel({ tanques }: { tanques: Tanque[] }) {
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(tanque);
-                    setOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
+                {canWrite && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(tanque);
+                      setOpen(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

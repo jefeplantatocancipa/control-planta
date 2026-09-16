@@ -31,16 +31,16 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Inicio", icon: LayoutDashboard, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad"] },
-  { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad"] },
-  { href: "/baches", label: "Baches", icon: Beaker, roles: ["jefe_planta", "supervisor", "calidad"] },
-  { href: "/envasado", label: "Envasado", icon: Package, roles: ["jefe_planta", "supervisor", "calidad"] },
-  { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor"] },
-  { href: "/enmangado", label: "Enmangado", icon: Package, roles: ["jefe_planta", "supervisor"] },
-  { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor", "planeacion"] },
-  { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor"] },
-  { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor"] },
-  { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta"] },
+  { href: "/", label: "Inicio", icon: LayoutDashboard, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad", "asistente_adm"] },
+  { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad", "asistente_adm"] },
+  { href: "/baches", label: "Baches", icon: Beaker, roles: ["jefe_planta", "supervisor", "calidad", "asistente_adm"] },
+  { href: "/envasado", label: "Envasado", icon: Package, roles: ["jefe_planta", "supervisor", "calidad", "asistente_adm"] },
+  { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
+  { href: "/enmangado", label: "Enmangado", icon: Package, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
+  { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"] },
+  { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
+  { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
+  { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta", "asistente_adm"] },
 ];
 
 const MOBILE_ITEMS = ["/", "/proceso", "/baches", "/envasado", "/encajado", "/estadisticas"];

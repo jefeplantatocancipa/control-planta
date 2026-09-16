@@ -13,7 +13,8 @@ import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
 import { TurnosPanel } from "./turnos-panel";
 
 export default async function AdminPage() {
-  const profile = await requireRole(["jefe_planta"]);
+  const profile = await requireRole(["jefe_planta", "asistente_adm"]);
+  const canWrite = profile.role === "jefe_planta";
   const supabase = await createClient();
 
   const [
@@ -71,10 +72,10 @@ export default async function AdminPage() {
           <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
         </TabsList>
         <TabsContent value="productos">
-          <ProductsPanel products={products ?? []} />
+          <ProductsPanel products={products ?? []} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="etapas">
-          <StagesPanel stages={stages ?? []} products={products ?? []} />
+          <StagesPanel stages={stages ?? []} products={products ?? []} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="insumos">
           <div className="flex flex-col gap-8">
@@ -82,31 +83,35 @@ export default async function AdminPage() {
               insumos={insumos ?? []}
               products={products ?? []}
               productInsumos={productInsumos ?? []}
+              canWrite={canWrite}
             />
             <Separator />
             <EnvasadoInsumosPanel
               insumos={envasadoInsumos ?? []}
               referencias={envasadoReferencias ?? []}
               referenciaInsumos={envasadoReferenciaInsumos ?? []}
+              canWrite={canWrite}
             />
             <Separator />
-            <TanquesPanel tanques={tanques ?? []} />
+            <TanquesPanel tanques={tanques ?? []} canWrite={canWrite} />
           </div>
         </TabsContent>
         <TabsContent value="envasado">
           <EnvasadoReferenciasPanel
             referencias={envasadoReferencias ?? []}
             products={products ?? []}
+            canWrite={canWrite}
           />
         </TabsContent>
         <TabsContent value="turnos">
-          <TurnosPanel turnos={turnos ?? []} />
+          <TurnosPanel turnos={turnos ?? []} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="usuarios">
           <UsersPanel
             profiles={profiles ?? []}
             currentUserId={profile.id}
             emailsById={emailsById}
+            canWrite={canWrite}
           />
         </TabsContent>
       </Tabs>

@@ -98,23 +98,31 @@ function TurnoForm({
   );
 }
 
-export function TurnosPanel({ turnos }: { turnos: Turno[] }) {
+export function TurnosPanel({
+  turnos,
+  canWrite = true,
+}: {
+  turnos: Turno[];
+  canWrite?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Turno | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Nuevo turno
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            Nuevo turno
+          </Button>
+        </div>
+      )}
 
       <Table>
         <TableHeader>
@@ -138,16 +146,18 @@ export function TurnosPanel({ turnos }: { turnos: Turno[] }) {
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(turno);
-                    setOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
+                {canWrite && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(turno);
+                      setOpen(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

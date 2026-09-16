@@ -6,7 +6,7 @@ import { ImportEnvasadoDialog } from "./import-envasado-dialog";
 import { ProgramCard } from "./program-card";
 
 export default async function ProgramaPage() {
-  const profile = await requireRole(["jefe_planta", "supervisor", "planeacion"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "planeacion", "asistente_adm"]);
   const supabase = await createClient();
 
   const [

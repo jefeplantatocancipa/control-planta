@@ -13,7 +13,7 @@ import {
 import { OperarioBarChart } from "./operario-bar-chart";
 
 export default async function EstadisticasPage() {
-  await requireRole(["jefe_planta", "supervisor"]);
+  await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
   const supabase = await createClient();
 
   const [

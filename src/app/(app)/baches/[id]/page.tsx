@@ -21,7 +21,7 @@ export default async function BacheDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const profile = await requireRole(["jefe_planta", "supervisor", "calidad"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "calidad", "asistente_adm"]);
   const { id } = await params;
   const supabase = await createClient();
 

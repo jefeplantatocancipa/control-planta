@@ -136,9 +136,11 @@ function ReferenciaForm({
 export function EnvasadoReferenciasPanel({
   referencias,
   products,
+  canWrite = true,
 }: {
   referencias: Referencia[];
   products: Product[];
+  canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Referencia | null>(null);
@@ -146,17 +148,19 @@ export function EnvasadoReferenciasPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Nueva referencia
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            Nueva referencia
+          </Button>
+        </div>
+      )}
 
       <Table>
         <TableHeader>
@@ -184,16 +188,18 @@ export function EnvasadoReferenciasPanel({
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(referencia);
-                    setOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
+                {canWrite && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(referencia);
+                      setOpen(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

@@ -42,7 +42,7 @@ function aggregate(
 }
 
 export default async function CumplimientoPage() {
-  await requireRole(["jefe_planta", "supervisor"]);
+  await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
   const supabase = await createClient();
 
   const { data } = await supabase
