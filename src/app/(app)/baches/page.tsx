@@ -69,24 +69,24 @@ export default async function BachesPage() {
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
   const orderById = new Map((allOrders ?? []).map((o) => [o.id, o]));
 
-  // Solo se ofrecen para asociar las órdenes pendientes/en proceso del
-  // mismo producto que el bache, para no permitir un cruce por error.
-  function orderOptionsFor(productId: string) {
-    return (orders ?? [])
-      .filter((order) => order.product_id === productId)
-      .map((order) => {
-        const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
-        const cantidad = order.baches_planeados
-          ? `${order.baches_planeados} baches`
-          : order.planned_quantity
-            ? `${order.planned_quantity} ${order.unit}`
-            : null;
-        return {
-          id: order.id,
-          label: [fecha, cantidad, order.orden_codigo].filter(Boolean).join(" — "),
-        };
-      });
-  }
+  // Se ofrecen todas las órdenes pendientes/en proceso (no solo las del
+  // mismo producto del bache): filtrar por product_id puede dejar afuera la
+  // orden correcta si hay productos duplicados con el mismo nombre pero
+  // distinto id. El nombre del producto va en la etiqueta para elegir bien.
+  const orderOptions = (orders ?? []).map((order) => {
+    const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
+    const cantidad = order.baches_planeados
+      ? `${order.baches_planeados} baches`
+      : order.planned_quantity
+        ? `${order.planned_quantity} ${order.unit}`
+        : null;
+    return {
+      id: order.id,
+      label: [productNames.get(order.product_id) ?? "—", fecha, cantidad, order.orden_codigo]
+        .filter(Boolean)
+        .join(" — "),
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -143,11 +143,8 @@ export default async function BachesPage() {
                       </div>
                     );
                   })()
-                ) : isJefe && orderOptionsFor(bache.product_id).length > 0 ? (
-                  <AssociateOrderDialog
-                    bacheId={bache.id}
-                    orders={orderOptionsFor(bache.product_id)}
-                  />
+                ) : isJefe && orderOptions.length > 0 ? (
+                  <AssociateOrderDialog bacheId={bache.id} orders={orderOptions} />
                 ) : (
                   <span className="text-muted-foreground">Sin orden asociada</span>
                 )}
