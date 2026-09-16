@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { format } from "date-fns";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { NewBacheDialog } from "./new-bache-dialog";
+import { AssociateOrderDialog } from "./associate-order-dialog";
 import { DeleteButton } from "@/components/delete-button";
 import { deleteBache } from "./actions";
 import { formatDate } from "@/lib/format-date";
@@ -36,6 +38,10 @@ export default async function BachesPage() {
   const profile = await requireRole(["jefe_planta", "supervisor", "calidad", "asistente_adm"]);
   const canDelete = profile.role === "jefe_planta";
   const canWrite = profile.role === "jefe_planta" || profile.role === "supervisor";
+  // Asociar retroactivamente una orden a un bache que quedó suelto queda
+  // exclusivo del jefe de planta -- es una corrección administrativa, no
+  // parte del flujo normal de captura.
+  const isJefe = profile.role === "jefe_planta";
   const supabase = await createClient();
 
   const [{ data: baches }, { data: products }, { data: orders }, { data: allOrders }] =
@@ -62,6 +68,25 @@ export default async function BachesPage() {
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
   const orderById = new Map((allOrders ?? []).map((o) => [o.id, o]));
+
+  // Solo se ofrecen para asociar las órdenes pendientes/en proceso del
+  // mismo producto que el bache, para no permitir un cruce por error.
+  function orderOptionsFor(productId: string) {
+    return (orders ?? [])
+      .filter((order) => order.product_id === productId)
+      .map((order) => {
+        const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
+        const cantidad = order.baches_planeados
+          ? `${order.baches_planeados} baches`
+          : order.planned_quantity
+            ? `${order.planned_quantity} ${order.unit}`
+            : null;
+        return {
+          id: order.id,
+          label: [fecha, cantidad, order.orden_codigo].filter(Boolean).join(" — "),
+        };
+      });
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -118,6 +143,11 @@ export default async function BachesPage() {
                       </div>
                     );
                   })()
+                ) : isJefe && orderOptionsFor(bache.product_id).length > 0 ? (
+                  <AssociateOrderDialog
+                    bacheId={bache.id}
+                    orders={orderOptionsFor(bache.product_id)}
+                  />
                 ) : (
                   <span className="text-muted-foreground">Sin orden asociada</span>
                 )}

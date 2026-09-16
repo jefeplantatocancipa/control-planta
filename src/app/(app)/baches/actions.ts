@@ -153,6 +153,58 @@ export async function updateBacheStatus(
   return { success: true };
 }
 
+const AssociateOrderSchema = z.object({
+  bache_id: z.string().uuid(),
+  production_order_id: z.string().uuid({ message: "Elegí una orden." }),
+});
+
+// Solo el jefe de planta puede ligar retroactivamente un bache que se creó
+// sin orden asociada -- si ya tiene una, no se toca (para eso está el resto
+// del flujo normal, esto es solo para el caso "quedó suelto").
+export async function associateBacheOrder(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = AssociateOrderSchema.safeParse({
+    bache_id: formData.get("bache_id"),
+    production_order_id: formData.get("production_order_id"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: updated, error } = await supabase
+    .from("baches")
+    .update({ production_order_id: parsed.data.production_order_id })
+    .eq("id", parsed.data.bache_id)
+    .is("production_order_id", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { error: "No se pudo asociar la orden." };
+  }
+  if (!updated) {
+    return { error: "Este bache ya tiene una orden asociada." };
+  }
+
+  // Misma regla que al crear un bache: la orden pasa a "en proceso" en
+  // cuanto queda un bache ligado a ella, salvo que ya se haya tocado a mano.
+  await supabase
+    .from("production_orders")
+    .update({ status: "en_proceso" })
+    .eq("id", parsed.data.production_order_id)
+    .eq("status", "pendiente");
+
+  revalidatePath("/baches");
+  revalidatePath("/programa");
+  return { success: true };
+}
+
 const DeleteBacheSchema = z.object({ id: z.string().uuid() });
 
 export async function deleteBache(
