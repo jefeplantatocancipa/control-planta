@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ProductsPanel } from "./products-panel";
@@ -41,6 +42,14 @@ export default async function AdminPage() {
     supabase.from("turnos").select("*").order("hora_inicio"),
     supabase.from("tanques").select("*").order("name"),
   ]);
+
+  // El correo de login vive en auth.users, no en profiles -- hace falta el
+  // cliente admin (service role) para poder listarlo por usuario.
+  const admin = createAdminClient();
+  const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  const emailsById: Record<string, string | null> = Object.fromEntries(
+    (authUsers?.users ?? []).map((u) => [u.id, u.email ?? null]),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,7 +103,11 @@ export default async function AdminPage() {
           <TurnosPanel turnos={turnos ?? []} />
         </TabsContent>
         <TabsContent value="usuarios">
-          <UsersPanel profiles={profiles ?? []} currentUserId={profile.id} />
+          <UsersPanel
+            profiles={profiles ?? []}
+            currentUserId={profile.id}
+            emailsById={emailsById}
+          />
         </TabsContent>
       </Tabs>
     </div>

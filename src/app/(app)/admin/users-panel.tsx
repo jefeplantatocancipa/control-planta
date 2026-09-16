@@ -43,9 +43,11 @@ const ROLE_LABELS: Record<UserRole, string> = {
 
 function UserForm({
   profile,
+  email,
   onSuccess,
 }: {
   profile: Profile;
+  email: string | null;
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -60,6 +62,11 @@ function UserForm({
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={profile.id} />
+
+      <div className="flex flex-col gap-2">
+        <Label>Correo de acceso</Label>
+        <p className="text-sm text-muted-foreground">{email ?? "Sin correo (operario)"}</p>
+      </div>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="full_name">Nombre</Label>
@@ -240,9 +247,11 @@ function ResetPasswordForm({
 export function UsersPanel({
   profiles,
   currentUserId,
+  emailsById,
 }: {
   profiles: Profile[];
   currentUserId: string;
+  emailsById: Record<string, string | null>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
@@ -328,6 +337,7 @@ export function UsersPanel({
             <UserForm
               key={editing.id}
               profile={editing}
+              email={emailsById[editing.id] ?? null}
               onSuccess={() => setEditOpen(false)}
             />
           )}
