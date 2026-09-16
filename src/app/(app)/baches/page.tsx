@@ -14,6 +14,10 @@ import { NewBacheDialog } from "./new-bache-dialog";
 import { DeleteButton } from "@/components/delete-button";
 import { deleteBache } from "./actions";
 import { formatDate } from "@/lib/format-date";
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_CLASSES,
+} from "../programa/order-status-styles";
 import type { BacheStatus } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -34,7 +38,7 @@ export default async function BachesPage() {
   const canWrite = profile.role === "jefe_planta" || profile.role === "supervisor";
   const supabase = await createClient();
 
-  const [{ data: baches }, { data: products }, { data: orders }] =
+  const [{ data: baches }, { data: products }, { data: orders }, { data: allOrders }] =
     await Promise.all([
       supabase
         .from("baches")
@@ -46,9 +50,18 @@ export default async function BachesPage() {
         .select("*")
         .in("status", ["pendiente", "en_proceso"])
         .order("scheduled_date"),
+      // A diferencia de "orders" (solo pendiente/en_proceso, para el
+      // desplegable de "Nuevo bache"), acá hace falta cualquier estado: un
+      // bache puede estar ligado a una orden ya completada o cancelada, y
+      // igual hay que poder verla para entender por qué el estado de esa
+      // orden no coincide con lo que se ve en Programa.
+      supabase
+        .from("production_orders")
+        .select("id, orden_codigo, status, scheduled_date"),
     ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
+  const orderById = new Map((allOrders ?? []).map((o) => [o.id, o]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,6 +83,7 @@ export default async function BachesPage() {
             <TableHead>Código</TableHead>
             <TableHead>Producto</TableHead>
             <TableHead>Volumen</TableHead>
+            <TableHead>Orden de trabajo</TableHead>
             <TableHead>Iniciado</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
@@ -85,6 +99,28 @@ export default async function BachesPage() {
                 {bache.volumen_total_litros
                   ? `${bache.volumen_total_litros} L`
                   : "—"}
+              </TableCell>
+              <TableCell>
+                {bache.production_order_id ? (
+                  (() => {
+                    const order = orderById.get(bache.production_order_id);
+                    return (
+                      <div className="flex flex-col gap-1">
+                        <span>{order?.orden_codigo || "Sin código"}</span>
+                        {order && (
+                          <Badge
+                            variant="outline"
+                            className={`w-fit text-xs ${ORDER_STATUS_CLASSES[order.status]}`}
+                          >
+                            {ORDER_STATUS_LABELS[order.status]}
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <span className="text-muted-foreground">Sin orden asociada</span>
+                )}
               </TableCell>
               <TableCell>
                 {formatDate(bache.started_at)}
@@ -117,7 +153,7 @@ export default async function BachesPage() {
           {(baches ?? []).length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={canDelete ? 7 : 6}
+                colSpan={canDelete ? 8 : 7}
                 className="text-center text-muted-foreground"
               >
                 Sin baches todavía.
