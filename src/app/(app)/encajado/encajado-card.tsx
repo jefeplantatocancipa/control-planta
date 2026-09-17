@@ -20,6 +20,7 @@ export interface EstibaDisplay {
   id: string;
   inicioEstiba: string;
   finalEstiba: string | null;
+  cajasPorEstiba: number | null;
 }
 
 export interface EncajadoDisplay {
@@ -91,9 +92,22 @@ function FinalizarEstibaForm({ estibaId }: { estibaId: string }) {
   );
 
   return (
-    <form action={action} className="flex flex-col gap-2">
+    <form action={action} className="flex items-end gap-2">
       <input type="hidden" name="estiba_id" value={estibaId} />
-      <Button type="submit" size="sm" disabled={pending} className="self-start">
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs font-normal text-muted-foreground">
+          Cajas de esta estiba
+        </Label>
+        <Input
+          name="cajas_por_estiba"
+          type="number"
+          step="1"
+          min="1"
+          className="w-32"
+          required
+        />
+      </div>
+      <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Guardando..." : "Finalizar estiba"}
       </Button>
       {state.error && (
@@ -136,6 +150,7 @@ function EstibasList({ estibas }: { estibas: EstibaDisplay[] }) {
         <tr className="border-b text-left text-muted-foreground">
           <th className="py-1 pr-3 font-normal">Inicio</th>
           <th className="py-1 pr-3 font-normal">Final</th>
+          <th className="py-1 pr-3 font-normal">Cajas</th>
         </tr>
       </thead>
       <tbody>
@@ -145,6 +160,7 @@ function EstibasList({ estibas }: { estibas: EstibaDisplay[] }) {
             <td className="py-1 pr-3">
               {e.finalEstiba ? formatTime(e.finalEstiba) : "En curso"}
             </td>
+            <td className="py-1 pr-3">{e.cajasPorEstiba ?? "—"}</td>
           </tr>
         ))}
       </tbody>
@@ -166,6 +182,7 @@ export function EncajadoCard({
   canExecute = true,
 }: EncajadoDisplay) {
   const estibaAbierta = estibas.find((e) => !e.finalEstiba);
+  const totalCajas = estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0);
 
   return (
     <Card>
@@ -200,7 +217,14 @@ export function EncajadoCard({
             </p>
 
             <div className="flex flex-col gap-2">
-              <Label className="text-xs font-normal text-muted-foreground">Estibas</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-normal text-muted-foreground">Estibas</Label>
+                {totalCajas > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Total: <span className="font-medium text-foreground">{totalCajas}</span> cajas
+                  </p>
+                )}
+              </div>
               <EstibasList estibas={estibas} />
               {!endedAt &&
                 canExecute &&

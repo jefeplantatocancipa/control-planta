@@ -44,6 +44,7 @@ export default async function EncajadoPage() {
       id: estiba.id,
       inicioEstiba: estiba.inicio_estiba,
       finalEstiba: estiba.final_estiba,
+      cajasPorEstiba: estiba.cajas_por_estiba,
     });
     estibasByEncajado.set(estiba.encajado_id, list);
   }
@@ -120,6 +121,7 @@ export default async function EncajadoPage() {
               <TableHead>Fecha de envasado</TableHead>
               <TableHead>Unidades envasadas</TableHead>
               <TableHead>Estibas</TableHead>
+              <TableHead>Cajas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
               {canDelete && <TableHead className="sticky right-0 bg-background" />}
@@ -134,6 +136,9 @@ export default async function EncajadoPage() {
                 <TableCell>{c.fechaEnvasado ? formatDate(c.fechaEnvasado) : "—"}</TableCell>
                 <TableCell>{c.unidadesEnvasadas}</TableCell>
                 <TableCell>{c.estibas.length}</TableCell>
+                <TableCell>
+                  {c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0)}
+                </TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
                 {canDelete && (
@@ -151,7 +156,7 @@ export default async function EncajadoPage() {
             {finalizados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canDelete ? 9 : 8}
+                  colSpan={canDelete ? 10 : 9}
                   className="text-center text-muted-foreground"
                 >
                   Sin encajados finalizados todavía.

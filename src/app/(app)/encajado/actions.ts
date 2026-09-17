@@ -112,22 +112,36 @@ export async function iniciarEstibaEncajado(
   return { success: true };
 }
 
+const FinalizarEstibaSchema = z.object({
+  estiba_id: z.string().uuid(),
+  cajas_por_estiba: z.coerce
+    .number()
+    .int()
+    .positive("Las cajas deben ser mayores a 0."),
+});
+
 export async function finalizarEstibaEncajado(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["jefe_planta", "supervisor"]);
 
-  const parsed = IdSchema.safeParse({ id: formData.get("estiba_id") });
+  const parsed = FinalizarEstibaSchema.safeParse({
+    estiba_id: formData.get("estiba_id"),
+    cajas_por_estiba: formData.get("cajas_por_estiba"),
+  });
   if (!parsed.success) {
-    return { error: "Datos inválidos." };
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("encajado_estibas")
-    .update({ final_estiba: new Date().toISOString() })
-    .eq("id", parsed.data.id);
+    .update({
+      final_estiba: new Date().toISOString(),
+      cajas_por_estiba: parsed.data.cajas_por_estiba,
+    })
+    .eq("id", parsed.data.estiba_id);
 
   if (error) {
     return { error: "No se pudo finalizar la estiba." };

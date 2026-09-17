@@ -695,6 +695,7 @@ export interface Database {
           encajado_id: string;
           inicio_estiba: string;
           final_estiba: string | null;
+          cajas_por_estiba: number | null;
           created_by: string;
           created_at: string;
         };
@@ -702,6 +703,7 @@ export interface Database {
           encajado_id: string;
           inicio_estiba?: string;
           final_estiba?: string | null;
+          cajas_por_estiba?: number | null;
           created_by: string;
         };
         Update: Partial<
