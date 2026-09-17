@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { addDays, addMonths, endOfMonth, format, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Beaker, ChevronLeft, ChevronRight, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,28 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fridayOfWeek } from "../programa/excel-utils";
+
+type Accent = "bases" | "envasado";
+
+const ACCENT: Record<Accent, { icon: typeof Beaker; color: string; label: string }> = {
+  bases: { icon: Beaker, color: "var(--chart-1)", label: "Bases (baches)" },
+  envasado: { icon: Package, color: "var(--chart-4)", label: "Envasado" },
+};
+
+function AccentTitle({ accent }: { accent: Accent }) {
+  const { icon: Icon, color, label } = ACCENT[accent];
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="flex size-7 shrink-0 items-center justify-center rounded-md"
+        style={{ backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`, color }}
+      >
+        <Icon className="size-4" />
+      </span>
+      <span style={{ color }}>{label}</span>
+    </div>
+  );
+}
 
 export interface CumplimientoRow {
   id: string;
@@ -81,11 +103,11 @@ function aggregateByProduct(rows: CumplimientoRow[]): Aggregated[] {
 }
 
 function ResumenTable({
-  title,
+  accent,
   rows,
   emptyLabel,
 }: {
-  title: string;
+  accent: Accent;
   rows: CumplimientoRow[];
   emptyLabel: string;
 }) {
@@ -95,9 +117,11 @@ function ResumenTable({
   const totalDiff = totalExecuted - totalPlanned;
 
   return (
-    <Card>
+    <Card className="border-t-4" style={{ borderTopColor: ACCENT[accent].color }}>
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-base">
+          <AccentTitle accent={accent} />
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
@@ -204,12 +228,12 @@ function buildWeekGrid(rows: CumplimientoRow[], days: string[]): WeekProductRow[
 }
 
 function SemanaGrid({
-  title,
+  accent,
   rows,
   weekStart,
   emptyLabel,
 }: {
-  title: string;
+  accent: Accent;
   rows: CumplimientoRow[];
   weekStart: string;
   emptyLabel: string;
@@ -222,9 +246,11 @@ function SemanaGrid({
   const colSpan = days.length + 2;
 
   return (
-    <Card>
+    <Card className="border-t-4" style={{ borderTopColor: ACCENT[accent].color }}>
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-base">
+          <AccentTitle accent={accent} />
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
@@ -394,13 +420,13 @@ export function ConsolidadoCumplimiento({
       {mode === "semana" ? (
         <>
           <SemanaGrid
-            title="Bases (baches)"
+            accent="bases"
             rows={bachesInRange}
             weekStart={periodRange.start}
             emptyLabel={`Sin baches programados ${emptySuffix}.`}
           />
           <SemanaGrid
-            title="Envasado"
+            accent="envasado"
             rows={envasadoInRange}
             weekStart={periodRange.start}
             emptyLabel={`Sin envasado programado ${emptySuffix}.`}
@@ -409,12 +435,12 @@ export function ConsolidadoCumplimiento({
       ) : (
         <>
           <ResumenTable
-            title="Bases (baches)"
+            accent="bases"
             rows={bachesInRange}
             emptyLabel={`Sin baches programados ${emptySuffix}.`}
           />
           <ResumenTable
-            title="Envasado"
+            accent="envasado"
             rows={envasadoInRange}
             emptyLabel={`Sin envasado programado ${emptySuffix}.`}
           />

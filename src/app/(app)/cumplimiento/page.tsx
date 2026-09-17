@@ -7,15 +7,18 @@ export default async function CumplimientoPage() {
   const supabase = await createClient();
 
   const [
+    { data: productionOrdersData },
+    { data: productsData },
     { data: bachesData },
     { data: envasadoOrdersData },
     { data: envasadoReferenciasData },
     { data: envasadosData },
   ] = await Promise.all([
     supabase
-      .from("v_cumplimiento_programa")
-      .select("*")
-      .order("scheduled_date", { ascending: false }),
+      .from("production_orders")
+      .select("product_id, scheduled_date, baches_planeados, planned_quantity"),
+    supabase.from("products").select("id, name"),
+    supabase.from("baches").select("product_id, started_at, status"),
     supabase
       .from("envasado_orders")
       .select("id, referencia_id, scheduled_date, planned_quantity")
@@ -24,14 +27,43 @@ export default async function CumplimientoPage() {
     supabase.from("envasados").select("referencia_id, presentacion, cantidad_unidades, started_at"),
   ]);
 
-  const bachesRows: CumplimientoRow[] = (bachesData ?? []).map((r) => ({
-    id: r.product_id,
-    name: r.product_name,
-    scheduled_date: r.scheduled_date,
-    planned: r.planned_quantity,
-    executed: r.executed_quantity,
-    unit: r.unit,
-  }));
+  // "Bases (baches)": la vista v_cumplimiento_programa medía lo ejecutado
+  // por unidades ENVASADAS (por eso un producto que no se envasa, como
+  // Cremado, siempre daba 0) y lo programado casi nunca se llenaba porque
+  // el importador de Excel de baches guarda el plan en "baches_planeados",
+  // no en "planned_quantity" (ese campo es el que usa la orden de
+  // envasado). Acá se mide directamente en baches: programados
+  // (baches_planeados, con planned_quantity como respaldo si no está) vs.
+  // baches reales creados, contados por su propia fecha de inicio.
+  const productNameById = new Map((productsData ?? []).map((p) => [p.id, p.name]));
+
+  const bachesPlanRows: CumplimientoRow[] = (productionOrdersData ?? [])
+    .map((o) => {
+      const planned = o.baches_planeados ?? o.planned_quantity ?? 0;
+      if (planned <= 0) return null;
+      return {
+        id: o.product_id,
+        name: productNameById.get(o.product_id) ?? "Producto eliminado",
+        scheduled_date: o.scheduled_date,
+        planned,
+        executed: 0,
+        unit: "baches",
+      } satisfies CumplimientoRow;
+    })
+    .filter((r): r is CumplimientoRow => r !== null);
+
+  const bachesExecutedRows: CumplimientoRow[] = (bachesData ?? [])
+    .filter((b) => b.status !== "cancelado")
+    .map((b) => ({
+      id: b.product_id,
+      name: productNameById.get(b.product_id) ?? "Producto eliminado",
+      scheduled_date: b.started_at.slice(0, 10),
+      planned: 0,
+      executed: 1,
+      unit: "baches",
+    }));
+
+  const bachesRows: CumplimientoRow[] = [...bachesPlanRows, ...bachesExecutedRows];
 
   // El "ejecutado" de envasado se cuenta por la fecha real en que se hizo
   // (started_at), no por la fecha programada de la orden -- una orden
