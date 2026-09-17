@@ -10,15 +10,20 @@ export default async function CumplimientoPage() {
     { data: productionOrdersData },
     { data: productsData },
     { data: bachesData },
+    { data: consumoMateriaPrima },
     { data: envasadoOrdersData },
     { data: envasadoReferenciasData },
     { data: envasadosData },
   ] = await Promise.all([
+    supabase.from("production_orders").select("product_id, scheduled_date, baches_planeados"),
+    supabase.from("products").select("id, name, volumen_por_bache"),
+    supabase.from("baches").select("id, product_id"),
     supabase
-      .from("production_orders")
-      .select("product_id, scheduled_date, baches_planeados, planned_quantity"),
-    supabase.from("products").select("id, name"),
-    supabase.from("baches").select("product_id, started_at, status"),
+      .from("inventario_movimientos")
+      .select("cantidad, created_at, origen_id")
+      .eq("insumo_tipo", "materia_prima")
+      .eq("tipo", "consumo")
+      .eq("origen_tipo", "bache"),
     supabase
       .from("envasado_orders")
       .select("id, referencia_id, scheduled_date, planned_quantity")
@@ -27,41 +32,46 @@ export default async function CumplimientoPage() {
     supabase.from("envasados").select("referencia_id, presentacion, cantidad_unidades, started_at"),
   ]);
 
-  // "Bases (baches)": la vista v_cumplimiento_programa medía lo ejecutado
-  // por unidades ENVASADAS (por eso un producto que no se envasa, como
-  // Cremado, siempre daba 0) y lo programado casi nunca se llenaba porque
-  // el importador de Excel de baches guarda el plan en "baches_planeados",
-  // no en "planned_quantity" (ese campo es el que usa la orden de
-  // envasado). Acá se mide directamente en baches: programados
-  // (baches_planeados, con planned_quantity como respaldo si no está) vs.
-  // baches reales creados, contados por su propia fecha de inicio.
+  // "Bases (baches)" en kilos: la vista v_cumplimiento_programa medía lo
+  // ejecutado por unidades ENVASADAS (por eso Cremado, que no se envasa,
+  // siempre daba 0) y no había forma de verlo en kilos. Programado se
+  // estima con baches_planeados x volumen por bache del producto (litros
+  // ~ kg); ejecutado se toma del mismo consumo real de materia prima que
+  // ya usa Estadísticas (registrado al cerrar la última etapa con
+  // checklist de insumos de cada bache), por su fecha real.
   const productNameById = new Map((productsData ?? []).map((p) => [p.id, p.name]));
+  const productVolumenById = new Map((productsData ?? []).map((p) => [p.id, p.volumen_por_bache]));
+  const bacheProductById = new Map((bachesData ?? []).map((b) => [b.id, b.product_id]));
 
   const bachesPlanRows: CumplimientoRow[] = (productionOrdersData ?? [])
     .map((o) => {
-      const planned = o.baches_planeados ?? o.planned_quantity ?? 0;
-      if (planned <= 0) return null;
+      const volumenPorBache = productVolumenById.get(o.product_id);
+      if (!o.baches_planeados || !volumenPorBache) return null;
       return {
         id: o.product_id,
         name: productNameById.get(o.product_id) ?? "Producto eliminado",
         scheduled_date: o.scheduled_date,
-        planned,
+        planned: Math.round(o.baches_planeados * volumenPorBache * 10) / 10,
         executed: 0,
-        unit: "baches",
+        unit: "kg",
       } satisfies CumplimientoRow;
     })
     .filter((r): r is CumplimientoRow => r !== null);
 
-  const bachesExecutedRows: CumplimientoRow[] = (bachesData ?? [])
-    .filter((b) => b.status !== "cancelado")
-    .map((b) => ({
-      id: b.product_id,
-      name: productNameById.get(b.product_id) ?? "Producto eliminado",
-      scheduled_date: b.started_at.slice(0, 10),
-      planned: 0,
-      executed: 1,
-      unit: "baches",
-    }));
+  const bachesExecutedRows: CumplimientoRow[] = (consumoMateriaPrima ?? [])
+    .map((m) => {
+      const productId = m.origen_id ? bacheProductById.get(m.origen_id) : undefined;
+      if (!productId) return null;
+      return {
+        id: productId,
+        name: productNameById.get(productId) ?? "Producto eliminado",
+        scheduled_date: m.created_at.slice(0, 10),
+        planned: 0,
+        executed: Math.round(Math.abs(m.cantidad) * 10) / 10,
+        unit: "kg",
+      } satisfies CumplimientoRow;
+    })
+    .filter((r): r is CumplimientoRow => r !== null);
 
   const bachesRows: CumplimientoRow[] = [...bachesPlanRows, ...bachesExecutedRows];
 
