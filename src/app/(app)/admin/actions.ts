@@ -946,6 +946,108 @@ const InventarioCategoriaSchema = z.object({
   tabla_destino: z.enum(["materia_prima", "empaque", "vaso_blanco", "generico"]),
 });
 
+// Cuando una categoría deja de ser "solo stock" (genérico) y pasa a
+// alimentar materia prima, empaque o vaso blanco, los ítems que ya se
+// habían importado bajo esa categoría quedaron guardados en el catálogo
+// genérico (inventario_items) -- hay que moverlos al catálogo correcto
+// para que aparezcan en recetas, sin perder su historial de movimientos.
+async function migrarItemsGenericos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  categoriaId: string,
+  tablaDestino: "materia_prima" | "empaque" | "vaso_blanco",
+) {
+  const { data: items } = await supabase
+    .from("inventario_items")
+    .select("*")
+    .eq("categoria_id", categoriaId);
+  if (!items || items.length === 0) return;
+
+  for (const item of items) {
+    let nuevoId: string | null = null;
+
+    if (tablaDestino === "materia_prima") {
+      const existing = item.codigo
+        ? await supabase.from("insumos").select("id").eq("codigo", item.codigo).maybeSingle()
+        : { data: null };
+      if (existing.data) {
+        nuevoId = existing.data.id;
+      } else {
+        const { data: created } = await supabase
+          .from("insumos")
+          .insert({
+            name: item.name,
+            codigo: item.codigo,
+            categoria_id: categoriaId,
+            stock_minimo: item.stock_minimo,
+            active: item.active,
+          })
+          .select("id")
+          .single();
+        nuevoId = created?.id ?? null;
+      }
+    } else if (tablaDestino === "empaque") {
+      const existing = item.codigo
+        ? await supabase
+            .from("envasado_insumos")
+            .select("id")
+            .eq("codigo", item.codigo)
+            .maybeSingle()
+        : { data: null };
+      if (existing.data) {
+        nuevoId = existing.data.id;
+      } else {
+        const { data: created } = await supabase
+          .from("envasado_insumos")
+          .insert({
+            name: item.name,
+            codigo: item.codigo,
+            categoria_id: categoriaId,
+            stock_minimo: item.stock_minimo,
+            active: item.active,
+          })
+          .select("id")
+          .single();
+        nuevoId = created?.id ?? null;
+      }
+    } else {
+      const existing = item.codigo
+        ? await supabase
+            .from("vasos_blancos")
+            .select("id")
+            .eq("codigo", item.codigo)
+            .maybeSingle()
+        : { data: null };
+      if (existing.data) {
+        nuevoId = existing.data.id;
+      } else {
+        const { data: created } = await supabase
+          .from("vasos_blancos")
+          .insert({
+            name: item.name,
+            unit: item.unit,
+            codigo: item.codigo,
+            categoria_id: categoriaId,
+            stock_minimo: item.stock_minimo,
+            active: item.active,
+          })
+          .select("id")
+          .single();
+        nuevoId = created?.id ?? null;
+      }
+    }
+
+    if (!nuevoId) continue;
+
+    await supabase
+      .from("inventario_movimientos")
+      .update({ insumo_tipo: tablaDestino, insumo_id: nuevoId })
+      .eq("insumo_tipo", "generico")
+      .eq("insumo_id", item.id);
+
+    await supabase.from("inventario_items").delete().eq("id", item.id);
+  }
+}
+
 export async function upsertInventarioCategoria(
   _prevState: ActionState,
   formData: FormData,
@@ -964,6 +1066,16 @@ export async function upsertInventarioCategoria(
   const { id, ...values } = parsed.data;
   const supabase = await createClient();
 
+  let tablaAnterior: string | null = null;
+  if (id) {
+    const { data: actual } = await supabase
+      .from("inventario_categorias")
+      .select("tabla_destino")
+      .eq("id", id)
+      .single();
+    tablaAnterior = actual?.tabla_destino ?? null;
+  }
+
   const { error } = id
     ? await supabase.from("inventario_categorias").update(values).eq("id", id)
     : await supabase.from("inventario_categorias").insert(values);
@@ -974,6 +1086,14 @@ export async function upsertInventarioCategoria(
         ? "Ya existe una categoría con ese nombre."
         : "No se pudo guardar la categoría.",
     };
+  }
+
+  if (
+    id &&
+    tablaAnterior === "generico" &&
+    values.tabla_destino !== "generico"
+  ) {
+    await migrarItemsGenericos(supabase, id, values.tabla_destino);
   }
 
   revalidatePath("/admin");
