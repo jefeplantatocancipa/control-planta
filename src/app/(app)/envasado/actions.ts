@@ -134,6 +134,21 @@ export async function startEnvasado(
     };
   }
 
+  // El encajado se habilita desde que arranca el envasado (no recién al
+  // cerrarlo): así se puede ir encajando lo que ya salió mientras el
+  // envasado sigue en curso. Arranca "pendiente" (sin started_at) hasta que
+  // alguien lo inicia desde /encajado.
+  const { error: encajadoError } = await supabase.from("encajados").insert({
+    envasado_id: created.id,
+    bache_id: parsed.data.bache_id,
+    created_by: profile.id,
+  });
+  if (encajadoError) {
+    return {
+      error: "El envasado se inició, pero no se pudo generar el encajado. Avisá para revisarlo.",
+    };
+  }
+
   // Una vez que la orden de envasado se usó, deja de estar disponible para
   // elegir en un nuevo "Iniciar envasado".
   if (parsed.data.envasado_order_id) {
@@ -145,6 +160,7 @@ export async function startEnvasado(
 
   revalidatePath("/envasado");
   revalidatePath("/programa");
+  revalidatePath("/encajado");
   return { success: true };
 }
 
@@ -296,22 +312,6 @@ export async function finalizarEnvasado(
       .from("envasado_orders")
       .update({ status: "completado" })
       .eq("id", envasado.envasado_order_id);
-  }
-
-  // El encajado no tiene programa propio: se crea automáticamente acá, al
-  // cerrar el envasado, y arranca "pendiente" (sin started_at) hasta que
-  // alguien lo inicia desde /encajado. Va al final porque lo importante
-  // (cerrar el envasado, actualizar bache y orden) ya se guardó arriba.
-  const { error: encajadoError } = await supabase.from("encajados").insert({
-    envasado_id: parsed.data.record_id,
-    bache_id: envasado.bache_id,
-    created_by: profile.id,
-  });
-  if (encajadoError) {
-    return {
-      error:
-        "El envasado se finalizó, pero no se pudo generar el encajado. Avisá para revisarlo.",
-    };
   }
 
   revalidatePath("/envasado");

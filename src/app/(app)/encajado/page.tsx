@@ -112,8 +112,9 @@ export default async function EncajadoPage() {
       <div>
         <h1 className="text-2xl font-semibold">Encajado</h1>
         <p className="text-muted-foreground">
-          Empacar en cajas las unidades ya envasadas. Se genera automáticamente
-          al cerrar cada envasado — no hace falta programarlo a mano.
+          Empacar en cajas lo que se va envasando. Se genera automáticamente
+          apenas arranca cada envasado — no hace falta programarlo a mano, y
+          no hace falta esperar a que termine para empezar a encajar.
         </p>
       </div>
 
