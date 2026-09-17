@@ -10,7 +10,8 @@ export default async function CumplimientoPage() {
     { data: productionOrdersData },
     { data: productsData },
     { data: bachesData },
-    { data: consumoMateriaPrima },
+    { data: stageTemplatesData },
+    { data: stageRecordsData },
     { data: envasadoOrdersData },
     { data: envasadoReferenciasData },
     { data: envasadosData },
@@ -19,11 +20,10 @@ export default async function CumplimientoPage() {
     supabase.from("products").select("id, name, volumen_por_bache"),
     supabase.from("baches").select("id, product_id"),
     supabase
-      .from("inventario_movimientos")
-      .select("cantidad, created_at, origen_id")
-      .eq("insumo_tipo", "materia_prima")
-      .eq("tipo", "consumo")
-      .eq("origen_tipo", "bache"),
+      .from("process_stage_templates")
+      .select("id, product_id, sequence_order, captures_insumos")
+      .eq("active", true),
+    supabase.from("bache_stage_records").select("bache_id, stage_template_id, ended_at, parameters"),
     supabase
       .from("envasado_orders")
       .select("id, referencia_id, scheduled_date, planned_quantity")
@@ -36,12 +36,37 @@ export default async function CumplimientoPage() {
   // ejecutado por unidades ENVASADAS (por eso Cremado, que no se envasa,
   // siempre daba 0) y no había forma de verlo en kilos. Programado se
   // estima con baches_planeados x volumen por bache del producto (litros
-  // ~ kg); ejecutado se toma del mismo consumo real de materia prima que
-  // ya usa Estadísticas (registrado al cerrar la última etapa con
-  // checklist de insumos de cada bache), por su fecha real.
+  // ~ kg). Ejecutado se calcula igual que el balance de masa del reporte
+  // impreso del bache: los kg de insumos de la ÚLTIMA etapa con checklist
+  // de insumos que quedó cerrada -- se lee directo de bache_stage_records
+  // en vez del consumo de inventario, porque ese consumo solo se registró
+  // desde que existe el módulo de Inventario y deja afuera los baches
+  // cerrados antes (o cuando el checklist quedó vacío en esa etapa).
   const productNameById = new Map((productsData ?? []).map((p) => [p.id, p.name]));
   const productVolumenById = new Map((productsData ?? []).map((p) => [p.id, p.volumen_por_bache]));
-  const bacheProductById = new Map((bachesData ?? []).map((b) => [b.id, b.product_id]));
+
+  const stagesByProduct = new Map<string, { id: string; sequence_order: number; captures_insumos: boolean }[]>();
+  const defaultStages: { id: string; sequence_order: number; captures_insumos: boolean }[] = [];
+  for (const s of stageTemplatesData ?? []) {
+    if (s.product_id) {
+      const arr = stagesByProduct.get(s.product_id) ?? [];
+      arr.push(s);
+      stagesByProduct.set(s.product_id, arr);
+    } else {
+      defaultStages.push(s);
+    }
+  }
+  function stagesFor(productId: string) {
+    const own = stagesByProduct.get(productId);
+    return own && own.length > 0 ? own : defaultStages;
+  }
+
+  const recordsByBache = new Map<string, NonNullable<typeof stageRecordsData>>();
+  for (const r of stageRecordsData ?? []) {
+    const arr = recordsByBache.get(r.bache_id) ?? [];
+    arr.push(r);
+    recordsByBache.set(r.bache_id, arr);
+  }
 
   const bachesPlanRows: CumplimientoRow[] = (productionOrdersData ?? [])
     .map((o) => {
@@ -58,20 +83,32 @@ export default async function CumplimientoPage() {
     })
     .filter((r): r is CumplimientoRow => r !== null);
 
-  const bachesExecutedRows: CumplimientoRow[] = (consumoMateriaPrima ?? [])
-    .map((m) => {
-      const productId = m.origen_id ? bacheProductById.get(m.origen_id) : undefined;
-      if (!productId) return null;
-      return {
-        id: productId,
-        name: productNameById.get(productId) ?? "Producto eliminado",
-        scheduled_date: m.created_at.slice(0, 10),
+  const bachesExecutedRows: CumplimientoRow[] = [];
+  for (const bache of bachesData ?? []) {
+    const records = recordsByBache.get(bache.id) ?? [];
+    const stageById = new Map(stagesFor(bache.product_id).map((s) => [s.id, s]));
+    let best: { order: number; kg: number; date: string } | null = null;
+    for (const record of records) {
+      if (!record.ended_at) continue;
+      const stage = stageById.get(record.stage_template_id);
+      if (!stage || !stage.captures_insumos) continue;
+      const insumos = record.parameters?.insumos;
+      if (!Array.isArray(insumos)) continue;
+      if (best && stage.sequence_order <= best.order) continue;
+      const kg = insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0);
+      best = { order: stage.sequence_order, kg, date: record.ended_at.slice(0, 10) };
+    }
+    if (best) {
+      bachesExecutedRows.push({
+        id: bache.product_id,
+        name: productNameById.get(bache.product_id) ?? "Producto eliminado",
+        scheduled_date: best.date,
         planned: 0,
-        executed: Math.round(Math.abs(m.cantidad) * 10) / 10,
+        executed: Math.round(best.kg * 10) / 10,
         unit: "kg",
-      } satisfies CumplimientoRow;
-    })
-    .filter((r): r is CumplimientoRow => r !== null);
+      });
+    }
+  }
 
   const bachesRows: CumplimientoRow[] = [...bachesPlanRows, ...bachesExecutedRows];
 
