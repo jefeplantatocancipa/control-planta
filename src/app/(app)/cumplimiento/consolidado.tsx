@@ -21,24 +21,37 @@ import { fridayOfWeek } from "../programa/excel-utils";
 
 type Accent = "bases" | "envasado";
 
-const ACCENT: Record<Accent, { icon: typeof Beaker; color: string; label: string }> = {
-  bases: { icon: Beaker, color: "var(--chart-1)", label: "Bases (baches)" },
-  envasado: { icon: Package, color: "var(--chart-4)", label: "Envasado" },
+const SECTION_COLOR = "var(--chart-1)";
+
+const ACCENT: Record<Accent, { icon: typeof Beaker; label: string }> = {
+  bases: { icon: Beaker, label: "Bases (baches)" },
+  envasado: { icon: Package, label: "Envasado" },
 };
 
 function AccentTitle({ accent }: { accent: Accent }) {
-  const { icon: Icon, color, label } = ACCENT[accent];
+  const { icon: Icon, label } = ACCENT[accent];
   return (
     <div className="flex items-center gap-2">
       <span
-        className="flex size-7 shrink-0 items-center justify-center rounded-md"
-        style={{ backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`, color }}
+        className="flex size-8 shrink-0 items-center justify-center rounded-md"
+        style={{ backgroundColor: `color-mix(in oklab, ${SECTION_COLOR} 18%, transparent)`, color: SECTION_COLOR }}
       >
-        <Icon className="size-4" />
+        <Icon className="size-5" />
       </span>
-      <span style={{ color }}>{label}</span>
+      <span className="text-xl font-semibold" style={{ color: SECTION_COLOR }}>
+        {label}
+      </span>
     </div>
   );
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function fmt(value: number): string {
+  const rounded = round1(value);
+  return rounded.toLocaleString("es-CO", { maximumFractionDigits: 1 });
 }
 
 export interface CumplimientoRow {
@@ -117,7 +130,7 @@ function ResumenTable({
   const totalDiff = totalExecuted - totalPlanned;
 
   return (
-    <Card className="border-t-4" style={{ borderTopColor: ACCENT[accent].color }}>
+    <Card className="border-t-4" style={{ borderTopColor: SECTION_COLOR }}>
       <CardHeader>
         <CardTitle className="text-base">
           <AccentTitle accent={accent} />
@@ -136,19 +149,19 @@ function ResumenTable({
           </TableHeader>
           <TableBody>
             {aggregated.map((r) => {
-              const diff = r.executed - r.planned;
+              const diff = round1(r.executed - r.planned);
               return (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.name}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {r.planned} {r.unit}
+                    {fmt(r.planned)} {r.unit}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {r.executed} {r.unit}
+                    {fmt(r.executed)} {r.unit}
                   </TableCell>
                   <TableCell className={`text-right tabular-nums ${diffClass(diff)}`}>
                     {diff > 0 ? "+" : ""}
-                    {diff} {r.unit}
+                    {fmt(diff)} {r.unit}
                   </TableCell>
                   <TableCell className="text-right">
                     <Badge variant={pct(r.planned, r.executed) >= 100 ? "default" : "outline"}>
@@ -170,11 +183,11 @@ function ResumenTable({
             <TableFooter>
               <TableRow>
                 <TableCell>Total</TableCell>
-                <TableCell className="text-right tabular-nums">{totalPlanned}</TableCell>
-                <TableCell className="text-right tabular-nums">{totalExecuted}</TableCell>
-                <TableCell className={`text-right tabular-nums ${diffClass(totalDiff)}`}>
+                <TableCell className="text-right tabular-nums">{fmt(totalPlanned)}</TableCell>
+                <TableCell className="text-right tabular-nums">{fmt(totalExecuted)}</TableCell>
+                <TableCell className={`text-right tabular-nums ${diffClass(round1(totalDiff))}`}>
                   {totalDiff > 0 ? "+" : ""}
-                  {totalDiff}
+                  {fmt(totalDiff)}
                 </TableCell>
                 <TableCell className="text-right">
                   <Badge variant={pct(totalPlanned, totalExecuted) >= 100 ? "default" : "outline"}>
@@ -246,7 +259,7 @@ function SemanaGrid({
   const colSpan = days.length + 2;
 
   return (
-    <Card className="border-t-4" style={{ borderTopColor: ACCENT[accent].color }}>
+    <Card className="border-t-4" style={{ borderTopColor: SECTION_COLOR }}>
       <CardHeader>
         <CardTitle className="text-base">
           <AccentTitle accent={accent} />
@@ -282,43 +295,43 @@ function SemanaGrid({
                   <TableCell className="pl-4 text-muted-foreground">Programado</TableCell>
                   {p.cells.map((c, i) => (
                     <TableCell key={i} className="text-right tabular-nums">
-                      {c.planned || "—"}
+                      {c.planned ? fmt(c.planned) : "—"}
                     </TableCell>
                   ))}
                   <TableCell className="text-right tabular-nums font-medium">
-                    {p.totalPlanned}
+                    {fmt(p.totalPlanned)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="pl-4 text-muted-foreground">Ejecutado</TableCell>
                   {p.cells.map((c, i) => (
                     <TableCell key={i} className="text-right tabular-nums">
-                      {c.executed || "—"}
+                      {c.executed ? fmt(c.executed) : "—"}
                     </TableCell>
                   ))}
                   <TableCell className="text-right tabular-nums font-medium">
-                    {p.totalExecuted}
+                    {fmt(p.totalExecuted)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="pl-4 text-muted-foreground">Diferencia</TableCell>
                   {p.cells.map((c, i) => {
-                    const diff = c.executed - c.planned;
+                    const diff = round1(c.executed - c.planned);
                     const empty = c.planned === 0 && c.executed === 0;
                     return (
                       <TableCell
                         key={i}
                         className={`text-right tabular-nums ${empty ? "text-muted-foreground" : diffClass(diff)}`}
                       >
-                        {empty ? "—" : `${diff > 0 ? "+" : ""}${diff}`}
+                        {empty ? "—" : `${diff > 0 ? "+" : ""}${fmt(diff)}`}
                       </TableCell>
                     );
                   })}
                   <TableCell
-                    className={`text-right tabular-nums font-medium ${diffClass(p.totalExecuted - p.totalPlanned)}`}
+                    className={`text-right tabular-nums font-medium ${diffClass(round1(p.totalExecuted - p.totalPlanned))}`}
                   >
                     {p.totalExecuted - p.totalPlanned > 0 ? "+" : ""}
-                    {p.totalExecuted - p.totalPlanned}
+                    {fmt(p.totalExecuted - p.totalPlanned)}
                   </TableCell>
                 </TableRow>
               </Fragment>
