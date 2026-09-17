@@ -92,7 +92,13 @@ export function ImportInventarioCatalogoDialog() {
           <DialogDescription>
             Crea o actualiza materia prima, material de empaque, vasos
             blancos y cualquier otra categoría, según lo que diga la columna
-            Categoría de cada fila.
+            Categoría de cada fila.{" "}
+            <a
+              href="/admin/plantilla-inventario-catalogo"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Descargar plantilla
+            </a>
           </DialogDescription>
         </DialogHeader>
         <ImportInventarioCatalogoForm />

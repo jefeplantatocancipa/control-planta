@@ -90,7 +90,13 @@ export function ImportEntradasDialog() {
           <DialogTitle>Importar ingreso de material desde Excel</DialogTitle>
           <DialogDescription>
             Registra varias entradas de stock de una vez (una compra grande,
-            un cierre de inventario, etc.).
+            un cierre de inventario, etc.).{" "}
+            <a
+              href="/inventario/plantilla-entradas"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Descargar plantilla
+            </a>
           </DialogDescription>
         </DialogHeader>
         <ImportEntradasForm />
