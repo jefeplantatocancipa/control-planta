@@ -14,7 +14,8 @@ export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
 export type BacheStatus = "en_proceso" | "completado" | "cancelado";
 
-export type InventarioInsumoTipo = "materia_prima" | "empaque" | "vaso_blanco";
+export type InventarioInsumoTipo = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
+export type InventarioTablaDestino = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
 export type InventarioMovimientoTipo = "entrada" | "consumo" | "ajuste";
 export type InventarioOrigenTipo = "bache" | "envasado" | "enmangado" | "manual";
 
@@ -107,12 +108,16 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          codigo: string | null;
+          categoria_id: string | null;
           stock_minimo: number | null;
           active: boolean;
           created_at: string;
         };
         Insert: {
           name: string;
+          codigo?: string | null;
+          categoria_id?: string | null;
           stock_minimo?: number | null;
           active?: boolean;
         };
@@ -326,6 +331,8 @@ export interface Database {
           id: string;
           name: string;
           unit: string;
+          codigo: string | null;
+          categoria_id: string | null;
           stock_minimo: number | null;
           active: boolean;
           created_at: string;
@@ -333,6 +340,8 @@ export interface Database {
         Insert: {
           name: string;
           unit?: string;
+          codigo?: string | null;
+          categoria_id?: string | null;
           stock_minimo?: number | null;
           active?: boolean;
         };
@@ -529,6 +538,8 @@ export interface Database {
           name: string;
           presentacion_caja: string | null;
           marca: string | null;
+          codigo: string | null;
+          categoria_id: string | null;
           stock_minimo: number | null;
           active: boolean;
           created_at: string;
@@ -537,6 +548,8 @@ export interface Database {
           name: string;
           presentacion_caja?: string | null;
           marca?: string | null;
+          codigo?: string | null;
+          categoria_id?: string | null;
           stock_minimo?: number | null;
           active?: boolean;
         };
@@ -790,6 +803,7 @@ export interface Database {
           insumo_id: string;
           tipo: InventarioMovimientoTipo;
           cantidad: number;
+          lote: string | null;
           origen_tipo: InventarioOrigenTipo | null;
           origen_id: string | null;
           proveedor: string | null;
@@ -802,6 +816,7 @@ export interface Database {
           insumo_id: string;
           tipo: InventarioMovimientoTipo;
           cantidad: number;
+          lote?: string | null;
           origen_tipo?: InventarioOrigenTipo | null;
           origen_id?: string | null;
           proveedor?: string | null;
@@ -810,6 +825,46 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["inventario_movimientos"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      inventario_categorias: {
+        Row: {
+          id: string;
+          nombre: string;
+          tabla_destino: InventarioTablaDestino;
+          created_at: string;
+        };
+        Insert: {
+          nombre: string;
+          tabla_destino?: InventarioTablaDestino;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["inventario_categorias"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      inventario_items: {
+        Row: {
+          id: string;
+          codigo: string | null;
+          name: string;
+          unit: string;
+          categoria_id: string | null;
+          stock_minimo: number | null;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          codigo?: string | null;
+          name: string;
+          unit?: string;
+          categoria_id?: string | null;
+          stock_minimo?: number | null;
+          active?: boolean;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["inventario_items"]["Insert"]
         >;
         Relationships: [];
       };
@@ -877,8 +932,19 @@ export interface Database {
           insumo_tipo: InventarioInsumoTipo;
           insumo_id: string;
           name: string;
+          codigo: string | null;
+          categoria_id: string | null;
           stock_minimo: number | null;
           stock_actual: number;
+        };
+        Relationships: [];
+      };
+      v_inventario_catalogo: {
+        Row: {
+          insumo_tipo: InventarioInsumoTipo;
+          insumo_id: string;
+          codigo: string | null;
+          name: string;
         };
         Relationships: [];
       };

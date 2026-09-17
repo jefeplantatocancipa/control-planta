@@ -32,6 +32,7 @@ const TIPO_LABELS: Record<InventarioInsumoTipo, string> = {
   materia_prima: "Materia prima",
   empaque: "Material de empaque",
   vaso_blanco: "Vaso blanco",
+  generico: "Otro (aseo, etc.)",
 };
 
 function MovimientoForm({
@@ -129,10 +130,20 @@ function MovimientoForm({
       </div>
 
       {mode === "entrada" && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="proveedor">Proveedor</Label>
-          <Input id="proveedor" name="proveedor" placeholder="Opcional" />
-        </div>
+        <>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="lote">Lote</Label>
+            <Input id="lote" name="lote" placeholder="Opcional" />
+            <p className="text-xs text-muted-foreground">
+              El mismo insumo puede tener varios lotes con saldo propio al
+              mismo tiempo.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="proveedor">Proveedor</Label>
+            <Input id="proveedor" name="proveedor" placeholder="Opcional" />
+          </div>
+        </>
       )}
 
       <div className="flex flex-col gap-2">

@@ -223,7 +223,7 @@ export async function finalizarEnvasado(
   // cerrar el envasado (así queda el consumo real: inicial - final).
   const { data: usosDelEnvasado } = await supabase
     .from("envasado_insumos_uso")
-    .select("id, envasado_insumo_id, inventario_inicial")
+    .select("id, envasado_insumo_id, inventario_inicial, lote")
     .eq("envasado_id", parsed.data.record_id);
 
   const finalById = new Map(
@@ -267,6 +267,7 @@ export async function finalizarEnvasado(
         insumo_id: uso.envasado_insumo_id,
         tipo: "consumo" as const,
         cantidad: -consumo,
+        lote: uso.lote || null,
         origen_tipo: "envasado" as const,
         origen_id: parsed.data.record_id,
         created_by: profile.id,

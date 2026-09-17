@@ -11,6 +11,8 @@ import { TanquesPanel } from "./tanques-panel";
 import { EnvasadoReferenciasPanel } from "./envasado-referencias-panel";
 import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
 import { TurnosPanel } from "./turnos-panel";
+import { InventarioCategoriasPanel } from "./inventario-categorias-panel";
+import { ImportInventarioCatalogoDialog } from "./import-inventario-catalogo-dialog";
 
 export default async function AdminPage() {
   const profile = await requireRole(["jefe_planta", "asistente_adm"]);
@@ -28,6 +30,7 @@ export default async function AdminPage() {
     { data: envasadoReferenciaInsumos },
     { data: turnos },
     { data: tanques },
+    { data: inventarioCategorias },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
     supabase
@@ -42,6 +45,7 @@ export default async function AdminPage() {
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").order("hora_inicio"),
     supabase.from("tanques").select("*").order("name"),
+    supabase.from("inventario_categorias").select("*").order("nombre"),
   ]);
 
   // El correo de login vive en auth.users, no en profiles -- hace falta el
@@ -69,6 +73,7 @@ export default async function AdminPage() {
           <TabsTrigger value="insumos">Insumos</TabsTrigger>
           <TabsTrigger value="envasado">Envasado</TabsTrigger>
           <TabsTrigger value="turnos">Turnos</TabsTrigger>
+          <TabsTrigger value="inventario">Inventario</TabsTrigger>
           <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
         </TabsList>
         <TabsContent value="productos">
@@ -105,6 +110,17 @@ export default async function AdminPage() {
         </TabsContent>
         <TabsContent value="turnos">
           <TurnosPanel turnos={turnos ?? []} canWrite={canWrite} />
+        </TabsContent>
+        <TabsContent value="inventario" className="flex flex-col gap-4">
+          {canWrite && (
+            <div className="flex justify-end">
+              <ImportInventarioCatalogoDialog />
+            </div>
+          )}
+          <InventarioCategoriasPanel
+            categorias={inventarioCategorias ?? []}
+            canWrite={canWrite}
+          />
         </TabsContent>
         <TabsContent value="usuarios">
           <UsersPanel

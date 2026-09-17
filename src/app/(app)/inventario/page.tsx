@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MovimientoDialog } from "./movimiento-dialog";
+import { ImportEntradasDialog } from "./import-entradas-dialog";
 import { formatDateTime } from "@/lib/format-date";
 import type { InventarioInsumoTipo } from "@/lib/supabase/types";
 
@@ -17,6 +18,7 @@ const TIPO_LABELS: Record<InventarioInsumoTipo, string> = {
   materia_prima: "Materia prima",
   empaque: "Material de empaque",
   vaso_blanco: "Vasos blancos",
+  generico: "Otros (aseo, etc.)",
 };
 
 const MOVIMIENTO_TIPO_LABELS: Record<string, string> = {
@@ -35,9 +37,11 @@ const ORIGEN_LABELS: Record<string, string> = {
 function StockTable({
   title,
   rows,
+  lotesByInsumo,
 }: {
   title: string;
-  rows: { insumo_id: string; name: string; stock_minimo: number | null; stock_actual: number }[];
+  rows: { insumo_id: string; name: string; codigo: string | null; stock_minimo: number | null; stock_actual: number }[];
+  lotesByInsumo: Map<string, { lote: string; saldo: number }[]>;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -47,6 +51,7 @@ function StockTable({
           <TableRow>
             <TableHead>Nombre</TableHead>
             <TableHead>Stock actual</TableHead>
+            <TableHead>Por lote</TableHead>
             <TableHead>Mínimo</TableHead>
             <TableHead />
           </TableRow>
@@ -54,13 +59,24 @@ function StockTable({
         <TableBody>
           {rows.map((row) => {
             const bajoMinimo = row.stock_minimo !== null && row.stock_actual < row.stock_minimo;
+            const lotes = lotesByInsumo.get(row.insumo_id) ?? [];
             return (
               <TableRow key={row.insumo_id}>
-                <TableCell className="font-medium">{row.name}</TableCell>
+                <TableCell className="font-medium">
+                  {row.name}
+                  {row.codigo && (
+                    <span className="ml-1 text-xs text-muted-foreground">({row.codigo})</span>
+                  )}
+                </TableCell>
                 <TableCell
                   className={bajoMinimo ? "font-semibold text-destructive" : undefined}
                 >
                   {row.stock_actual}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {lotes.length > 0
+                    ? lotes.map((l) => `${l.lote}: ${l.saldo}`).join(" · ")
+                    : "—"}
                 </TableCell>
                 <TableCell>{row.stock_minimo ?? "—"}</TableCell>
                 <TableCell className="text-right">
@@ -71,7 +87,7 @@ function StockTable({
           })}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
+              <TableCell colSpan={5} className="text-center text-muted-foreground">
                 Sin insumos en esta categoría.
               </TableCell>
             </TableRow>
@@ -92,18 +108,27 @@ export default async function InventarioPage() {
     { data: insumos },
     { data: envasadoInsumos },
     { data: vasosBlancos },
+    { data: items },
     { data: movimientos },
+    { data: movimientosConLote },
     { data: profiles },
   ] = await Promise.all([
     supabase.from("v_inventario_stock").select("*").order("name"),
     supabase.from("insumos").select("id, name").eq("active", true).order("name"),
     supabase.from("envasado_insumos").select("id, name").eq("active", true).order("name"),
     supabase.from("vasos_blancos").select("id, name").eq("active", true).order("name"),
+    supabase.from("inventario_items").select("id, name").eq("active", true).order("name"),
     supabase
       .from("inventario_movimientos")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50),
+    // Para el saldo por lote hace falta TODO el historial con lote, no solo
+    // los 50 movimientos más recientes de arriba.
+    supabase
+      .from("inventario_movimientos")
+      .select("insumo_tipo, insumo_id, lote, cantidad")
+      .not("lote", "is", null),
     supabase.from("profiles").select("id, full_name"),
   ]);
 
@@ -111,23 +136,49 @@ export default async function InventarioPage() {
     materia_prima: insumos ?? [],
     empaque: envasadoInsumos ?? [],
     vaso_blanco: vasosBlancos ?? [],
+    generico: items ?? [],
   };
 
   // Para mostrar el nombre en el historial hace falta el catálogo completo
   // (incluidos inactivos: un movimiento viejo puede referenciar un insumo
   // que después se desactivó).
-  const [{ data: insumosAll }, { data: envasadoInsumosAll }, { data: vasosBlancosAll }] =
-    await Promise.all([
-      supabase.from("insumos").select("id, name"),
-      supabase.from("envasado_insumos").select("id, name"),
-      supabase.from("vasos_blancos").select("id, name"),
-    ]);
+  const [
+    { data: insumosAll },
+    { data: envasadoInsumosAll },
+    { data: vasosBlancosAll },
+    { data: itemsAll },
+  ] = await Promise.all([
+    supabase.from("insumos").select("id, name"),
+    supabase.from("envasado_insumos").select("id, name"),
+    supabase.from("vasos_blancos").select("id, name"),
+    supabase.from("inventario_items").select("id, name"),
+  ]);
   const nameByKey = new Map<string, string>();
   for (const i of insumosAll ?? []) nameByKey.set(`materia_prima:${i.id}`, i.name);
   for (const i of envasadoInsumosAll ?? []) nameByKey.set(`empaque:${i.id}`, i.name);
   for (const i of vasosBlancosAll ?? []) nameByKey.set(`vaso_blanco:${i.id}`, i.name);
+  for (const i of itemsAll ?? []) nameByKey.set(`generico:${i.id}`, i.name);
 
   const profileNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+  // Saldo por lote: se agrupa por insumo y lote, sumando las cantidades
+  // (positivas de entrada, negativas de consumo/ajuste) -- se muestran solo
+  // los lotes que todavía tienen saldo distinto de 0.
+  const lotesByInsumo = new Map<string, Map<string, number>>();
+  for (const m of movimientosConLote ?? []) {
+    if (!m.lote) continue;
+    const key = `${m.insumo_tipo}:${m.insumo_id}`;
+    const porLote = lotesByInsumo.get(key) ?? new Map<string, number>();
+    porLote.set(m.lote, (porLote.get(m.lote) ?? 0) + m.cantidad);
+    lotesByInsumo.set(key, porLote);
+  }
+  const lotesDisplay = new Map<string, { lote: string; saldo: number }[]>();
+  for (const [key, porLote] of lotesByInsumo) {
+    const list = Array.from(porLote.entries())
+      .filter(([, saldo]) => saldo !== 0)
+      .map(([lote, saldo]) => ({ lote, saldo }));
+    if (list.length > 0) lotesDisplay.set(key.split(":").slice(1).join(":"), list);
+  }
 
   const stockRows = stock ?? [];
   const porTipo = (tipo: InventarioInsumoTipo) =>
@@ -142,13 +193,15 @@ export default async function InventarioPage() {
         <div>
           <h1 className="text-2xl font-semibold">Inventario</h1>
           <p className="text-muted-foreground">
-            Stock de materia prima, material de empaque y vasos blancos. El
-            consumo de baches y envasados se descuenta solo; acá se
-            registran las entradas (compras) y ajustes por conteo físico.
+            Stock de materia prima, material de empaque, vasos blancos y
+            otros insumos. El consumo de baches y envasados se descuenta
+            solo; acá se registran las entradas (compras) y ajustes por
+            conteo físico.
           </p>
         </div>
         {canWrite && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            <ImportEntradasDialog />
             <MovimientoDialog mode="entrada" catalogos={catalogos} />
             <MovimientoDialog mode="ajuste" catalogos={catalogos} />
           </div>
@@ -166,9 +219,10 @@ export default async function InventarioPage() {
         </div>
       )}
 
-      <StockTable title="Materia prima" rows={porTipo("materia_prima")} />
-      <StockTable title="Material de empaque" rows={porTipo("empaque")} />
-      <StockTable title="Vasos blancos" rows={porTipo("vaso_blanco")} />
+      <StockTable title="Materia prima" rows={porTipo("materia_prima")} lotesByInsumo={lotesDisplay} />
+      <StockTable title="Material de empaque" rows={porTipo("empaque")} lotesByInsumo={lotesDisplay} />
+      <StockTable title="Vasos blancos" rows={porTipo("vaso_blanco")} lotesByInsumo={lotesDisplay} />
+      <StockTable title="Otros (aseo, etc.)" rows={porTipo("generico")} lotesByInsumo={lotesDisplay} />
 
       <div className="flex flex-col gap-2">
         <h2 className="text-lg font-medium">Movimientos recientes</h2>
@@ -179,6 +233,7 @@ export default async function InventarioPage() {
               <TableHead>Insumo</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Cantidad</TableHead>
+              <TableHead>Lote</TableHead>
               <TableHead>Origen</TableHead>
               <TableHead>Quién</TableHead>
               <TableHead>Notas</TableHead>
@@ -198,6 +253,7 @@ export default async function InventarioPage() {
                 <TableCell className={m.cantidad < 0 ? "text-destructive" : undefined}>
                   {m.cantidad > 0 ? `+${m.cantidad}` : m.cantidad}
                 </TableCell>
+                <TableCell>{m.lote ?? "—"}</TableCell>
                 <TableCell>{m.origen_tipo ? ORIGEN_LABELS[m.origen_tipo] : "—"}</TableCell>
                 <TableCell>{profileNames.get(m.created_by) ?? "—"}</TableCell>
                 <TableCell className="text-muted-foreground">
@@ -207,7 +263,7 @@ export default async function InventarioPage() {
             ))}
             {(movimientos ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   Sin movimientos todavía.
                 </TableCell>
               </TableRow>

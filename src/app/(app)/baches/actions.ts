@@ -410,6 +410,7 @@ export async function finishStage(
             insumo_id: i.insumo_id,
             tipo: "consumo" as const,
             cantidad: -i.peso,
+            lote: i.lote || null,
             origen_tipo: "bache" as const,
             origen_id: parsed.data.bache_id,
             created_by: profile.id,

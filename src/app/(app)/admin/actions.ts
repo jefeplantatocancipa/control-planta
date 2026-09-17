@@ -877,3 +877,271 @@ export async function saveEnvasadoReferenciaRecipe(
   revalidatePath("/admin");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Categorías de inventario (abiertas): cada una dice a qué catálogo
+// alimenta (materia prima, empaque, vaso blanco, o solo stock genérico).
+// ---------------------------------------------------------------------------
+const InventarioCategoriaSchema = z.object({
+  id: z.string().uuid().optional(),
+  nombre: z.string().trim().min(1, "El nombre es obligatorio."),
+  tabla_destino: z.enum(["materia_prima", "empaque", "vaso_blanco", "generico"]),
+});
+
+export async function upsertInventarioCategoria(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = InventarioCategoriaSchema.safeParse({
+    id: formData.get("id") || undefined,
+    nombre: formData.get("nombre"),
+    tabla_destino: formData.get("tabla_destino"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("inventario_categorias").update(values).eq("id", id)
+    : await supabase.from("inventario_categorias").insert(values);
+
+  if (error) {
+    return {
+      error: isUniqueViolation(error)
+        ? "Ya existe una categoría con ese nombre."
+        : "No se pudo guardar la categoría.",
+    };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/inventario");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Importador del catálogo de inventario: un solo Excel con Código,
+// Descripción, Unidad y Categoría -- cada fila va al catálogo que
+// corresponda según la categoría (materia prima / empaque / vaso blanco /
+// genérico), creando la categoría si todavía no existe.
+// ---------------------------------------------------------------------------
+const INVENTARIO_CATALOGO_REQUIRED_HEADERS = ["codigo", "descripcion"];
+
+function findColumn(map: Record<string, number>, patterns: string[]): number | undefined {
+  for (const p of patterns) {
+    if (map[p] !== undefined) return map[p];
+  }
+  const keys = Object.keys(map);
+  for (const p of patterns) {
+    const found = keys.find((k) => k.includes(p) || p.includes(k));
+    if (found) return map[found];
+  }
+  return undefined;
+}
+
+export async function importInventarioCatalogo(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Elegí un archivo de Excel (.xlsx)." };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer as never);
+  } catch {
+    return { error: "No se pudo leer el archivo. ¿Es un .xlsx válido?" };
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { error: "El archivo no tiene hojas." };
+
+  let headerRowNumber = -1;
+  let columns: Record<string, number> = {};
+  for (let r = 1; r <= Math.min(sheet.rowCount, 20); r++) {
+    const row = sheet.getRow(r);
+    const map: Record<string, number> = {};
+    row.eachCell((cell, colNumber) => {
+      const key = normalize(cellText(cell));
+      if (key) map[key] = colNumber;
+    });
+    if (INVENTARIO_CATALOGO_REQUIRED_HEADERS.every((h) => h in map)) {
+      headerRowNumber = r;
+      columns = map;
+      break;
+    }
+  }
+  if (headerRowNumber === -1) {
+    return {
+      error: "No se encontraron las columnas \"Codigo\" y \"Descripción\". Revisá el archivo.",
+    };
+  }
+
+  const colUnidad = findColumn(columns, ["u. medida", "unidad", "u medida", "und"]);
+  const colCategoria = findColumn(columns, ["categoria", "categor"]);
+
+  const supabase = await createClient();
+
+  const [
+    { data: categorias },
+    { data: insumos },
+    { data: envasadoInsumos },
+    { data: vasosBlancos },
+    { data: items },
+  ] = await Promise.all([
+    supabase.from("inventario_categorias").select("id, nombre, tabla_destino"),
+    supabase.from("insumos").select("id, codigo"),
+    supabase.from("envasado_insumos").select("id, codigo"),
+    supabase.from("vasos_blancos").select("id, codigo"),
+    supabase.from("inventario_items").select("id, codigo"),
+  ]);
+
+  const categoriaByNombre = new Map(
+    (categorias ?? []).map((c) => [normalize(c.nombre), c]),
+  );
+  const insumoByCodigo = new Map(
+    (insumos ?? []).filter((i) => i.codigo).map((i) => [i.codigo as string, i.id]),
+  );
+  const empaqueByCodigo = new Map(
+    (envasadoInsumos ?? []).filter((i) => i.codigo).map((i) => [i.codigo as string, i.id]),
+  );
+  const vasoByCodigo = new Map(
+    (vasosBlancos ?? []).filter((i) => i.codigo).map((i) => [i.codigo as string, i.id]),
+  );
+  const itemByCodigo = new Map(
+    (items ?? []).filter((i) => i.codigo).map((i) => [i.codigo as string, i.id]),
+  );
+
+  const warnings: string[] = [];
+  let imported = 0;
+
+  for (let r = headerRowNumber + 1; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const codigo = cellText(row.getCell(columns["codigo"]));
+    const name = cellText(row.getCell(columns["descripcion"]));
+    if (!codigo && !name) continue; // fila vacía: fin de la tabla
+    if (!codigo || !name) {
+      warnings.push(`Fila ${r}: falta código o descripción.`);
+      continue;
+    }
+
+    const unit = colUnidad ? cellText(row.getCell(colUnidad)) || "unidades" : "unidades";
+    const categoriaNombre = colCategoria ? cellText(row.getCell(colCategoria)) : "";
+
+    let categoria = categoriaNombre
+      ? categoriaByNombre.get(normalize(categoriaNombre))
+      : undefined;
+    if (categoriaNombre && !categoria) {
+      // Categoría nueva: se crea sola, apuntando a "genérico" -- el jefe de
+      // planta puede después cambiarle el destino desde Administración si
+      // corresponde que alimente materia prima, empaque o vaso blanco.
+      const { data: created, error: catError } = await supabase
+        .from("inventario_categorias")
+        .insert({ nombre: categoriaNombre, tabla_destino: "generico" })
+        .select("id, nombre, tabla_destino")
+        .single();
+      if (catError || !created) {
+        warnings.push(`Fila ${r} (${codigo}): no se pudo crear la categoría "${categoriaNombre}".`);
+        continue;
+      }
+      categoria = created;
+      categoriaByNombre.set(normalize(categoriaNombre), created);
+    }
+
+    const tablaDestino = categoria?.tabla_destino ?? "generico";
+    const categoriaId = categoria?.id ?? null;
+
+    let error: { message: string } | null = null;
+    if (tablaDestino === "materia_prima") {
+      const existingId = insumoByCodigo.get(codigo);
+      const res = existingId
+        ? await supabase
+            .from("insumos")
+            .update({ name, categoria_id: categoriaId })
+            .eq("id", existingId)
+        : await supabase
+            .from("insumos")
+            .insert({ name, codigo, categoria_id: categoriaId })
+            .select("id")
+            .single();
+      error = res.error;
+      if (!existingId && !res.error && "data" in res && res.data) {
+        insumoByCodigo.set(codigo, (res.data as { id: string }).id);
+      }
+    } else if (tablaDestino === "empaque") {
+      const existingId = empaqueByCodigo.get(codigo);
+      const res = existingId
+        ? await supabase
+            .from("envasado_insumos")
+            .update({ name, categoria_id: categoriaId })
+            .eq("id", existingId)
+        : await supabase
+            .from("envasado_insumos")
+            .insert({ name, codigo, categoria_id: categoriaId })
+            .select("id")
+            .single();
+      error = res.error;
+      if (!existingId && !res.error && "data" in res && res.data) {
+        empaqueByCodigo.set(codigo, (res.data as { id: string }).id);
+      }
+    } else if (tablaDestino === "vaso_blanco") {
+      const existingId = vasoByCodigo.get(codigo);
+      const res = existingId
+        ? await supabase
+            .from("vasos_blancos")
+            .update({ name, unit, categoria_id: categoriaId })
+            .eq("id", existingId)
+        : await supabase
+            .from("vasos_blancos")
+            .insert({ name, unit, codigo, categoria_id: categoriaId })
+            .select("id")
+            .single();
+      error = res.error;
+      if (!existingId && !res.error && "data" in res && res.data) {
+        vasoByCodigo.set(codigo, (res.data as { id: string }).id);
+      }
+    } else {
+      const existingId = itemByCodigo.get(codigo);
+      const res = existingId
+        ? await supabase
+            .from("inventario_items")
+            .update({ name, unit, categoria_id: categoriaId })
+            .eq("id", existingId)
+        : await supabase
+            .from("inventario_items")
+            .insert({ name, unit, codigo, categoria_id: categoriaId })
+            .select("id")
+            .single();
+      error = res.error;
+      if (!existingId && !res.error && "data" in res && res.data) {
+        itemByCodigo.set(codigo, (res.data as { id: string }).id);
+      }
+    }
+
+    if (error) {
+      warnings.push(`Fila ${r} (${codigo}): no se pudo guardar.`);
+      continue;
+    }
+    imported++;
+  }
+
+  if (imported === 0) {
+    return {
+      error: warnings[0] ?? "No se encontraron filas para importar.",
+      warnings,
+    };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/inventario");
+  return { success: true, imported, warnings };
+}
