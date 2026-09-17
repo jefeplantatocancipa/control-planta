@@ -33,6 +33,7 @@ export interface EncajadoDisplay {
   startedAt: string | null;
   endedAt: string | null;
   estibas: EstibaDisplay[];
+  multiempaque: number | null;
   canDelete?: boolean;
   canExecute?: boolean;
 }
@@ -178,11 +179,13 @@ export function EncajadoCard({
   startedAt,
   endedAt,
   estibas,
+  multiempaque,
   canDelete,
   canExecute = true,
 }: EncajadoDisplay) {
   const estibaAbierta = estibas.find((e) => !e.finalEstiba);
   const totalCajas = estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0);
+  const unidadesEmpacadas = multiempaque !== null ? totalCajas * multiempaque : null;
 
   return (
     <Card>
@@ -222,6 +225,13 @@ export function EncajadoCard({
                 {totalCajas > 0 && (
                   <p className="text-xs text-muted-foreground">
                     Total: <span className="font-medium text-foreground">{totalCajas}</span> cajas
+                    {unidadesEmpacadas !== null && (
+                      <>
+                        {" "}
+                        (<span className="font-medium text-foreground">{unidadesEmpacadas}</span>{" "}
+                        unidades)
+                      </>
+                    )}
                   </p>
                 )}
               </div>

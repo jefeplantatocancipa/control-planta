@@ -25,17 +25,47 @@ export default async function EncajadoPage() {
     { data: baches },
     { data: products },
     { data: estibas },
+    { data: envasadoReferencias },
   ] = await Promise.all([
     supabase.from("encajados").select("*").order("created_at", { ascending: false }),
-    supabase.from("envasados").select("id, presentacion, cantidad_unidades, started_at"),
+    supabase
+      .from("envasados")
+      .select("id, presentacion, cantidad_unidades, started_at, referencia_id"),
     supabase.from("baches").select("id, batch_code, product_id"),
     supabase.from("products").select("id, name"),
     supabase.from("encajado_estibas").select("*").order("inicio_estiba"),
+    supabase.from("envasado_referencias").select("id, sku, name, multiempaque"),
   ]);
 
   const envasadosById = new Map((envasados ?? []).map((e) => [e.id, e]));
   const bachesById = new Map((baches ?? []).map((b) => [b.id, b]));
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
+
+  // Unidades por caja (multiempaque) de la referencia -- se resuelve por
+  // referencia_id cuando el envasado la tiene, y si no, por el texto de la
+  // presentación (igual que en el informe del bache, porque el sku puede
+  // haber cambiado desde que se guardó ese texto).
+  const multiempaqueById = new Map(
+    (envasadoReferencias ?? []).map((r) => [r.id, r.multiempaque]),
+  );
+  const multiempaqueByLabel = new Map(
+    (envasadoReferencias ?? []).map((r) => [`${r.sku} — ${r.name}`, r.multiempaque]),
+  );
+  const multiempaqueByName = new Map(
+    (envasadoReferencias ?? []).map((r) => [r.name, r.multiempaque]),
+  );
+  function multiempaqueDe(envasado: { referencia_id: string | null; presentacion: string } | undefined) {
+    if (!envasado) return null;
+    if (envasado.referencia_id && multiempaqueById.has(envasado.referencia_id)) {
+      return multiempaqueById.get(envasado.referencia_id)!;
+    }
+    if (multiempaqueByLabel.has(envasado.presentacion)) {
+      return multiempaqueByLabel.get(envasado.presentacion)!;
+    }
+    const parts = envasado.presentacion.split(" — ");
+    const nameGuess = (parts.length > 1 ? parts.slice(1).join(" — ") : envasado.presentacion).trim();
+    return multiempaqueByName.get(nameGuess) ?? null;
+  }
 
   const estibasByEncajado = new Map<string, EstibaDisplay[]>();
   for (const estiba of estibas ?? []) {
@@ -67,6 +97,7 @@ export default async function EncajadoPage() {
       startedAt: encajado.started_at,
       endedAt: encajado.ended_at,
       estibas: estibasByEncajado.get(encajado.id) ?? [],
+      multiempaque: multiempaqueDe(envasado),
       canDelete,
       canExecute,
     };
@@ -122,6 +153,7 @@ export default async function EncajadoPage() {
               <TableHead>Unidades envasadas</TableHead>
               <TableHead>Estibas</TableHead>
               <TableHead>Cajas</TableHead>
+              <TableHead>Unidades empacadas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
               {canDelete && <TableHead className="sticky right-0 bg-background" />}
@@ -138,6 +170,12 @@ export default async function EncajadoPage() {
                 <TableCell>{c.estibas.length}</TableCell>
                 <TableCell>
                   {c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0)}
+                </TableCell>
+                <TableCell>
+                  {c.multiempaque !== null
+                    ? c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0) *
+                      c.multiempaque
+                    : "—"}
                 </TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
@@ -156,7 +194,7 @@ export default async function EncajadoPage() {
             {finalizados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canDelete ? 10 : 9}
+                  colSpan={canDelete ? 11 : 10}
                   className="text-center text-muted-foreground"
                 >
                   Sin encajados finalizados todavía.
