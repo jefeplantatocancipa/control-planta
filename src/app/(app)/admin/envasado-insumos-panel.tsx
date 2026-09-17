@@ -88,6 +88,21 @@ function EnvasadoInsumoForm({
           defaultValue={insumo?.marca ?? ""}
         />
       </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="stock_minimo">Stock mínimo</Label>
+        <Input
+          id="stock_minimo"
+          name="stock_minimo"
+          type="number"
+          step="0.01"
+          min="0"
+          defaultValue={insumo?.stock_minimo ?? ""}
+          placeholder="Opcional"
+        />
+        <p className="text-xs text-muted-foreground">
+          Si el stock actual queda por debajo, se resalta en Inventario.
+        </p>
+      </div>
       <Label className="flex items-center gap-2">
         <input
           type="checkbox"

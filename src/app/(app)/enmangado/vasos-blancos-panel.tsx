@@ -70,6 +70,21 @@ function VasoBlancoForm({
           required
         />
       </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="stock_minimo">Stock mínimo</Label>
+        <Input
+          id="stock_minimo"
+          name="stock_minimo"
+          type="number"
+          step="0.01"
+          min="0"
+          defaultValue={vasoBlanco?.stock_minimo ?? ""}
+          placeholder="Opcional"
+        />
+        <p className="text-xs text-muted-foreground">
+          Si el stock actual queda por debajo, se resalta en Inventario.
+        </p>
+      </div>
       <Label className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -163,10 +178,12 @@ export function VasosBlancosPanel({
   vasosBlancos,
   stockByVaso,
   canManage,
+  canCapture = true,
 }: {
   vasosBlancos: VasoBlanco[];
   stockByVaso: Map<string, number>;
   canManage: boolean;
+  canCapture?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<VasoBlanco | null>(null);
@@ -175,18 +192,20 @@ export function VasosBlancosPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex justify-end gap-2">
-        <Dialog open={entradaOpen} onOpenChange={setEntradaOpen}>
-          <DialogTrigger render={<Button size="sm">Nueva entrada</Button>} />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nueva entrada de stock</DialogTitle>
-            </DialogHeader>
-            <EntradaForm
-              vasosBlancos={vasosBlancos}
-              onSuccess={() => setEntradaOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
+        {canCapture && (
+          <Dialog open={entradaOpen} onOpenChange={setEntradaOpen}>
+            <DialogTrigger render={<Button size="sm">Nueva entrada</Button>} />
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nueva entrada de stock</DialogTitle>
+              </DialogHeader>
+              <EntradaForm
+                vasosBlancos={vasosBlancos}
+                onSuccess={() => setEntradaOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
         {canManage && (
           <Button
             size="sm"
@@ -211,11 +230,21 @@ export function VasosBlancosPanel({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {vasosBlancos.map((vaso) => (
+          {vasosBlancos.map((vaso) => {
+            const stock = stockByVaso.get(vaso.id) ?? 0;
+            const bajoMinimo = vaso.stock_minimo !== null && stock < vaso.stock_minimo;
+            return (
             <TableRow key={vaso.id}>
               <TableCell className="font-medium">{vaso.name}</TableCell>
               <TableCell>
-                {stockByVaso.get(vaso.id) ?? 0} {vaso.unit}
+                <div className="flex items-center gap-2">
+                  <span>
+                    {stock} {vaso.unit}
+                  </span>
+                  {bajoMinimo && (
+                    <Badge variant="destructive">Bajo mínimo</Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 <Badge variant={vaso.active ? "default" : "outline"}>
@@ -237,7 +266,8 @@ export function VasosBlancosPanel({
                 </TableCell>
               )}
             </TableRow>
-          ))}
+            );
+          })}
           {vasosBlancos.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">

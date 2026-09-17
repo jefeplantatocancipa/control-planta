@@ -23,6 +23,7 @@ const VasoBlancoSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
   unit: z.string().trim().min(1, "La unidad es obligatoria."),
+  stock_minimo: z.coerce.number().min(0).nullable(),
 });
 
 export async function upsertVasoBlanco(
@@ -31,10 +32,12 @@ export async function upsertVasoBlanco(
 ): Promise<ActionState> {
   await requireRole(["jefe_planta"]);
 
+  const stockMinimo = formData.get("stock_minimo");
   const parsed = VasoBlancoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
     unit: formData.get("unit"),
+    stock_minimo: stockMinimo || null,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -77,10 +80,18 @@ export async function createVasoBlancoEntrada(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  // El stock de vasos blancos vive en el libro de movimientos de
+  // Inventario (unificado con materia prima y material de empaque), no en
+  // vasos_blancos_entradas -- esa tabla queda solo como historial de antes
+  // de que existiera el módulo de Inventario.
   const supabase = await createClient();
-  const { error } = await supabase.from("vasos_blancos_entradas").insert({
-    ...parsed.data,
-    notes: parsed.data.notes || null,
+  const { error } = await supabase.from("inventario_movimientos").insert({
+    insumo_tipo: "vaso_blanco",
+    insumo_id: parsed.data.vaso_blanco_id,
+    tipo: "entrada",
+    cantidad: parsed.data.cantidad,
+    origen_tipo: "manual",
+    notas: parsed.data.notes || null,
     created_by: profile.id,
   });
 
@@ -89,6 +100,7 @@ export async function createVasoBlancoEntrada(
   }
 
   revalidatePath("/enmangado");
+  revalidatePath("/inventario");
   return { success: true };
 }
 
@@ -331,21 +343,45 @@ export async function createVasoEnmangado(
 
   const now = new Date().toISOString();
   const supabase = await createClient();
-  const { error } = await supabase.from("vasos_enmangados").insert({
-    ...parsed.data,
-    lote_etiqueta: parsed.data.lote_etiqueta || null,
-    notes: parsed.data.notes || null,
-    started_at: now,
-    ended_at: now,
-    created_by: profile.id,
-  });
+  const { data: created, error } = await supabase
+    .from("vasos_enmangados")
+    .insert({
+      ...parsed.data,
+      lote_etiqueta: parsed.data.lote_etiqueta || null,
+      notes: parsed.data.notes || null,
+      started_at: now,
+      ended_at: now,
+      created_by: profile.id,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !created) {
     return { error: "No se pudo registrar el enmangado." };
   }
 
-  // El stock de vasos blancos se calcula como entradas - lo consumido acá,
-  // así que no hace falta un movimiento de "salida" aparte.
+  // Descuenta del stock de vasos blancos el que consume esta referencia.
+  // Nunca bloquea: si falla, el enmangado ya quedó registrado igual.
+  if (parsed.data.cantidad_unidades > 0) {
+    const { data: referencia } = await supabase
+      .from("enmangado_referencias")
+      .select("vaso_blanco_id")
+      .eq("id", parsed.data.referencia_id)
+      .single();
+    if (referencia) {
+      await supabase.from("inventario_movimientos").insert({
+        insumo_tipo: "vaso_blanco",
+        insumo_id: referencia.vaso_blanco_id,
+        tipo: "consumo",
+        cantidad: -parsed.data.cantidad_unidades,
+        origen_tipo: "enmangado",
+        origen_id: created.id,
+        created_by: profile.id,
+      });
+    }
+  }
+
   revalidatePath("/enmangado");
+  revalidatePath("/inventario");
   return { success: true };
 }

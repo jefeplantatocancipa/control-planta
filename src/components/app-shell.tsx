@@ -12,6 +12,7 @@ import {
   LogOut,
   Package,
   Tags,
+  Warehouse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/enmangado", label: "Enmangado", icon: Package, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"] },
+  { href: "/inventario", label: "Inventario", icon: Warehouse, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta", "asistente_adm"] },

@@ -26,7 +26,7 @@ export default async function EnmangadoPage() {
     { data: orders },
     { data: referencias },
     { data: vasosBlancos },
-    { data: entradas },
+    { data: stockRows },
     { data: operarios },
   ] = await Promise.all([
     supabase
@@ -40,7 +40,7 @@ export default async function EnmangadoPage() {
     supabase.from("enmangado_orders").select("*").order("scheduled_date"),
     supabase.from("enmangado_referencias").select("*").order("name"),
     supabase.from("vasos_blancos").select("*").order("name"),
-    supabase.from("vasos_blancos_entradas").select("*"),
+    supabase.from("v_inventario_stock").select("*").eq("insumo_tipo", "vaso_blanco"),
     supabase.from("profiles").select("*").eq("active", true).order("full_name"),
   ]);
 
@@ -62,21 +62,11 @@ export default async function EnmangadoPage() {
     label: `${referenciaNames.get(order.referencia_id) ?? "—"} — ${order.scheduled_date}`,
   }));
 
-  const stockByVaso = new Map<string, number>();
-  for (const entrada of entradas ?? []) {
-    stockByVaso.set(
-      entrada.vaso_blanco_id,
-      (stockByVaso.get(entrada.vaso_blanco_id) ?? 0) + entrada.cantidad,
-    );
-  }
-  for (const vaso of vasosEnmangados ?? []) {
-    const referencia = referenciaList.find((r) => r.id === vaso.referencia_id);
-    if (!referencia) continue;
-    stockByVaso.set(
-      referencia.vaso_blanco_id,
-      (stockByVaso.get(referencia.vaso_blanco_id) ?? 0) - vaso.cantidad_unidades,
-    );
-  }
+  // El stock ya no se calcula acá (entradas - consumo): viene armado del
+  // libro de movimientos central de Inventario.
+  const stockByVaso = new Map(
+    (stockRows ?? []).map((row) => [row.insumo_id, row.stock_actual]),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,6 +163,7 @@ export default async function EnmangadoPage() {
             vasosBlancos={vasosBlancos ?? []}
             stockByVaso={stockByVaso}
             canManage={canWrite}
+            canCapture={canCapture}
           />
         </TabsContent>
 

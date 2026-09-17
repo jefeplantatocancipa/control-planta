@@ -223,7 +223,7 @@ export async function finalizarEnvasado(
   // cerrar el envasado (así queda el consumo real: inicial - final).
   const { data: usosDelEnvasado } = await supabase
     .from("envasado_insumos_uso")
-    .select("id")
+    .select("id, envasado_insumo_id, inventario_inicial")
     .eq("envasado_id", parsed.data.record_id);
 
   const finalById = new Map(
@@ -252,6 +252,29 @@ export async function finalizarEnvasado(
     return {
       error: `No se pudo guardar el inventario final de los insumos: ${failedUpdate.error?.message ?? "error desconocido"}`,
     };
+  }
+
+  // Consumo de material de empaque: inventario inicial - final, ya
+  // capturados arriba. Nunca bloquea: si falla, el envasado ya se cerró.
+  const movimientos = (usosDelEnvasado ?? [])
+    .map((uso) => {
+      const final = finalById.get(uso.id);
+      if (uso.inventario_inicial == null || final == null) return null;
+      const consumo = uso.inventario_inicial - final;
+      if (consumo === 0) return null;
+      return {
+        insumo_tipo: "empaque" as const,
+        insumo_id: uso.envasado_insumo_id,
+        tipo: "consumo" as const,
+        cantidad: -consumo,
+        origen_tipo: "envasado" as const,
+        origen_id: parsed.data.record_id,
+        created_by: profile.id,
+      };
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null);
+  if (movimientos.length > 0) {
+    await supabase.from("inventario_movimientos").insert(movimientos);
   }
 
   // Las unidades totales son la suma de lo que dio cada estiba (dato real,

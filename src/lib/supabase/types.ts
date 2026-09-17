@@ -14,6 +14,10 @@ export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
 export type BacheStatus = "en_proceso" | "completado" | "cancelado";
 
+export type InventarioInsumoTipo = "materia_prima" | "empaque" | "vaso_blanco";
+export type InventarioMovimientoTipo = "entrada" | "consumo" | "ajuste";
+export type InventarioOrigenTipo = "bache" | "envasado" | "enmangado" | "manual";
+
 export type StageParameterType =
   | "number"
   | "text"
@@ -103,11 +107,13 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          stock_minimo: number | null;
           active: boolean;
           created_at: string;
         };
         Insert: {
           name: string;
+          stock_minimo?: number | null;
           active?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["insumos"]["Insert"]>;
@@ -320,12 +326,14 @@ export interface Database {
           id: string;
           name: string;
           unit: string;
+          stock_minimo: number | null;
           active: boolean;
           created_at: string;
         };
         Insert: {
           name: string;
           unit?: string;
+          stock_minimo?: number | null;
           active?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["vasos_blancos"]["Insert"]>;
@@ -521,6 +529,7 @@ export interface Database {
           name: string;
           presentacion_caja: string | null;
           marca: string | null;
+          stock_minimo: number | null;
           active: boolean;
           created_at: string;
         };
@@ -528,6 +537,7 @@ export interface Database {
           name: string;
           presentacion_caja?: string | null;
           marca?: string | null;
+          stock_minimo?: number | null;
           active?: boolean;
         };
         Update: Partial<
@@ -773,6 +783,36 @@ export interface Database {
         >;
         Relationships: [];
       };
+      inventario_movimientos: {
+        Row: {
+          id: string;
+          insumo_tipo: InventarioInsumoTipo;
+          insumo_id: string;
+          tipo: InventarioMovimientoTipo;
+          cantidad: number;
+          origen_tipo: InventarioOrigenTipo | null;
+          origen_id: string | null;
+          proveedor: string | null;
+          notas: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          insumo_tipo: InventarioInsumoTipo;
+          insumo_id: string;
+          tipo: InventarioMovimientoTipo;
+          cantidad: number;
+          origen_tipo?: InventarioOrigenTipo | null;
+          origen_id?: string | null;
+          proveedor?: string | null;
+          notas?: string | null;
+          created_by: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["inventario_movimientos"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: {
       v_proceso_actual: {
@@ -829,6 +869,16 @@ export interface Database {
           total_unidades: number;
           total_mermas: number;
           tasa_merma_pct: number;
+        };
+        Relationships: [];
+      };
+      v_inventario_stock: {
+        Row: {
+          insumo_tipo: InventarioInsumoTipo;
+          insumo_id: string;
+          name: string;
+          stock_minimo: number | null;
+          stock_actual: number;
         };
         Relationships: [];
       };

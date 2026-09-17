@@ -468,6 +468,7 @@ export async function createUser(
 const InsumoSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
+  stock_minimo: z.coerce.number().min(0).nullable(),
 });
 
 export async function upsertInsumo(
@@ -476,9 +477,11 @@ export async function upsertInsumo(
 ): Promise<ActionState> {
   await requireRole(["jefe_planta"]);
 
+  const stockMinimo = formData.get("stock_minimo");
   const parsed = InsumoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
+    stock_minimo: stockMinimo || null,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -688,6 +691,7 @@ const EnvasadoInsumoSchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio."),
   presentacion_caja: z.string().trim().optional(),
   marca: z.string().trim().optional(),
+  stock_minimo: z.coerce.number().min(0).nullable(),
 });
 
 export async function upsertEnvasadoInsumo(
@@ -696,11 +700,13 @@ export async function upsertEnvasadoInsumo(
 ): Promise<ActionState> {
   await requireRole(["jefe_planta"]);
 
+  const stockMinimo = formData.get("stock_minimo");
   const parsed = EnvasadoInsumoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
     presentacion_caja: formData.get("presentacion_caja") || undefined,
     marca: formData.get("marca") || undefined,
+    stock_minimo: stockMinimo || null,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };

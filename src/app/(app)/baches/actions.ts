@@ -371,6 +371,54 @@ export async function finishStage(
     return { error: "No se pudo finalizar la etapa." };
   }
 
+  // Consumo de materia prima: se registra solo al cerrar la ÚLTIMA etapa
+  // del bache con checklist de insumos (mismo criterio que el balance de
+  // masa de los informes) -- si un insumo se "arrastra" y se reconfirma en
+  // una etapa posterior, no se cuenta dos veces. Nunca bloquea: si falla,
+  // la etapa ya quedó guardada igual.
+  if (template?.captures_insumos && parameters.insumos && parameters.insumos.length > 0) {
+    const [{ data: bache }, { data: currentStage }] = await Promise.all([
+      supabase.from("baches").select("product_id").eq("id", parsed.data.bache_id).single(),
+      supabase
+        .from("process_stage_templates")
+        .select("sequence_order")
+        .eq("id", parsed.data.stage_template_id)
+        .single(),
+    ]);
+    if (bache && currentStage) {
+      const { data: ownStages } = await supabase
+        .from("process_stage_templates")
+        .select("sequence_order, captures_insumos")
+        .eq("product_id", bache.product_id)
+        .eq("active", true);
+      let pool = ownStages ?? [];
+      if (pool.length === 0) {
+        const { data: defaultStages } = await supabase
+          .from("process_stage_templates")
+          .select("sequence_order, captures_insumos")
+          .is("product_id", null)
+          .eq("active", true);
+        pool = defaultStages ?? [];
+      }
+      const hayEtapaPosteriorDeInsumos = pool.some(
+        (s) => s.captures_insumos && s.sequence_order > currentStage.sequence_order,
+      );
+      if (!hayEtapaPosteriorDeInsumos) {
+        await supabase.from("inventario_movimientos").insert(
+          parameters.insumos.map((i) => ({
+            insumo_tipo: "materia_prima" as const,
+            insumo_id: i.insumo_id,
+            tipo: "consumo" as const,
+            cantidad: -i.peso,
+            origen_tipo: "bache" as const,
+            origen_id: parsed.data.bache_id,
+            created_by: profile.id,
+          })),
+        );
+      }
+    }
+  }
+
   revalidatePath(`/baches/${parsed.data.bache_id}`);
   return { success: true };
 }
