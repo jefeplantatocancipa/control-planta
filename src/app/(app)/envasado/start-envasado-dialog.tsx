@@ -46,7 +46,6 @@ interface InsumoUsoDraft {
   lote: string;
   fecha_vencimiento: string;
   proveedor: string;
-  inventario_inicial: string;
 }
 
 function InsumosUsoChecklist({
@@ -100,18 +99,6 @@ function InsumosUsoChecklist({
                   onChange={(e) => updateAt(index, { proveedor: e.target.value })}
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs font-normal text-muted-foreground">
-                  Inventario inicial
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={draft.inventario_inicial}
-                  onChange={(e) => updateAt(index, { inventario_inicial: e.target.value })}
-                />
-              </div>
             </div>
           )}
         </div>
@@ -134,7 +121,6 @@ function buildInsumoDrafts(list: EnvasadoInsumo[]): InsumoUsoDraft[] {
     lote: "",
     fecha_vencimiento: "",
     proveedor: "",
-    inventario_inicial: "",
   }));
 }
 
@@ -303,7 +289,6 @@ function StartEnvasadoForm({
             lote: i.lote,
             fecha_vencimiento: i.fecha_vencimiento || undefined,
             proveedor: i.proveedor,
-            inventario_inicial: i.inventario_inicial || undefined,
           })),
         )}
       />

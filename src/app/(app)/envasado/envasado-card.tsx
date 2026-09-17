@@ -43,7 +43,6 @@ export interface ParadaDisplay {
 export interface InsumoUsoDisplay {
   id: string;
   nombre: string;
-  inventarioInicial: number | null;
 }
 
 function FinalizarEnvasadoForm({
@@ -60,50 +59,45 @@ function FinalizarEnvasadoForm({
     {},
   );
   const [bacheTerminado, setBacheTerminado] = useState("true");
-  const [inventariosFinales, setInventariosFinales] = useState<Record<string, string>>({});
+  const [desperdicios, setDesperdicios] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
-
-  const faltanInventarios = insumosUso.some((i) => !inventariosFinales[i.id]);
 
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="record_id" value={recordId} />
       <input
         type="hidden"
-        name="insumos_final"
+        name="insumos_desperdicio"
         value={JSON.stringify(
           insumosUso
-            .filter((i) => inventariosFinales[i.id])
-            .map((i) => ({ id: i.id, inventario_final: inventariosFinales[i.id] })),
+            .filter((i) => desperdicios[i.id])
+            .map((i) => ({ id: i.id, desperdicio: desperdicios[i.id] })),
         )}
       />
 
       {insumosUso.length > 0 && (
         <div className="flex flex-col gap-2">
-          <Label>Inventario final de insumos</Label>
+          <Label>Desperdicio de material de empaque</Label>
+          <p className="text-xs text-muted-foreground">
+            El consumo por las unidades envasadas se descuenta solo. Anotá
+            acá solo el material extra que se perdió (ej. un vaso roto).
+          </p>
           {insumosUso.map((insumo) => (
             <div key={insumo.id} className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm">{insumo.nombre}</p>
-                {insumo.inventarioInicial !== null && (
-                  <p className="text-xs text-muted-foreground">
-                    Inventario inicial: {insumo.inventarioInicial}
-                  </p>
-                )}
-              </div>
+              <p className="text-sm">{insumo.nombre}</p>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 className="w-28"
-                value={inventariosFinales[insumo.id] ?? ""}
+                placeholder="0"
+                value={desperdicios[insumo.id] ?? ""}
                 onChange={(e) =>
-                  setInventariosFinales((v) => ({ ...v, [insumo.id]: e.target.value }))
+                  setDesperdicios((v) => ({ ...v, [insumo.id]: e.target.value }))
                 }
-                required
               />
             </div>
           ))}
@@ -147,7 +141,7 @@ function FinalizarEnvasadoForm({
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending || faltanInventarios}>
+        <Button type="submit" disabled={pending}>
           {pending ? "Finalizando..." : "Finalizar envasado"}
         </Button>
       </DialogFooter>

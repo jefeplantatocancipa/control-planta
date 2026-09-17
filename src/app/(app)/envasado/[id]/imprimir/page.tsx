@@ -206,9 +206,9 @@ export default async function EnvasadoReportPage({
                 <th className="py-0.5 pr-2 font-normal">Lote</th>
                 <th className="py-0.5 pr-2 font-normal">Vencimiento</th>
                 <th className="py-0.5 pr-2 font-normal">Proveedor</th>
-                <th className="py-0.5 pr-2 font-normal">Inv. inicial</th>
-                <th className="py-0.5 pr-2 font-normal">Inv. final</th>
-                <th className="py-0.5 font-normal">Consumo</th>
+                <th className="py-0.5 pr-2 font-normal">Unidades</th>
+                <th className="py-0.5 pr-2 font-normal">Desperdicio</th>
+                <th className="py-0.5 font-normal">Consumo total</th>
               </tr>
             </thead>
             <tbody>
@@ -222,13 +222,9 @@ export default async function EnvasadoReportPage({
                     {i.fecha_vencimiento ? formatDate(`${i.fecha_vencimiento}T00:00:00`) : "—"}
                   </td>
                   <td className="py-0.5 pr-2">{i.proveedor ?? "—"}</td>
-                  <td className="py-0.5 pr-2">{i.inventario_inicial ?? "—"}</td>
-                  <td className="py-0.5 pr-2">{i.inventario_final ?? "—"}</td>
-                  <td className="py-0.5">
-                    {i.inventario_inicial !== null && i.inventario_final !== null
-                      ? i.inventario_inicial - i.inventario_final
-                      : "—"}
-                  </td>
+                  <td className="py-0.5 pr-2">{totalUnidades}</td>
+                  <td className="py-0.5 pr-2">{i.desperdicio ?? 0}</td>
+                  <td className="py-0.5">{totalUnidades + (i.desperdicio ?? 0)}</td>
                 </tr>
               ))}
             </tbody>

@@ -58,7 +58,6 @@ const InsumoUsoSchema = z.object({
   lote: z.string().trim().optional(),
   fecha_vencimiento: z.string().trim().optional(),
   proveedor: z.string().trim().optional(),
-  inventario_inicial: z.coerce.number().optional(),
 });
 
 const InsumosUsoArraySchema = z
@@ -124,7 +123,6 @@ export async function startEnvasado(
       lote: i.lote || null,
       fecha_vencimiento: i.fecha_vencimiento || null,
       proveedor: i.proveedor || null,
-      inventario_inicial: i.inventario_inicial ?? null,
     })),
   );
 
@@ -170,11 +168,11 @@ const FinalizarEnvasadoSchema = z.object({
   volumen_restante: z.coerce.number().min(0).optional(),
 });
 
-const InsumoFinalSchema = z.object({
+const InsumoDesperdicioSchema = z.object({
   id: z.string().uuid(),
-  inventario_final: z.coerce.number(),
+  desperdicio: z.coerce.number().min(0).optional(),
 });
-const InsumosFinalArraySchema = z.array(InsumoFinalSchema);
+const InsumosDesperdicioArraySchema = z.array(InsumoDesperdicioSchema);
 
 export async function finalizarEnvasado(
   _prevState: ActionState,
@@ -191,11 +189,11 @@ export async function finalizarEnvasado(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
-  const insumosFinalParsed = InsumosFinalArraySchema.safeParse(
-    JSON.parse(String(formData.get("insumos_final") || "[]")),
+  const insumosDesperdicioParsed = InsumosDesperdicioArraySchema.safeParse(
+    JSON.parse(String(formData.get("insumos_desperdicio") || "[]")),
   );
-  if (!insumosFinalParsed.success) {
-    return { error: "Inventario final inválido." };
+  if (!insumosDesperdicioParsed.success) {
+    return { error: "Desperdicio de insumos inválido." };
   }
 
   const supabase = await createClient();
@@ -217,65 +215,6 @@ export async function finalizarEnvasado(
     .limit(1);
   if (activo && activo.length > 0) {
     return { error: "Finalizá el turno activo antes de cerrar el envasado." };
-  }
-
-  // El inventario final de cada insumo usado es obligatorio para poder
-  // cerrar el envasado (así queda el consumo real: inicial - final).
-  const { data: usosDelEnvasado } = await supabase
-    .from("envasado_insumos_uso")
-    .select("id, envasado_insumo_id, inventario_inicial, lote")
-    .eq("envasado_id", parsed.data.record_id);
-
-  const finalById = new Map(
-    insumosFinalParsed.data.map((i) => [i.id, i.inventario_final]),
-  );
-  const faltaInventarioFinal = (usosDelEnvasado ?? []).some(
-    (uso) => !finalById.has(uso.id),
-  );
-  if (faltaInventarioFinal) {
-    return {
-      error: "Falta el inventario final de algún insumo usado en el envasado.",
-    };
-  }
-
-  const updates = await Promise.all(
-    insumosFinalParsed.data.map((i) =>
-      supabase
-        .from("envasado_insumos_uso")
-        .update({ inventario_final: i.inventario_final })
-        .eq("id", i.id)
-        .eq("envasado_id", parsed.data.record_id),
-    ),
-  );
-  const failedUpdate = updates.find((u) => u.error);
-  if (failedUpdate) {
-    return {
-      error: `No se pudo guardar el inventario final de los insumos: ${failedUpdate.error?.message ?? "error desconocido"}`,
-    };
-  }
-
-  // Consumo de material de empaque: inventario inicial - final, ya
-  // capturados arriba. Nunca bloquea: si falla, el envasado ya se cerró.
-  const movimientos = (usosDelEnvasado ?? [])
-    .map((uso) => {
-      const final = finalById.get(uso.id);
-      if (uso.inventario_inicial == null || final == null) return null;
-      const consumo = uso.inventario_inicial - final;
-      if (consumo === 0) return null;
-      return {
-        insumo_tipo: "empaque" as const,
-        insumo_id: uso.envasado_insumo_id,
-        tipo: "consumo" as const,
-        cantidad: -consumo,
-        lote: uso.lote || null,
-        origen_tipo: "envasado" as const,
-        origen_id: parsed.data.record_id,
-        created_by: profile.id,
-      };
-    })
-    .filter((m): m is NonNullable<typeof m> => m !== null);
-  if (movimientos.length > 0) {
-    await supabase.from("inventario_movimientos").insert(movimientos);
   }
 
   // Las unidades totales son la suma de lo que dio cada estiba (dato real,
@@ -313,6 +252,52 @@ export async function finalizarEnvasado(
 
   if (error) {
     return { error: "No se pudo finalizar el envasado." };
+  }
+
+  // Consumo de material de empaque: automático, 1 unidad de cada insumo de
+  // la receta por cada unidad envasada (ya no hace falta que alguien
+  // cuente inventario inicial/final a mano) -- solo se anota el
+  // desperdicio extra de material (ej. un vaso roto) por si hubo más
+  // consumo del que corresponde a las unidades buenas. Nunca bloquea: si
+  // falla, el envasado ya se cerró igual.
+  const { data: usosDelEnvasado } = await supabase
+    .from("envasado_insumos_uso")
+    .select("id, envasado_insumo_id, lote")
+    .eq("envasado_id", parsed.data.record_id);
+
+  const desperdicioById = new Map(
+    insumosDesperdicioParsed.data.map((i) => [i.id, i.desperdicio ?? 0]),
+  );
+
+  if (usosDelEnvasado && usosDelEnvasado.length > 0) {
+    await Promise.all(
+      usosDelEnvasado.map((uso) =>
+        supabase
+          .from("envasado_insumos_uso")
+          .update({ desperdicio: desperdicioById.get(uso.id) ?? 0 })
+          .eq("id", uso.id),
+      ),
+    );
+
+    const movimientos = usosDelEnvasado
+      .map((uso) => {
+        const consumo = cantidad_unidades + (desperdicioById.get(uso.id) ?? 0);
+        if (consumo <= 0) return null;
+        return {
+          insumo_tipo: "empaque" as const,
+          insumo_id: uso.envasado_insumo_id,
+          tipo: "consumo" as const,
+          cantidad: -consumo,
+          lote: uso.lote || null,
+          origen_tipo: "envasado" as const,
+          origen_id: parsed.data.record_id,
+          created_by: profile.id,
+        };
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null);
+    if (movimientos.length > 0) {
+      await supabase.from("inventario_movimientos").insert(movimientos);
+    }
   }
 
   // Esto solo actualiza volumen_restante_litros (cuánto queda por envasar),

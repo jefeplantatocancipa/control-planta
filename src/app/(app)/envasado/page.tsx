@@ -82,7 +82,7 @@ export default async function EnvasadoPage() {
     supabase.from("envasado_paradas").select("*").order("started_at"),
     supabase
       .from("envasado_insumos_uso")
-      .select("id, envasado_id, envasado_insumo_id, inventario_inicial"),
+      .select("id, envasado_id, envasado_insumo_id"),
     supabase.from("envasado_corte_firmas").select("*"),
   ]);
 
@@ -163,19 +163,15 @@ export default async function EnvasadoPage() {
 
   const turnoNames = new Map((turnos ?? []).map((t) => [t.id, t.name]));
 
-  // Insumos usados por envasado, para pedir el inventario final al cerrar
-  // (el inicial ya se capturó al iniciar el envasado).
+  // Insumos usados por envasado, para pedir el desperdicio extra de
+  // material al cerrar (el consumo normal se descuenta solo por unidades).
   const envasadoInsumoNames = new Map((envasadoInsumos ?? []).map((i) => [i.id, i.name]));
-  const insumosUsoByEnvasado = new Map<
-    string,
-    { id: string; nombre: string; inventarioInicial: number | null }[]
-  >();
+  const insumosUsoByEnvasado = new Map<string, { id: string; nombre: string }[]>();
   for (const uso of insumosUso ?? []) {
     const list = insumosUsoByEnvasado.get(uso.envasado_id) ?? [];
     list.push({
       id: uso.id,
       nombre: envasadoInsumoNames.get(uso.envasado_insumo_id) ?? "—",
-      inventarioInicial: uso.inventario_inicial,
     });
     insumosUsoByEnvasado.set(uso.envasado_id, list);
   }
