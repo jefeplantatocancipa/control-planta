@@ -29,8 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DeleteButton } from "@/components/delete-button";
 import {
   upsertInsumo,
+  deleteInsumo,
   saveProductRecipe,
   type ActionState,
 } from "./actions";
@@ -265,16 +267,24 @@ export function InsumosPanel({
                 </TableCell>
                 <TableCell className="text-right">
                   {canWrite && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setEditing(insumo);
-                        setOpen(true);
-                      }}
-                    >
-                      Editar
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditing(insumo);
+                          setOpen(true);
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      <DeleteButton
+                        action={deleteInsumo}
+                        id={insumo.id}
+                        title="Eliminar insumo"
+                        description={`Borra "${insumo.name}" del catálogo. Si ya está usado en alguna receta o etapa registrada, no se va a poder eliminar -- marcalo como inactivo en su lugar.`}
+                      />
+                    </>
                   )}
                 </TableCell>
               </TableRow>

@@ -503,6 +503,35 @@ export async function upsertInsumo(
   return { success: true };
 }
 
+const DeleteInsumoSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteInsumo(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteInsumoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("insumos").delete().eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: este insumo ya está usado en recetas o etapas registradas. Marcalo como inactivo en vez de borrarlo."
+          : "No se pudo eliminar el insumo.",
+    };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Tanques
 // ---------------------------------------------------------------------------
@@ -722,6 +751,35 @@ export async function upsertEnvasadoInsumo(
 
   if (error) {
     return { error: "No se pudo guardar el insumo." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+const DeleteEnvasadoInsumoSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteEnvasadoInsumo(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteEnvasadoInsumoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("envasado_insumos").delete().eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: este insumo ya está usado en recetas o envasados registrados. Marcalo como inactivo en vez de borrarlo."
+          : "No se pudo eliminar el insumo.",
+    };
   }
 
   revalidatePath("/admin");

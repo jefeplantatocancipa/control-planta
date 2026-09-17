@@ -59,6 +59,35 @@ export async function upsertVasoBlanco(
   return { success: true };
 }
 
+const DeleteVasoBlancoSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteVasoBlanco(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteVasoBlancoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("vasos_blancos").delete().eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede: este vaso blanco ya está usado en referencias o movimientos registrados. Marcalo como inactivo en vez de borrarlo."
+          : "No se pudo eliminar el vaso blanco.",
+    };
+  }
+
+  revalidatePath("/enmangado");
+  return { success: true };
+}
+
 const VasoBlancoEntradaSchema = z.object({
   vaso_blanco_id: z.string().uuid({ message: "Elegí un vaso blanco." }),
   cantidad: z.coerce.number().positive("La cantidad debe ser mayor a 0."),

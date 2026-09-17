@@ -29,8 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DeleteButton } from "@/components/delete-button";
 import {
   upsertEnvasadoInsumo,
+  deleteEnvasadoInsumo,
   saveEnvasadoReferenciaRecipe,
   type ActionState,
 } from "./actions";
@@ -297,16 +299,24 @@ export function EnvasadoInsumosPanel({
               </TableCell>
               <TableCell className="text-right">
                 {canWrite && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditing(insumo);
-                      setOpen(true);
-                    }}
-                  >
-                    Editar
-                  </Button>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(insumo);
+                        setOpen(true);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                    <DeleteButton
+                      action={deleteEnvasadoInsumo}
+                      id={insumo.id}
+                      title="Eliminar insumo"
+                      description={`Borra "${insumo.name}" del catálogo. Si ya está usado en alguna receta o envasado registrado, no se va a poder eliminar -- marcalo como inactivo en su lugar.`}
+                    />
+                  </>
                 )}
               </TableCell>
             </TableRow>

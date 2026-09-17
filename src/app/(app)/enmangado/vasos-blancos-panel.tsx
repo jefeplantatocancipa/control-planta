@@ -29,8 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DeleteButton } from "@/components/delete-button";
 import {
   upsertVasoBlanco,
+  deleteVasoBlanco,
   createVasoBlancoEntrada,
   type ActionState,
 } from "./actions";
@@ -263,6 +265,12 @@ export function VasosBlancosPanel({
                   >
                     Editar
                   </Button>
+                  <DeleteButton
+                    action={deleteVasoBlanco}
+                    id={vaso.id}
+                    title="Eliminar vaso blanco"
+                    description={`Borra "${vaso.name}" del catálogo. Si ya está usado en alguna referencia o movimiento registrado, no se va a poder eliminar -- marcalo como inactivo en su lugar.`}
+                  />
                 </TableCell>
               )}
             </TableRow>
