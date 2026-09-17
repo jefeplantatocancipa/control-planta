@@ -197,3 +197,15 @@ export function mondayOfWeek(isoDate: string): string {
   date.setUTCDate(date.getUTCDate() + diff);
   return date.toISOString().slice(0, 10);
 }
+
+// Viernes (UTC) de la semana operativa (viernes a jueves) que contiene la
+// fecha dada ("YYYY-MM-DD"). Se usa solo para agrupar vistas de cumplimiento;
+// no afecta al calendario ISO (lunes) usado para guardar los programas.
+export function fridayOfWeek(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const day = date.getUTCDay();
+  const diff = (day + 2) % 7;
+  date.setUTCDate(date.getUTCDate() - diff);
+  return date.toISOString().slice(0, 10);
+}
