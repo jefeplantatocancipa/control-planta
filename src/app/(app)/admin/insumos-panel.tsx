@@ -65,6 +65,15 @@ function InsumoForm({
         <Input id="name" name="name" defaultValue={insumo?.name} required />
       </div>
       <div className="flex flex-col gap-2">
+        <Label htmlFor="unit">Unidad</Label>
+        <Input
+          id="unit"
+          name="unit"
+          defaultValue={insumo?.unit ?? "kg"}
+          required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
         <Label htmlFor="stock_minimo">Stock mínimo</Label>
         <Input
           id="stock_minimo"
@@ -252,6 +261,7 @@ export function InsumosPanel({
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
+              <TableHead>Unidad</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead />
             </TableRow>
@@ -260,6 +270,7 @@ export function InsumosPanel({
             {insumos.map((insumo) => (
               <TableRow key={insumo.id}>
                 <TableCell className="font-medium">{insumo.name}</TableCell>
+                <TableCell className="text-muted-foreground">{insumo.unit}</TableCell>
                 <TableCell>
                   <Badge variant={insumo.active ? "default" : "outline"}>
                     {insumo.active ? "Activo" : "Inactivo"}
@@ -291,7 +302,7 @@ export function InsumosPanel({
             ))}
             {insumos.length === 0 && (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground">
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
                   Sin insumos todavía.
                 </TableCell>
               </TableRow>

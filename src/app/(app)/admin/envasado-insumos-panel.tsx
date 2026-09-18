@@ -73,6 +73,15 @@ function EnvasadoInsumoForm({
         />
       </div>
       <div className="flex flex-col gap-2">
+        <Label htmlFor="unit">Unidad</Label>
+        <Input
+          id="unit"
+          name="unit"
+          defaultValue={insumo?.unit ?? "unidades"}
+          required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
         <Label htmlFor="presentacion_caja">Presentación por caja</Label>
         <Input
           id="presentacion_caja"
@@ -280,6 +289,7 @@ export function EnvasadoInsumosPanel({
         <TableHeader>
           <TableRow>
             <TableHead>Nombre</TableHead>
+            <TableHead>Unidad</TableHead>
             <TableHead>Presentación por caja</TableHead>
             <TableHead>Marca</TableHead>
             <TableHead>Estado</TableHead>
@@ -290,6 +300,7 @@ export function EnvasadoInsumosPanel({
           {insumos.map((insumo) => (
             <TableRow key={insumo.id}>
               <TableCell className="font-medium">{insumo.name}</TableCell>
+              <TableCell className="text-muted-foreground">{insumo.unit}</TableCell>
               <TableCell>{insumo.presentacion_caja ?? "—"}</TableCell>
               <TableCell>{insumo.marca ?? "—"}</TableCell>
               <TableCell>
@@ -323,7 +334,7 @@ export function EnvasadoInsumosPanel({
           ))}
           {insumos.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Sin insumos de envasado todavía.
               </TableCell>
             </TableRow>

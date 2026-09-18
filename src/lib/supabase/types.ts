@@ -108,6 +108,7 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          unit: string;
           codigo: string | null;
           categoria_id: string | null;
           stock_minimo: number | null;
@@ -116,6 +117,7 @@ export interface Database {
         };
         Insert: {
           name: string;
+          unit?: string;
           codigo?: string | null;
           categoria_id?: string | null;
           stock_minimo?: number | null;
@@ -536,6 +538,7 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          unit: string;
           presentacion_caja: string | null;
           marca: string | null;
           codigo: string | null;
@@ -546,6 +549,7 @@ export interface Database {
         };
         Insert: {
           name: string;
+          unit?: string;
           presentacion_caja?: string | null;
           marca?: string | null;
           codigo?: string | null;
@@ -932,6 +936,7 @@ export interface Database {
           insumo_tipo: InventarioInsumoTipo;
           insumo_id: string;
           name: string;
+          unit: string;
           codigo: string | null;
           categoria_id: string | null;
           stock_minimo: number | null;

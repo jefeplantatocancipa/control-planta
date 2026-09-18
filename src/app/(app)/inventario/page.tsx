@@ -40,7 +40,14 @@ function StockTable({
   lotesByInsumo,
 }: {
   title: string;
-  rows: { insumo_id: string; name: string; codigo: string | null; stock_minimo: number | null; stock_actual: number }[];
+  rows: {
+    insumo_id: string;
+    name: string;
+    unit: string;
+    codigo: string | null;
+    stock_minimo: number | null;
+    stock_actual: number;
+  }[];
   lotesByInsumo: Map<string, { lote: string; saldo: number }[]>;
 }) {
   return (
@@ -50,6 +57,7 @@ function StockTable({
         <TableHeader>
           <TableRow>
             <TableHead>Nombre</TableHead>
+            <TableHead>Unidad</TableHead>
             <TableHead>Stock actual</TableHead>
             <TableHead>Por lote</TableHead>
             <TableHead>Mínimo</TableHead>
@@ -68,6 +76,7 @@ function StockTable({
                     <span className="ml-1 text-xs text-muted-foreground">({row.codigo})</span>
                   )}
                 </TableCell>
+                <TableCell className="text-muted-foreground">{row.unit}</TableCell>
                 <TableCell
                   className={bajoMinimo ? "font-semibold text-destructive" : undefined}
                 >
@@ -87,7 +96,7 @@ function StockTable({
           })}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Sin insumos en esta categoría.
               </TableCell>
             </TableRow>

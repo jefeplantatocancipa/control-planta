@@ -468,6 +468,7 @@ export async function createUser(
 const InsumoSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
+  unit: z.string().trim().min(1, "La unidad es obligatoria."),
   stock_minimo: z.coerce.number().min(0).nullable(),
 });
 
@@ -481,6 +482,7 @@ export async function upsertInsumo(
   const parsed = InsumoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
+    unit: formData.get("unit"),
     stock_minimo: stockMinimo || null,
   });
   if (!parsed.success) {
@@ -718,6 +720,7 @@ export async function upsertTurno(
 const EnvasadoInsumoSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
+  unit: z.string().trim().min(1, "La unidad es obligatoria."),
   presentacion_caja: z.string().trim().optional(),
   marca: z.string().trim().optional(),
   stock_minimo: z.coerce.number().min(0).nullable(),
@@ -733,6 +736,7 @@ export async function upsertEnvasadoInsumo(
   const parsed = EnvasadoInsumoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
+    unit: formData.get("unit"),
     presentacion_caja: formData.get("presentacion_caja") || undefined,
     marca: formData.get("marca") || undefined,
     stock_minimo: stockMinimo || null,
@@ -976,6 +980,7 @@ async function migrarItemsGenericos(
           .from("insumos")
           .insert({
             name: item.name,
+            unit: item.unit,
             codigo: item.codigo,
             categoria_id: categoriaId,
             stock_minimo: item.stock_minimo,
@@ -1000,6 +1005,7 @@ async function migrarItemsGenericos(
           .from("envasado_insumos")
           .insert({
             name: item.name,
+            unit: item.unit,
             codigo: item.codigo,
             categoria_id: categoriaId,
             stock_minimo: item.stock_minimo,
@@ -1244,11 +1250,11 @@ export async function importInventarioCatalogo(
       const res = existingId
         ? await supabase
             .from("insumos")
-            .update({ name, categoria_id: categoriaId })
+            .update({ name, unit, categoria_id: categoriaId })
             .eq("id", existingId)
         : await supabase
             .from("insumos")
-            .insert({ name, codigo, categoria_id: categoriaId })
+            .insert({ name, unit, codigo, categoria_id: categoriaId })
             .select("id")
             .single();
       error = res.error;
@@ -1260,11 +1266,11 @@ export async function importInventarioCatalogo(
       const res = existingId
         ? await supabase
             .from("envasado_insumos")
-            .update({ name, categoria_id: categoriaId })
+            .update({ name, unit, categoria_id: categoriaId })
             .eq("id", existingId)
         : await supabase
             .from("envasado_insumos")
-            .insert({ name, codigo, categoria_id: categoriaId })
+            .insert({ name, unit, codigo, categoria_id: categoriaId })
             .select("id")
             .single();
       error = res.error;
