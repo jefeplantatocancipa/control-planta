@@ -1241,8 +1241,24 @@ export async function importInventarioCatalogo(
       categoriaByNombre.set(normalize(categoriaNombre), created);
     }
 
-    const tablaDestino = categoria?.tabla_destino ?? "generico";
-    const categoriaId = categoria?.id ?? null;
+    // Si la fila no trae categoría (ej. un Excel reducido solo para
+    // actualizar unidades) y el código ya existe en algún catálogo, se
+    // actualiza ESE catálogo sin tocar su categoría -- así no hace falta
+    // repetir la categoría de cada insumo solo para cambiarle la unidad.
+    const existingElsewhere = !categoriaNombre
+      ? insumoByCodigo.has(codigo)
+        ? "materia_prima"
+        : empaqueByCodigo.has(codigo)
+          ? "empaque"
+          : vasoByCodigo.has(codigo)
+            ? "vaso_blanco"
+            : itemByCodigo.has(codigo)
+              ? "generico"
+              : null
+      : null;
+
+    const tablaDestino = categoria?.tabla_destino ?? existingElsewhere ?? "generico";
+    const categoriaId = categoria ? categoria.id : existingElsewhere ? undefined : null;
 
     let error: { message: string } | null = null;
     if (tablaDestino === "materia_prima") {
