@@ -34,7 +34,7 @@ export async function registrarEntrada(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
 
   const parsed = EntradaSchema.safeParse({
     insumo_tipo: formData.get("insumo_tipo"),
@@ -127,7 +127,7 @@ export async function importInventarioEntradas(
   _prevState: ImportActionState,
   formData: FormData,
 ): Promise<ImportActionState> {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
