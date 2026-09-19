@@ -105,11 +105,11 @@ function MovimientoForm({
           items={opciones.map((o) => ({ value: o.id, label: o.name }))}
         >
           <SelectTrigger id="insumo_id" className="w-full">
-            <SelectValue placeholder="Elegí un insumo" />
+            <SelectValue placeholder="Elegí un insumo" className="text-xs sm:text-sm" />
           </SelectTrigger>
           <SelectContent>
             {opciones.map((o) => (
-              <SelectItem key={o.id} value={o.id}>
+              <SelectItem key={o.id} value={o.id} className="text-xs">
                 {o.name}
               </SelectItem>
             ))}
@@ -249,7 +249,7 @@ export function MovimientoDialog({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{TITLE_LABELS[mode]}</DialogTitle>
         </DialogHeader>
