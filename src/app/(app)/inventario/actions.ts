@@ -21,6 +21,8 @@ export interface ImportActionState {
 
 const INSUMO_TIPOS = ["materia_prima", "empaque", "vaso_blanco", "generico"] as const;
 
+export const BODEGAS_DESPACHO = ["Funza", "Chía", "Bodega Luis", "Guasca"] as const;
+
 const EntradaSchema = z.object({
   insumo_tipo: z.enum(INSUMO_TIPOS),
   insumo_id: z.string().uuid({ message: "Elegí un insumo." }),
@@ -108,6 +110,55 @@ export async function registrarAjuste(
 
   if (error) {
     return { error: "No se pudo registrar el ajuste." };
+  }
+
+  revalidatePath("/inventario");
+  revalidatePath("/enmangado");
+  return { success: true };
+}
+
+const DespachoSchema = z.object({
+  insumo_tipo: z.enum(INSUMO_TIPOS),
+  insumo_id: z.string().uuid({ message: "Elegí un insumo." }),
+  cantidad: z.coerce.number().positive("La cantidad debe ser mayor a 0."),
+  destino: z.enum(BODEGAS_DESPACHO, { message: "Elegí la bodega destino." }),
+  lote: z.string().trim().optional(),
+  notas: z.string().trim().optional(),
+});
+
+export async function registrarDespacho(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = DespachoSchema.safeParse({
+    insumo_tipo: formData.get("insumo_tipo"),
+    insumo_id: formData.get("insumo_id"),
+    cantidad: formData.get("cantidad"),
+    destino: formData.get("destino"),
+    lote: formData.get("lote") || undefined,
+    notas: formData.get("notas") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("inventario_movimientos").insert({
+    insumo_tipo: parsed.data.insumo_tipo,
+    insumo_id: parsed.data.insumo_id,
+    tipo: "despacho",
+    cantidad: -parsed.data.cantidad,
+    lote: parsed.data.lote || null,
+    destino: parsed.data.destino,
+    origen_tipo: "manual",
+    notas: parsed.data.notas || null,
+    created_by: profile.id,
+  });
+
+  if (error) {
+    return { error: "No se pudo registrar el despacho." };
   }
 
   revalidatePath("/inventario");

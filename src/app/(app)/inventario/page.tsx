@@ -25,6 +25,7 @@ const MOVIMIENTO_TIPO_LABELS: Record<string, string> = {
   entrada: "Entrada",
   consumo: "Consumo",
   ajuste: "Ajuste",
+  despacho: "Despacho",
 };
 
 const ORIGEN_LABELS: Record<string, string> = {
@@ -214,6 +215,7 @@ export default async function InventarioPage() {
           <div className="flex flex-wrap justify-end gap-2">
             {canEntrada && <ImportEntradasDialog />}
             {canEntrada && <MovimientoDialog mode="entrada" catalogos={catalogos} />}
+            {canAjustar && <MovimientoDialog mode="despacho" catalogos={catalogos} />}
             {canAjustar && <MovimientoDialog mode="ajuste" catalogos={catalogos} />}
           </div>
         )}
@@ -265,7 +267,10 @@ export default async function InventarioPage() {
                   {m.cantidad > 0 ? `+${m.cantidad}` : m.cantidad}
                 </TableCell>
                 <TableCell>{m.lote ?? "—"}</TableCell>
-                <TableCell>{m.origen_tipo ? ORIGEN_LABELS[m.origen_tipo] : "—"}</TableCell>
+                <TableCell>
+                  {m.destino ??
+                    (m.origen_tipo ? ORIGEN_LABELS[m.origen_tipo] : "—")}
+                </TableCell>
                 <TableCell>{profileNames.get(m.created_by) ?? "—"}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {[m.proveedor, m.notas].filter(Boolean).join(" — ") || "—"}

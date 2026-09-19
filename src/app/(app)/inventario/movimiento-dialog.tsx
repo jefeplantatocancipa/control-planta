@@ -20,7 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { registrarEntrada, registrarAjuste, type ActionState } from "./actions";
+import {
+  registrarEntrada,
+  registrarAjuste,
+  registrarDespacho,
+  BODEGAS_DESPACHO,
+  type ActionState,
+} from "./actions";
 import type { InventarioInsumoTipo } from "@/lib/supabase/types";
 
 interface InsumoOption {
@@ -35,19 +41,26 @@ const TIPO_LABELS: Record<InventarioInsumoTipo, string> = {
   generico: "Otro (aseo, etc.)",
 };
 
+const MODE_ACTIONS = {
+  entrada: registrarEntrada,
+  ajuste: registrarAjuste,
+  despacho: registrarDespacho,
+} as const;
+
 function MovimientoForm({
   mode,
   catalogos,
   onSuccess,
 }: {
-  mode: "entrada" | "ajuste";
+  mode: "entrada" | "ajuste" | "despacho";
   catalogos: Record<InventarioInsumoTipo, InsumoOption[]>;
   onSuccess: () => void;
 }) {
-  const action = mode === "entrada" ? registrarEntrada : registrarAjuste;
+  const action = MODE_ACTIONS[mode];
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, {});
   const [insumoTipo, setInsumoTipo] = useState<InventarioInsumoTipo>("materia_prima");
   const [insumoId, setInsumoId] = useState("");
+  const [destino, setDestino] = useState("");
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -111,14 +124,18 @@ function MovimientoForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="cantidad">
-          {mode === "entrada" ? "Cantidad ingresada" : "Ajuste (+ o -)"}
+          {mode === "entrada"
+            ? "Cantidad ingresada"
+            : mode === "despacho"
+              ? "Cantidad despachada"
+              : "Ajuste (+ o -)"}
         </Label>
         <Input
           id="cantidad"
           name="cantidad"
           type="number"
           step="0.01"
-          min={mode === "entrada" ? "0" : undefined}
+          min={mode === "ajuste" ? undefined : "0"}
           required
         />
         {mode === "ajuste" && (
@@ -129,21 +146,44 @@ function MovimientoForm({
         )}
       </div>
 
+      {mode === "despacho" && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="destino">Bodega destino</Label>
+          <Select
+            name="destino"
+            value={destino}
+            onValueChange={(value) => setDestino(value ?? "")}
+            items={BODEGAS_DESPACHO.map((b) => ({ value: b, label: b }))}
+          >
+            <SelectTrigger id="destino" className="w-full">
+              <SelectValue placeholder="Elegí una bodega" />
+            </SelectTrigger>
+            <SelectContent>
+              {BODEGAS_DESPACHO.map((b) => (
+                <SelectItem key={b} value={b}>
+                  {b}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {(mode === "entrada" || mode === "despacho") && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="lote">Lote</Label>
+          <Input id="lote" name="lote" placeholder="Opcional" />
+          <p className="text-xs text-muted-foreground">
+            El mismo insumo puede tener varios lotes con saldo propio al
+            mismo tiempo.
+          </p>
+        </div>
+      )}
       {mode === "entrada" && (
-        <>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="lote">Lote</Label>
-            <Input id="lote" name="lote" placeholder="Opcional" />
-            <p className="text-xs text-muted-foreground">
-              El mismo insumo puede tener varios lotes con saldo propio al
-              mismo tiempo.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="proveedor">Proveedor</Label>
-            <Input id="proveedor" name="proveedor" placeholder="Opcional" />
-          </div>
-        </>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="proveedor">Proveedor</Label>
+          <Input id="proveedor" name="proveedor" placeholder="Opcional" />
+        </div>
       )}
 
       <div className="flex flex-col gap-2">
@@ -162,23 +202,40 @@ function MovimientoForm({
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending || !insumoId}>
+        <Button
+          type="submit"
+          disabled={pending || !insumoId || (mode === "despacho" && !destino)}
+        >
           {pending
             ? "Guardando..."
             : mode === "entrada"
               ? "Registrar entrada"
-              : "Registrar ajuste"}
+              : mode === "despacho"
+                ? "Registrar despacho"
+                : "Registrar ajuste"}
         </Button>
       </DialogFooter>
     </form>
   );
 }
 
+const TRIGGER_LABELS = {
+  entrada: "Nueva entrada",
+  despacho: "Despacho de materiales",
+  ajuste: "Registrar ajuste",
+} as const;
+
+const TITLE_LABELS = {
+  entrada: "Nueva entrada de stock",
+  despacho: "Despacho de materiales",
+  ajuste: "Ajuste de inventario",
+} as const;
+
 export function MovimientoDialog({
   mode,
   catalogos,
 }: {
-  mode: "entrada" | "ajuste";
+  mode: "entrada" | "ajuste" | "despacho";
   catalogos: Record<InventarioInsumoTipo, InsumoOption[]>;
 }) {
   const [open, setOpen] = useState(false);
@@ -188,15 +245,13 @@ export function MovimientoDialog({
       <DialogTrigger
         render={
           <Button size="sm" variant={mode === "entrada" ? "default" : "outline"}>
-            {mode === "entrada" ? "Nueva entrada" : "Registrar ajuste"}
+            {TRIGGER_LABELS[mode]}
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {mode === "entrada" ? "Nueva entrada de stock" : "Ajuste de inventario"}
-          </DialogTitle>
+          <DialogTitle>{TITLE_LABELS[mode]}</DialogTitle>
         </DialogHeader>
         <MovimientoForm mode={mode} catalogos={catalogos} onSuccess={() => setOpen(false)} />
       </DialogContent>

@@ -16,7 +16,7 @@ export type BacheStatus = "en_proceso" | "completado" | "cancelado";
 
 export type InventarioInsumoTipo = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
 export type InventarioTablaDestino = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
-export type InventarioMovimientoTipo = "entrada" | "consumo" | "ajuste";
+export type InventarioMovimientoTipo = "entrada" | "consumo" | "ajuste" | "despacho";
 export type InventarioOrigenTipo = "bache" | "envasado" | "enmangado" | "manual";
 
 export type StageParameterType =
@@ -811,6 +811,7 @@ export interface Database {
           origen_tipo: InventarioOrigenTipo | null;
           origen_id: string | null;
           proveedor: string | null;
+          destino: string | null;
           notas: string | null;
           created_by: string;
           created_at: string;
@@ -824,6 +825,7 @@ export interface Database {
           origen_tipo?: InventarioOrigenTipo | null;
           origen_id?: string | null;
           proveedor?: string | null;
+          destino?: string | null;
           notas?: string | null;
           created_by: string;
         };
