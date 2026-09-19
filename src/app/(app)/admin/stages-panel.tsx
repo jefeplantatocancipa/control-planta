@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import {
   upsertStageTemplate,
-  cloneDefaultStagesForProduct,
+  cloneStagesForProduct,
   deleteProductStages,
   type ActionState,
 } from "./actions";
@@ -242,21 +242,46 @@ function StageForm({
   );
 }
 
-function CloneStagesForm({ eligibleProducts }: { eligibleProducts: Product[] }) {
+function CloneStagesForm({
+  eligibleProducts,
+  sourceOptions,
+}: {
+  eligibleProducts: Product[];
+  sourceOptions: { value: string; label: string }[];
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
-    cloneDefaultStagesForProduct,
+    cloneStagesForProduct,
     {},
   );
   const [productId, setProductId] = useState("");
+  const [sourceId, setSourceId] = useState(sourceOptions[0]?.value ?? ALL_PRODUCTS_VALUE);
 
-  if (eligibleProducts.length === 0) return null;
+  if (eligibleProducts.length === 0 || sourceOptions.length === 0) return null;
 
   return (
     <form action={action} className="flex flex-wrap items-end gap-2 rounded-lg border p-3">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="clone_product_id">
-          Copiar las etapas por defecto a un producto (para que sean independientes)
-        </Label>
+        <Label htmlFor="clone_source_id">Copiar las etapas de</Label>
+        <Select
+          name="source_product_id"
+          value={sourceId}
+          onValueChange={(value) => setSourceId(value ?? ALL_PRODUCTS_VALUE)}
+          items={sourceOptions}
+        >
+          <SelectTrigger id="clone_source_id" className="w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {sourceOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="clone_product_id">a</Label>
         <Select
           name="product_id"
           value={productId}
@@ -448,6 +473,15 @@ export function StagesPanel({
 
   const eligibleProducts = products.filter((p) => !groups.has(p.id));
 
+  // Origen para copiar: las etapas por defecto (si existen) + cualquier
+  // producto que ya tenga sus propias etapas.
+  const sourceOptions = [
+    ...(groups.has("all") ? [{ value: ALL_PRODUCTS_VALUE, label: "Etapas por defecto" }] : []),
+    ...products
+      .filter((p) => groups.has(p.id))
+      .map((p) => ({ value: p.id, label: p.name })),
+  ];
+
   function openEdit(stage: StageTemplate) {
     setEditing(stage);
     setOpen(true);
@@ -469,7 +503,9 @@ export function StagesPanel({
         </div>
       )}
 
-      {canWrite && <CloneStagesForm eligibleProducts={eligibleProducts} />}
+      {canWrite && (
+        <CloneStagesForm eligibleProducts={eligibleProducts} sourceOptions={sourceOptions} />
+      )}
 
       {groups.has("all") && (
         <StagesTable

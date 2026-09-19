@@ -196,17 +196,24 @@ export async function upsertStageTemplate(
 }
 
 const CloneStagesSchema = z.object({
-  product_id: z.string().uuid({ message: "Elegí un producto." }),
+  product_id: z.string().uuid({ message: "Elegí un producto destino." }),
+  source_product_id: z.string().uuid().nullable(),
 });
 
-export async function cloneDefaultStagesForProduct(
+// Copia una secuencia de etapas a un producto que todavía no tiene las
+// suyas propias -- el origen puede ser las etapas por defecto (source_product_id
+// null) o las de cualquier otro producto que ya tenga las suyas, para no
+// tener que recrear todo a mano cuando dos productos son muy parecidos.
+export async function cloneStagesForProduct(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["jefe_planta"]);
 
+  const rawSource = formData.get("source_product_id");
   const parsed = CloneStagesSchema.safeParse({
     product_id: formData.get("product_id"),
+    source_product_id: rawSource === ALL_PRODUCTS_VALUE || !rawSource ? null : rawSource,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -223,17 +230,16 @@ export async function cloneDefaultStagesForProduct(
     return { error: "Este producto ya tiene etapas propias." };
   }
 
-  const { data: defaults } = await supabase
-    .from("process_stage_templates")
-    .select("*")
-    .is("product_id", null)
-    .order("sequence_order");
-  if (!defaults || defaults.length === 0) {
-    return { error: "No hay etapas por defecto para copiar." };
+  const sourceQuery = supabase.from("process_stage_templates").select("*").order("sequence_order");
+  const { data: source } = parsed.data.source_product_id
+    ? await sourceQuery.eq("product_id", parsed.data.source_product_id)
+    : await sourceQuery.is("product_id", null);
+  if (!source || source.length === 0) {
+    return { error: "El producto de origen no tiene etapas para copiar." };
   }
 
   const { error } = await supabase.from("process_stage_templates").insert(
-    defaults.map((stage) => ({
+    source.map((stage) => ({
       product_id: parsed.data.product_id,
       process_type: stage.process_type,
       name: stage.name,
