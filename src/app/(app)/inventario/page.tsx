@@ -111,8 +111,10 @@ function StockTable({
 export default async function InventarioPage() {
   const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
   const canAjustar = profile.role === "jefe_planta" || profile.role === "supervisor";
-  // Asistente Adm puede registrar entradas (e importarlas) pero no ajustes.
+  // Asistente Adm puede registrar entradas (e importarlas) y despachos a
+  // otra bodega, pero no ajustes.
   const canEntrada = canAjustar || profile.role === "asistente_adm";
+  const canDespachar = canEntrada;
   const supabase = await createClient();
 
   const [
@@ -211,11 +213,11 @@ export default async function InventarioPage() {
             conteo físico.
           </p>
         </div>
-        {(canEntrada || canAjustar) && (
+        {(canEntrada || canDespachar || canAjustar) && (
           <div className="flex flex-wrap justify-end gap-2">
             {canEntrada && <ImportEntradasDialog />}
             {canEntrada && <MovimientoDialog mode="entrada" catalogos={catalogos} />}
-            {canAjustar && <MovimientoDialog mode="despacho" catalogos={catalogos} />}
+            {canDespachar && <MovimientoDialog mode="despacho" catalogos={catalogos} />}
             {canAjustar && <MovimientoDialog mode="ajuste" catalogos={catalogos} />}
           </div>
         )}

@@ -130,7 +130,7 @@ export async function registrarDespacho(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const profile = await requireRole(["jefe_planta", "supervisor"]);
+  const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
 
   const parsed = DespachoSchema.safeParse({
     insumo_tipo: formData.get("insumo_tipo"),
