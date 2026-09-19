@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { normalize, cellText } from "../programa/excel-utils";
+import { BODEGAS_DESPACHO } from "./constants";
 
 export interface ActionState {
   error?: string;
@@ -20,8 +21,6 @@ export interface ImportActionState {
 }
 
 const INSUMO_TIPOS = ["materia_prima", "empaque", "vaso_blanco", "generico"] as const;
-
-export const BODEGAS_DESPACHO = ["Funza", "Chía", "Bodega Luis", "Guasca"] as const;
 
 const EntradaSchema = z.object({
   insumo_tipo: z.enum(INSUMO_TIPOS),

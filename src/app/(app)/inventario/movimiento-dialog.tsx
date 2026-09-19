@@ -24,9 +24,9 @@ import {
   registrarEntrada,
   registrarAjuste,
   registrarDespacho,
-  BODEGAS_DESPACHO,
   type ActionState,
 } from "./actions";
+import { BODEGAS_DESPACHO } from "./constants";
 import type { InventarioInsumoTipo } from "@/lib/supabase/types";
 
 interface InsumoOption {
