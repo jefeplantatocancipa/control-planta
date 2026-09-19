@@ -126,28 +126,48 @@ export default async function BachesPage() {
                   : "—"}
               </TableCell>
               <TableCell>
-                {bache.production_order_id ? (
-                  (() => {
-                    const order = orderById.get(bache.production_order_id);
-                    return (
-                      <div className="flex flex-col gap-1">
-                        <span>{order?.orden_codigo || "Sin código"}</span>
-                        {order && (
-                          <Badge
-                            variant="outline"
-                            className={`w-fit text-xs ${ORDER_STATUS_CLASSES[order.status]}`}
-                          >
-                            {ORDER_STATUS_LABELS[order.status]}
-                          </Badge>
-                        )}
-                      </div>
-                    );
-                  })()
-                ) : isJefe && orderOptions.length > 0 ? (
-                  <AssociateOrderDialog bacheId={bache.id} orders={orderOptions} />
-                ) : (
-                  <span className="text-muted-foreground">Sin orden asociada</span>
-                )}
+                <div className="flex flex-col items-start gap-1">
+                  {bache.production_order_id ? (
+                    (() => {
+                      const order = orderById.get(bache.production_order_id);
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <span>{order?.orden_codigo || "Sin código"}</span>
+                          {order && (
+                            <Badge
+                              variant="outline"
+                              className={`w-fit text-xs ${ORDER_STATUS_CLASSES[order.status]}`}
+                            >
+                              {ORDER_STATUS_LABELS[order.status]}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <span className="text-muted-foreground">Sin orden asociada</span>
+                  )}
+                  {isJefe && (
+                    <AssociateOrderDialog
+                      bacheId={bache.id}
+                      currentOrderId={bache.production_order_id}
+                      orders={
+                        bache.production_order_id &&
+                        !orderOptions.some((o) => o.id === bache.production_order_id)
+                          ? [
+                              ...orderOptions,
+                              {
+                                id: bache.production_order_id,
+                                label:
+                                  orderById.get(bache.production_order_id)?.orden_codigo ??
+                                  "Orden actual",
+                              },
+                            ]
+                          : orderOptions
+                      }
+                    />
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 {formatDate(bache.started_at)}
