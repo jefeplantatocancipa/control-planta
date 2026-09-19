@@ -79,6 +79,9 @@ export default async function EstadisticasPage() {
     { data: insumos },
     { data: envasados },
     { data: envasadoReferencias },
+    { data: products },
+    { data: stageRecordsAll },
+    { data: stageTemplatesAll },
   ] = await Promise.all([
     supabase.from("v_estadisticas_operario").select("*").order("operario_name"),
     supabase
@@ -89,7 +92,7 @@ export default async function EstadisticasPage() {
     supabase.from("profiles").select("*"),
     supabase
       .from("baches")
-      .select("started_at, completed_at")
+      .select("id, product_id, started_at, completed_at")
       .eq("status", "completado")
       .not("completed_at", "is", null),
     supabase
@@ -100,12 +103,17 @@ export default async function EstadisticasPage() {
     supabase.from("insumos").select("id, name"),
     supabase.from("envasados").select("cantidad_unidades, referencia_id, presentacion, started_at"),
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
+    supabase.from("products").select("id, name"),
+    supabase.from("bache_stage_records").select("bache_id, stage_template_id, started_at, ended_at"),
+    supabase.from("process_stage_templates").select("id, name, sequence_order"),
   ]);
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+  const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
 
   // -------------------------------------------------------------------
-  // KPI: tiempo promedio de preparación de un bache
+  // KPI: tiempo promedio de preparación de un bache (planta completa) +
+  // desglose por producto, porque no todos tardan lo mismo.
   // -------------------------------------------------------------------
   const prepDurations = (bachesCerrados ?? [])
     .filter((b) => b.completed_at)
@@ -115,30 +123,78 @@ export default async function EstadisticasPage() {
       ? prepDurations.reduce((s, v) => s + v, 0) / prepDurations.length
       : null;
 
+  const prepPorProducto = new Map<string, { sumaMin: number; cantidad: number }>();
+  for (const b of bachesCerrados ?? []) {
+    if (!b.completed_at) continue;
+    const minutos = (new Date(b.completed_at).getTime() - new Date(b.started_at).getTime()) / 60000;
+    const entry = prepPorProducto.get(b.product_id) ?? { sumaMin: 0, cantidad: 0 };
+    entry.sumaMin += minutos;
+    entry.cantidad += 1;
+    prepPorProducto.set(b.product_id, entry);
+  }
+  const preparacionPorProducto = Array.from(prepPorProducto.entries())
+    .map(([productId, e]) => ({
+      productId,
+      nombre: productNameById.get(productId) ?? "Producto eliminado",
+      promedioMin: e.sumaMin / e.cantidad,
+      cantidad: e.cantidad,
+    }))
+    .sort((a, b) => b.promedioMin - a.promedioMin);
+
   // -------------------------------------------------------------------
-  // KPI + gráfico: duración promedio por etapa (planta completa, no por
-  // operario) -- promedio ponderado por cantidad de etapas completadas.
+  // KPI: tiempo promedio por etapa (planta completa) + desglose por
+  // producto y etapa -- se calcula directo de bache_stage_records (no de
+  // v_estadisticas_operario, que solo trae operario x etapa) para poder
+  // agrupar por producto.
   // -------------------------------------------------------------------
-  const porEtapa = new Map<string, { nombre: string; sumaMin: number; cantidad: number }>();
-  for (const row of etapaStats ?? []) {
-    if (row.duracion_promedio_min == null) continue;
-    const entry = porEtapa.get(row.stage_id) ?? {
-      nombre: row.stage_name,
+  const stageInfoById = new Map(
+    (stageTemplatesAll ?? []).map((s) => [s.id, { name: s.name, sequenceOrder: s.sequence_order }]),
+  );
+  const bacheProductById = new Map((bachesCerrados ?? []).map((b) => [b.id, b.product_id]));
+
+  const etapaPorProductoMap = new Map<
+    string,
+    Map<string, { stageName: string; sequenceOrder: number; sumaMin: number; cantidad: number }>
+  >();
+  let totalEtapasCompletadas = 0;
+  let sumaEtapasMin = 0;
+  for (const r of stageRecordsAll ?? []) {
+    if (!r.ended_at) continue;
+    const productId = bacheProductById.get(r.bache_id);
+    const stage = stageInfoById.get(r.stage_template_id);
+    if (!productId || !stage) continue;
+    const minutos = (new Date(r.ended_at).getTime() - new Date(r.started_at).getTime()) / 60000;
+    const porEtapa = etapaPorProductoMap.get(productId) ?? new Map();
+    const entry = porEtapa.get(r.stage_template_id) ?? {
+      stageName: stage.name,
+      sequenceOrder: stage.sequenceOrder,
       sumaMin: 0,
       cantidad: 0,
     };
-    entry.sumaMin += row.duracion_promedio_min * row.etapas_completadas;
-    entry.cantidad += row.etapas_completadas;
-    porEtapa.set(row.stage_id, entry);
+    entry.sumaMin += minutos;
+    entry.cantidad += 1;
+    porEtapa.set(r.stage_template_id, entry);
+    etapaPorProductoMap.set(productId, porEtapa);
+    totalEtapasCompletadas += 1;
+    sumaEtapasMin += minutos;
   }
-  const duracionPorEtapa = Array.from(porEtapa.values())
-    .map((e) => ({ label: e.nombre, value: e.cantidad > 0 ? Math.round(e.sumaMin / e.cantidad) : 0 }))
-    .sort((a, b) => b.value - a.value);
-  const totalEtapasCompletadas = Array.from(porEtapa.values()).reduce((s, e) => s + e.cantidad, 0);
-  const avgEtapaMinutes =
-    totalEtapasCompletadas > 0
-      ? Array.from(porEtapa.values()).reduce((s, e) => s + e.sumaMin, 0) / totalEtapasCompletadas
-      : null;
+  const avgEtapaMinutes = totalEtapasCompletadas > 0 ? sumaEtapasMin / totalEtapasCompletadas : null;
+
+  const duracionPorEtapaYProducto = Array.from(etapaPorProductoMap.entries())
+    .sort(([a], [b]) =>
+      (productNameById.get(a) ?? "").localeCompare(productNameById.get(b) ?? ""),
+    )
+    .flatMap(([productId, porEtapa]) =>
+      Array.from(porEtapa.values())
+        .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+        .map((e) => ({
+          productId,
+          productName: productNameById.get(productId) ?? "Producto eliminado",
+          stageName: e.stageName,
+          promedioMin: e.sumaMin / e.cantidad,
+          cantidad: e.cantidad,
+        })),
+    );
 
   // -------------------------------------------------------------------
   // Kg producidos: consumo real de materia prima registrado al cerrar la
@@ -309,14 +365,34 @@ export default async function EstadisticasPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Duración promedio por etapa</CardTitle>
+            <CardTitle className="text-base">Tiempo de preparación por producto</CardTitle>
           </CardHeader>
           <CardContent>
-            {duracionPorEtapa.length > 0 ? (
-              <OperarioBarChart data={duracionPorEtapa} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Sin etapas completadas todavía.</p>
-            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Baches cerrados</TableHead>
+                  <TableHead className="text-right">Tiempo promedio</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {preparacionPorProducto.map((p) => (
+                  <TableRow key={p.productId}>
+                    <TableCell className="font-medium">{p.nombre}</TableCell>
+                    <TableCell>{p.cantidad}</TableCell>
+                    <TableCell className="text-right">{minutesLabel(p.promedioMin)}</TableCell>
+                  </TableRow>
+                ))}
+                {preparacionPorProducto.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      Sin baches cerrados todavía.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 
@@ -351,6 +427,41 @@ export default async function EstadisticasPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Duración promedio por etapa y producto</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Producto</TableHead>
+                <TableHead>Etapa</TableHead>
+                <TableHead>Completadas</TableHead>
+                <TableHead className="text-right">Duración promedio</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {duracionPorEtapaYProducto.map((e, i) => (
+                <TableRow key={`${e.productId}-${e.stageName}-${i}`}>
+                  <TableCell className="font-medium">{e.productName}</TableCell>
+                  <TableCell>{e.stageName}</TableCell>
+                  <TableCell>{e.cantidad}</TableCell>
+                  <TableCell className="text-right">{minutesLabel(e.promedioMin)}</TableCell>
+                </TableRow>
+              ))}
+              {duracionPorEtapaYProducto.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Sin etapas completadas todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
