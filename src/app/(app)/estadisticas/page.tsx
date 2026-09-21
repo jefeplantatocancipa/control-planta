@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { OperarioBarChart } from "./operario-bar-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
+import { ShareChart } from "./share-chart";
 import { fridayOfWeek } from "../programa/excel-utils";
 
 function minutesLabel(minutes: number | null) {
@@ -75,7 +76,7 @@ export default async function EstadisticasPage() {
     { data: vasosEnmangados },
     { data: profiles },
     { data: bachesCerrados },
-    { data: consumoMateriaPrima },
+    { data: todosBaches },
     { data: insumos },
     { data: envasados },
     { data: envasadoReferencias },
@@ -95,17 +96,20 @@ export default async function EstadisticasPage() {
       .select("id, product_id, started_at, completed_at")
       .eq("status", "completado")
       .not("completed_at", "is", null),
-    supabase
-      .from("inventario_movimientos")
-      .select("cantidad, created_at, insumo_id")
-      .eq("insumo_tipo", "materia_prima")
-      .eq("tipo", "consumo"),
+    // Para "kg producidos" hace falta CUALQUIER bache (no solo los ya
+    // completados): la última etapa con checklist de insumos puede cerrarse
+    // antes de que el bache entero se marque como terminado.
+    supabase.from("baches").select("id, product_id"),
     supabase.from("insumos").select("id, name"),
     supabase.from("envasados").select("cantidad_unidades, referencia_id, presentacion, started_at"),
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
     supabase.from("products").select("id, name"),
-    supabase.from("bache_stage_records").select("bache_id, stage_template_id, started_at, ended_at"),
-    supabase.from("process_stage_templates").select("id, name, sequence_order"),
+    supabase
+      .from("bache_stage_records")
+      .select("bache_id, stage_template_id, started_at, ended_at, parameters"),
+    supabase
+      .from("process_stage_templates")
+      .select("id, product_id, name, sequence_order, captures_insumos"),
   ]);
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
@@ -197,11 +201,80 @@ export default async function EstadisticasPage() {
     );
 
   // -------------------------------------------------------------------
-  // Kg producidos: consumo real de materia prima registrado al cerrar la
-  // última etapa con checklist de insumos de cada bache (igual criterio
-  // que el balance de masa del reporte de bache).
+  // Kg producidos: se calcula igual que el balance de masa del reporte
+  // impreso de cada bache (no del consumo de inventario, que solo existe
+  // desde que existe el módulo de Inventario y deja afuera baches
+  // anteriores) -- los kg de insumos de la última etapa con checklist de
+  // insumos que quedó cerrada, para CUALQUIER bache (no solo los ya
+  // completados, porque esa etapa puede cerrarse antes).
   // -------------------------------------------------------------------
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
+
+  const stagesByProduct = new Map<
+    string,
+    { id: string; sequence_order: number; captures_insumos: boolean }[]
+  >();
+  const defaultStagesList: { id: string; sequence_order: number; captures_insumos: boolean }[] = [];
+  for (const s of stageTemplatesAll ?? []) {
+    if (s.product_id) {
+      const arr = stagesByProduct.get(s.product_id) ?? [];
+      arr.push(s);
+      stagesByProduct.set(s.product_id, arr);
+    } else {
+      defaultStagesList.push(s);
+    }
+  }
+  function stagesForProducto(productId: string) {
+    const own = stagesByProduct.get(productId);
+    return own && own.length > 0 ? own : defaultStagesList;
+  }
+
+  const recordsByBacheAll = new Map<string, NonNullable<typeof stageRecordsAll>>();
+  for (const r of stageRecordsAll ?? []) {
+    const arr = recordsByBacheAll.get(r.bache_id) ?? [];
+    arr.push(r);
+    recordsByBacheAll.set(r.bache_id, arr);
+  }
+
+  const kgProducidoEvents: {
+    productId: string;
+    kg: number;
+    date: string;
+    insumos: { insumo_id: string; peso: number }[];
+  }[] = [];
+  for (const bache of todosBaches ?? []) {
+    const records = recordsByBacheAll.get(bache.id) ?? [];
+    const stageById = new Map(stagesForProducto(bache.product_id).map((s) => [s.id, s]));
+    let best: {
+      order: number;
+      kg: number;
+      date: string;
+      insumos: { insumo_id: string; peso: number }[];
+    } | null = null;
+    for (const record of records) {
+      if (!record.ended_at) continue;
+      const stage = stageById.get(record.stage_template_id);
+      if (!stage || !stage.captures_insumos) continue;
+      const insumosArr = record.parameters?.insumos;
+      if (!Array.isArray(insumosArr)) continue;
+      if (best && stage.sequence_order <= best.order) continue;
+      const kgTotal = insumosArr.reduce((s, i) => s + (Number(i.peso) || 0), 0);
+      best = {
+        order: stage.sequence_order,
+        kg: kgTotal,
+        date: record.ended_at.slice(0, 10),
+        insumos: insumosArr,
+      };
+    }
+    if (best) {
+      kgProducidoEvents.push({
+        productId: bache.product_id,
+        kg: best.kg,
+        date: best.date,
+        insumos: best.insumos,
+      });
+    }
+  }
 
   // -------------------------------------------------------------------
   // Kg empacados: unidades envasadas x peso unitario de la referencia
@@ -209,26 +282,29 @@ export default async function EstadisticasPage() {
   // referencia_id, si no por el texto congelado de la presentación, y si
   // no por el nombre de la referencia).
   // -------------------------------------------------------------------
-  const pesoUnitarioById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r.peso_unitario]));
-  const pesoUnitarioByLabel = new Map(
-    (envasadoReferencias ?? []).map((r) => [`${r.sku} — ${r.name}`, r.peso_unitario]),
+  const referenciaById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
+  const referenciaByLabel = new Map(
+    (envasadoReferencias ?? []).map((r) => [`${r.sku} — ${r.name}`, r]),
   );
-  const pesoUnitarioByName = new Map((envasadoReferencias ?? []).map((r) => [r.name, r.peso_unitario]));
-  function pesoUnitarioDe(e: { referencia_id: string | null; presentacion: string }) {
-    if (e.referencia_id && pesoUnitarioById.has(e.referencia_id)) {
-      return pesoUnitarioById.get(e.referencia_id)!;
+  const referenciaByName = new Map((envasadoReferencias ?? []).map((r) => [r.name, r]));
+  function referenciaDe(e: { referencia_id: string | null; presentacion: string }) {
+    if (e.referencia_id && referenciaById.has(e.referencia_id)) {
+      return referenciaById.get(e.referencia_id)!;
     }
-    if (pesoUnitarioByLabel.has(e.presentacion)) return pesoUnitarioByLabel.get(e.presentacion)!;
+    if (referenciaByLabel.has(e.presentacion)) return referenciaByLabel.get(e.presentacion)!;
     const parts = e.presentacion.split(" — ");
     const nameGuess = (parts.length > 1 ? parts.slice(1).join(" — ") : e.presentacion).trim();
-    return pesoUnitarioByName.get(nameGuess) ?? null;
+    return referenciaByName.get(nameGuess) ?? null;
+  }
+  function pesoUnitarioDe(e: { referencia_id: string | null; presentacion: string }) {
+    return referenciaDe(e)?.peso_unitario ?? null;
   }
 
   const cutoff30d = daysAgoISO(30);
 
-  const kgProducidos30d = (consumoMateriaPrima ?? [])
-    .filter((m) => m.created_at.slice(0, 10) >= cutoff30d)
-    .reduce((s, m) => s + Math.abs(m.cantidad), 0);
+  const kgProducidos30d = kgProducidoEvents
+    .filter((e) => e.date >= cutoff30d)
+    .reduce((s, e) => s + e.kg, 0);
 
   const kgEmpacados30d = (envasados ?? [])
     .filter((e) => e.started_at.slice(0, 10) >= cutoff30d)
@@ -238,12 +314,44 @@ export default async function EstadisticasPage() {
     }, 0);
 
   // -------------------------------------------------------------------
-  // Top 5 insumos de materia prima más consumidos (últimos 30 días)
+  // Participación por producto (kg producidos, últimos 30 días) y por
+  // referencia de envasado (kg empacados, últimos 30 días).
+  // -------------------------------------------------------------------
+  const produccionPorProductoMap = new Map<string, number>();
+  for (const e of kgProducidoEvents) {
+    if (e.date < cutoff30d) continue;
+    produccionPorProductoMap.set(e.productId, (produccionPorProductoMap.get(e.productId) ?? 0) + e.kg);
+  }
+  const produccionPorProducto = Array.from(produccionPorProductoMap.entries())
+    .map(([id, total]) => ({
+      label: productNameById.get(id) ?? "Producto eliminado",
+      value: Math.round(total * 10) / 10,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  const empaquePorReferenciaMap = new Map<string, { nombre: string; total: number }>();
+  for (const e of envasados ?? []) {
+    if (e.started_at.slice(0, 10) < cutoff30d) continue;
+    const referencia = referenciaDe(e);
+    if (!referencia) continue;
+    const entry = empaquePorReferenciaMap.get(referencia.id) ?? { nombre: referencia.name, total: 0 };
+    entry.total += (e.cantidad_unidades * referencia.peso_unitario) / 1000;
+    empaquePorReferenciaMap.set(referencia.id, entry);
+  }
+  const empaquePorReferencia = Array.from(empaquePorReferenciaMap.values())
+    .map((e) => ({ label: e.nombre, value: Math.round(e.total * 10) / 10 }))
+    .sort((a, b) => b.value - a.value);
+
+  // -------------------------------------------------------------------
+  // Top 5 insumos de materia prima más consumidos (últimos 30 días) --
+  // mismos eventos de balance de masa de arriba, desglosados por insumo.
   // -------------------------------------------------------------------
   const topInsumosMap = new Map<string, number>();
-  for (const m of consumoMateriaPrima ?? []) {
-    if (m.created_at.slice(0, 10) < cutoff30d) continue;
-    topInsumosMap.set(m.insumo_id, (topInsumosMap.get(m.insumo_id) ?? 0) + Math.abs(m.cantidad));
+  for (const e of kgProducidoEvents) {
+    if (e.date < cutoff30d) continue;
+    for (const i of e.insumos) {
+      topInsumosMap.set(i.insumo_id, (topInsumosMap.get(i.insumo_id) ?? 0) + (Number(i.peso) || 0));
+    }
   }
   const topInsumos = Array.from(topInsumosMap.entries())
     .map(([id, total]) => ({ id, nombre: insumoNames.get(id) ?? "—", total }))
@@ -262,9 +370,9 @@ export default async function EstadisticasPage() {
     weekStarts.push(d.toISOString().slice(0, 10));
   }
   const trendData: TrendDatum[] = weekStarts.map((weekStart) => {
-    const producido = (consumoMateriaPrima ?? [])
-      .filter((m) => fridayOfWeek(m.created_at.slice(0, 10)) === weekStart)
-      .reduce((s, m) => s + Math.abs(m.cantidad), 0);
+    const producido = kgProducidoEvents
+      .filter((e) => fridayOfWeek(e.date) === weekStart)
+      .reduce((s, e) => s + e.kg, 0);
     const empacado = (envasados ?? [])
       .filter((e) => fridayOfWeek(e.started_at.slice(0, 10)) === weekStart)
       .reduce((s, e) => {
@@ -361,6 +469,38 @@ export default async function EstadisticasPage() {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Participación por producto (30 días)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {produccionPorProducto.length > 0 ? (
+              <ShareChart data={produccionPorProducto} unit="kg" />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Sin producción registrada en los últimos 30 días.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Participación por referencia de envasado (30 días)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {empaquePorReferencia.length > 0 ? (
+              <ShareChart data={empaquePorReferencia} unit="kg" />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Sin envasado registrado en los últimos 30 días.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
