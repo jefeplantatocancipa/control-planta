@@ -17,7 +17,7 @@ import {
 import { OperarioBarChart } from "./operario-bar-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
-import { EtapasPorOperario } from "./etapas-por-operario";
+import { EtapasPorOperario, type EtapaOperarioRow } from "./etapas-por-operario";
 import { fridayOfWeek } from "../programa/excel-utils";
 
 function minutesLabel(minutes: number | null) {
@@ -72,7 +72,6 @@ export default async function EstadisticasPage() {
   const supabase = await createClient();
 
   const [
-    { data: etapaStats },
     { data: envasadoStats },
     { data: vasosEnmangados },
     { data: profiles },
@@ -85,7 +84,6 @@ export default async function EstadisticasPage() {
     { data: stageRecordsAll },
     { data: stageTemplatesAll },
   ] = await Promise.all([
-    supabase.from("v_estadisticas_operario").select("*").order("operario_name"),
     supabase
       .from("v_estadisticas_envasado_operario")
       .select("*")
@@ -107,7 +105,7 @@ export default async function EstadisticasPage() {
     supabase.from("products").select("id, name"),
     supabase
       .from("bache_stage_records")
-      .select("bache_id, stage_template_id, started_at, ended_at, parameters"),
+      .select("bache_id, stage_template_id, operario_id, started_at, ended_at, parameters"),
     supabase
       .from("process_stage_templates")
       .select("id, product_id, name, sequence_order, captures_insumos"),
@@ -276,6 +274,54 @@ export default async function EstadisticasPage() {
       });
     }
   }
+
+  // -------------------------------------------------------------------
+  // Etapas de bache por operario Y producto -- v_estadisticas_operario no
+  // trae el producto (una misma etapa por nombre puede repetirse por
+  // producto), así que se recalcula directo de bache_stage_records para
+  // poder filtrar por operario y por producto a la vez.
+  // -------------------------------------------------------------------
+  const bacheProductByIdAll = new Map((todosBaches ?? []).map((b) => [b.id, b.product_id]));
+  const etapaOperarioAgg = new Map<
+    string,
+    {
+      operario_id: string;
+      product_id: string;
+      stage_id: string;
+      stage_name: string;
+      sumaMin: number;
+      cantidad: number;
+    }
+  >();
+  for (const r of stageRecordsAll ?? []) {
+    if (!r.ended_at) continue;
+    const productId = bacheProductByIdAll.get(r.bache_id);
+    const stage = stageInfoById.get(r.stage_template_id);
+    if (!productId || !stage) continue;
+    const minutos = (new Date(r.ended_at).getTime() - new Date(r.started_at).getTime()) / 60000;
+    const key = `${r.operario_id}:${productId}:${r.stage_template_id}`;
+    const entry = etapaOperarioAgg.get(key) ?? {
+      operario_id: r.operario_id,
+      product_id: productId,
+      stage_id: r.stage_template_id,
+      stage_name: stage.name,
+      sumaMin: 0,
+      cantidad: 0,
+    };
+    entry.sumaMin += minutos;
+    entry.cantidad += 1;
+    etapaOperarioAgg.set(key, entry);
+  }
+  const etapaOperarioRows: EtapaOperarioRow[] = Array.from(etapaOperarioAgg.values()).map((e) => ({
+    operario_id: e.operario_id,
+    operario_name: operarioNames.get(e.operario_id) ?? "—",
+    product_id: e.product_id,
+    product_name: productNameById.get(e.product_id) ?? "Producto eliminado",
+    stage_id: e.stage_id,
+    stage_name: e.stage_name,
+    etapas_completadas: e.cantidad,
+    duracion_promedio_min: e.cantidad > 0 ? e.sumaMin / e.cantidad : null,
+  }));
 
   // -------------------------------------------------------------------
   // Kg empacados: unidades envasadas x peso unitario de la referencia
@@ -609,7 +655,7 @@ export default async function EstadisticasPage() {
           <CardTitle className="text-base">Etapas de bache por operario</CardTitle>
         </CardHeader>
         <CardContent>
-          <EtapasPorOperario rows={etapaStats ?? []} />
+          <EtapasPorOperario rows={etapaOperarioRows} />
         </CardContent>
       </Card>
 

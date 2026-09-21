@@ -21,11 +21,15 @@ import { Label } from "@/components/ui/label";
 export interface EtapaOperarioRow {
   operario_id: string;
   operario_name: string;
+  product_id: string;
+  product_name: string;
   stage_id: string;
   stage_name: string;
   etapas_completadas: number;
   duracion_promedio_min: number | null;
 }
+
+const ALL_PRODUCTS = "__todos__";
 
 function diffClass(diff: number): string {
   if (diff < -2) return "text-emerald-600 dark:text-emerald-400";
@@ -41,21 +45,32 @@ export function EtapasPorOperario({ rows }: { rows: EtapaOperarioRow[] }) {
         .sort((a, b) => a.name.localeCompare(b.name)),
     [rows],
   );
+  const productos = useMemo(
+    () =>
+      Array.from(new Map(rows.map((r) => [r.product_id, r.product_name])).entries())
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [rows],
+  );
   const [operarioId, setOperarioId] = useState(operarios[0]?.id ?? "");
+  const [productId, setProductId] = useState(ALL_PRODUCTS);
 
-  // Promedio de planta por etapa (todos los operarios), para comparar.
-  const promedioPlantaPorEtapa = useMemo(() => {
+  // Promedio de planta por producto + etapa (todos los operarios), para
+  // comparar en igualdad de condiciones (una misma etapa por nombre puede
+  // repetirse en varios productos).
+  const promedioPlantaPorProductoEtapa = useMemo(() => {
     const acc = new Map<string, { sumaMin: number; cantidad: number }>();
     for (const r of rows) {
       if (r.duracion_promedio_min == null) continue;
-      const entry = acc.get(r.stage_id) ?? { sumaMin: 0, cantidad: 0 };
+      const key = `${r.product_id}:${r.stage_id}`;
+      const entry = acc.get(key) ?? { sumaMin: 0, cantidad: 0 };
       entry.sumaMin += r.duracion_promedio_min * r.etapas_completadas;
       entry.cantidad += r.etapas_completadas;
-      acc.set(r.stage_id, entry);
+      acc.set(key, entry);
     }
     const out = new Map<string, number>();
-    for (const [stageId, e] of acc) {
-      if (e.cantidad > 0) out.set(stageId, e.sumaMin / e.cantidad);
+    for (const [key, e] of acc) {
+      if (e.cantidad > 0) out.set(key, e.sumaMin / e.cantidad);
     }
     return out;
   }, [rows]);
@@ -64,35 +79,66 @@ export function EtapasPorOperario({ rows }: { rows: EtapaOperarioRow[] }) {
     () =>
       rows
         .filter((r) => r.operario_id === operarioId)
-        .sort((a, b) => a.stage_name.localeCompare(b.stage_name)),
-    [rows, operarioId],
+        .filter((r) => productId === ALL_PRODUCTS || r.product_id === productId)
+        .sort(
+          (a, b) =>
+            a.product_name.localeCompare(b.product_name) || a.stage_name.localeCompare(b.stage_name),
+        ),
+    [rows, operarioId, productId],
   );
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2 sm:w-72">
-        <Label htmlFor="operario_filter">Operario</Label>
-        <Select
-          value={operarioId}
-          onValueChange={(value) => setOperarioId(value ?? "")}
-          items={operarios.map((o) => ({ value: o.id, label: o.name }))}
-        >
-          <SelectTrigger id="operario_filter" className="w-full">
-            <SelectValue placeholder="Elegí un operario" />
-          </SelectTrigger>
-          <SelectContent>
-            {operarios.map((o) => (
-              <SelectItem key={o.id} value={o.id}>
-                {o.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-2 sm:w-64">
+          <Label htmlFor="operario_filter">Operario</Label>
+          <Select
+            value={operarioId}
+            onValueChange={(value) => setOperarioId(value ?? "")}
+            items={operarios.map((o) => ({ value: o.id, label: o.name }))}
+          >
+            <SelectTrigger id="operario_filter" className="w-full">
+              <SelectValue placeholder="Elegí un operario" />
+            </SelectTrigger>
+            <SelectContent>
+              {operarios.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:w-64">
+          <Label htmlFor="producto_filter">Producto</Label>
+          <Select
+            value={productId}
+            onValueChange={(value) => setProductId(value ?? ALL_PRODUCTS)}
+            items={[
+              { value: ALL_PRODUCTS, label: "Todos los productos" },
+              ...productos.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+          >
+            <SelectTrigger id="producto_filter" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PRODUCTS}>Todos los productos</SelectItem>
+              {productos.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Producto</TableHead>
             <TableHead>Etapa</TableHead>
             <TableHead>Completadas</TableHead>
             <TableHead className="text-right">Duración promedio</TableHead>
@@ -102,13 +148,14 @@ export function EtapasPorOperario({ rows }: { rows: EtapaOperarioRow[] }) {
         </TableHeader>
         <TableBody>
           {filasOperario.map((row) => {
-            const plantaAvg = promedioPlantaPorEtapa.get(row.stage_id) ?? null;
+            const plantaAvg = promedioPlantaPorProductoEtapa.get(`${row.product_id}:${row.stage_id}`) ?? null;
             const diff =
               row.duracion_promedio_min != null && plantaAvg != null
                 ? Math.round(row.duracion_promedio_min - plantaAvg)
                 : null;
             return (
-              <TableRow key={row.stage_id}>
+              <TableRow key={`${row.product_id}-${row.stage_id}`}>
+                <TableCell className="text-muted-foreground">{row.product_name}</TableCell>
                 <TableCell className="font-medium">{row.stage_name}</TableCell>
                 <TableCell>{row.etapas_completadas}</TableCell>
                 <TableCell className="text-right tabular-nums">
@@ -127,10 +174,10 @@ export function EtapasPorOperario({ rows }: { rows: EtapaOperarioRow[] }) {
           })}
           {filasOperario.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 {operarios.length === 0
                   ? "Sin etapas completadas todavía."
-                  : "Este operario todavía no completó etapas."}
+                  : "Sin etapas completadas con ese filtro."}
               </TableCell>
             </TableRow>
           )}
