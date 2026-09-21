@@ -17,6 +17,7 @@ import {
 import { OperarioBarChart } from "./operario-bar-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
+import { EtapasPorOperario } from "./etapas-por-operario";
 import { fridayOfWeek } from "../programa/excel-utils";
 
 function minutesLabel(minutes: number | null) {
@@ -608,37 +609,7 @@ export default async function EstadisticasPage() {
           <CardTitle className="text-base">Etapas de bache por operario</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Operario</TableHead>
-                <TableHead>Etapa</TableHead>
-                <TableHead>Completadas</TableHead>
-                <TableHead>Duración promedio</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(etapaStats ?? []).map((row) => (
-                <TableRow key={`${row.operario_id}-${row.stage_id}`}>
-                  <TableCell className="font-medium">{row.operario_name}</TableCell>
-                  <TableCell>{row.stage_name}</TableCell>
-                  <TableCell>{row.etapas_completadas}</TableCell>
-                  <TableCell>
-                    {row.duracion_promedio_min != null
-                      ? `${Math.round(row.duracion_promedio_min)} min`
-                      : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(etapaStats ?? []).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Sin etapas completadas todavía.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <EtapasPorOperario rows={etapaStats ?? []} />
         </CardContent>
       </Card>
 
