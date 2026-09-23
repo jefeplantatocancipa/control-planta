@@ -100,11 +100,11 @@ export default async function EstadisticasPage() {
     // Para "kg producidos" hace falta CUALQUIER bache (no solo los ya
     // completados): la última etapa con checklist de insumos puede cerrarse
     // antes de que el bache entero se marque como terminado.
-    supabase.from("baches").select("id, product_id"),
+    supabase.from("baches").select("id, product_id, volumen_restante_litros"),
     supabase.from("insumos").select("id, name"),
     supabase
       .from("envasados")
-      .select("cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
+      .select("bache_id, cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
     supabase.from("products").select("id, name"),
     supabase
@@ -484,9 +484,9 @@ export default async function EstadisticasPage() {
       : null;
 
   // -------------------------------------------------------------------
-  // Unidades por hora: se calcula por TURNO (envasado_cortes), no por el
-  // envasado completo -- un envasado puede tener huecos entre turnos que
-  // inflarían el tiempo sin producir nada. Cada turno acredita sus
+  // Unidades por hora por operario: se calcula por TURNO (envasado_cortes),
+  // no por el envasado completo -- mide qué tan rápido produce cada
+  // operario mientras está activamente trabajando. Cada turno acredita sus
   // unidades/hora a los dos operarios que lo trabajaron (operario_id y
   // operario_2_id), no solo a quien arrancó la máquina.
   // -------------------------------------------------------------------
@@ -498,15 +498,11 @@ export default async function EstadisticasPage() {
     );
   }
   const rendimientoPorOperario = new Map<string, { horas: number; unidades: number }>();
-  let horasPlanta = 0;
-  let unidadesPlanta = 0;
   for (const c of envasadoCortes ?? []) {
     if (!c.ended_at) continue;
     const horas = (new Date(c.ended_at).getTime() - new Date(c.started_at).getTime()) / 3_600_000;
     if (horas <= 0) continue;
     const unidades = unidadesPorCorte.get(c.id) ?? 0;
-    horasPlanta += horas;
-    unidadesPlanta += unidades;
     for (const opId of [c.operario_id, c.operario_2_id]) {
       if (!opId) continue;
       const entry = rendimientoPorOperario.get(opId) ?? { horas: 0, unidades: 0 };
@@ -515,7 +511,6 @@ export default async function EstadisticasPage() {
       rendimientoPorOperario.set(opId, entry);
     }
   }
-  const unidadesPorHoraPlanta = horasPlanta > 0 ? unidadesPlanta / horasPlanta : null;
   const rendimientoTurnos = Array.from(rendimientoPorOperario.entries())
     .map(([operarioId, e]) => ({
       operarioId,
@@ -525,6 +520,39 @@ export default async function EstadisticasPage() {
       unidadesPorHora: e.horas > 0 ? e.unidades / e.horas : 0,
     }))
     .sort((a, b) => b.unidadesPorHora - a.unidadesPorHora);
+
+  // -------------------------------------------------------------------
+  // Unidades por hora de planta: acá sí se mide el ciclo completo -- desde
+  // que arranca el primer envasado del bache hasta que se cierra el último
+  // marcando "no queda más base" (volumen_restante_litros en 0), incluidos
+  // los huecos entre turnos, porque es el tiempo real que tarda la planta
+  // en terminar de envasar un bache.
+  // -------------------------------------------------------------------
+  const volumenRestanteById = new Map((todosBaches ?? []).map((b) => [b.id, b.volumen_restante_litros]));
+  const envasadosPorBache = new Map<
+    string,
+    { starts: string[]; ends: (string | null)[]; unidades: number }
+  >();
+  for (const e of envasados ?? []) {
+    const entry = envasadosPorBache.get(e.bache_id) ?? { starts: [], ends: [], unidades: 0 };
+    entry.starts.push(e.started_at);
+    entry.ends.push(e.ended_at);
+    entry.unidades += e.cantidad_unidades;
+    envasadosPorBache.set(e.bache_id, entry);
+  }
+  let horasPlanta = 0;
+  let unidadesPlanta = 0;
+  for (const [bacheId, data] of envasadosPorBache) {
+    if (data.ends.some((end) => !end)) continue; // todavía hay envasado en curso
+    if (volumenRestanteById.get(bacheId) !== 0) continue; // no confirmaron "no queda más base"
+    const start = Math.min(...data.starts.map((s) => new Date(s).getTime()));
+    const end = Math.max(...data.ends.map((e) => new Date(e!).getTime()));
+    const horas = (end - start) / 3_600_000;
+    if (horas <= 0) continue;
+    horasPlanta += horas;
+    unidadesPlanta += data.unidades;
+  }
+  const unidadesPorHoraPlanta = horasPlanta > 0 ? unidadesPlanta / horasPlanta : null;
 
   const envasadoChartData = (envasadoStats ?? []).map((s) => ({
     label: s.operario_name,
@@ -747,7 +775,7 @@ export default async function EstadisticasPage() {
                 {unidadesPorHoraPlanta != null ? Math.round(unidadesPorHoraPlanta).toLocaleString("es-CO") : "—"}
               </span>
               <span className="text-xs text-muted-foreground">
-                Calculado por turno, no desde el inicio de la máquina
+                Desde que arranca el envasado hasta que se cierra el bache
               </span>
             </div>
           </div>
