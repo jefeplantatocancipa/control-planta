@@ -83,6 +83,8 @@ export default async function EstadisticasPage() {
     { data: products },
     { data: stageRecordsAll },
     { data: stageTemplatesAll },
+    { data: envasadoCortes },
+    { data: envasadoEstibas },
   ] = await Promise.all([
     supabase
       .from("v_estadisticas_envasado_operario")
@@ -100,7 +102,9 @@ export default async function EstadisticasPage() {
     // antes de que el bache entero se marque como terminado.
     supabase.from("baches").select("id, product_id"),
     supabase.from("insumos").select("id, name"),
-    supabase.from("envasados").select("cantidad_unidades, referencia_id, presentacion, started_at"),
+    supabase
+      .from("envasados")
+      .select("cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
     supabase.from("products").select("id, name"),
     supabase
@@ -109,6 +113,14 @@ export default async function EstadisticasPage() {
     supabase
       .from("process_stage_templates")
       .select("id, product_id, name, sequence_order, captures_insumos"),
+    // Rendimiento por turno: cada corte tiene su propia ventana de tiempo
+    // (no la del envasado completo, que puede tener huecos entre turnos) y
+    // hasta dos operarios -- las unidades/hora se calculan por turno y se
+    // le acreditan a los dos.
+    supabase
+      .from("envasado_cortes")
+      .select("id, operario_id, operario_2_id, started_at, ended_at"),
+    supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
   ]);
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
@@ -459,6 +471,61 @@ export default async function EstadisticasPage() {
     }))
     .sort((a, b) => b.total_unidades - a.total_unidades);
 
+  // -------------------------------------------------------------------
+  // Tiempo promedio de empaque por bache: duración completa de cada
+  // envasado (inicio a fin), planta completa.
+  // -------------------------------------------------------------------
+  const empaqueDurations = (envasados ?? [])
+    .filter((e) => e.ended_at)
+    .map((e) => (new Date(e.ended_at!).getTime() - new Date(e.started_at).getTime()) / 60000);
+  const avgEmpaqueMinutes =
+    empaqueDurations.length > 0
+      ? empaqueDurations.reduce((s, v) => s + v, 0) / empaqueDurations.length
+      : null;
+
+  // -------------------------------------------------------------------
+  // Unidades por hora: se calcula por TURNO (envasado_cortes), no por el
+  // envasado completo -- un envasado puede tener huecos entre turnos que
+  // inflarían el tiempo sin producir nada. Cada turno acredita sus
+  // unidades/hora a los dos operarios que lo trabajaron (operario_id y
+  // operario_2_id), no solo a quien arrancó la máquina.
+  // -------------------------------------------------------------------
+  const unidadesPorCorte = new Map<string, number>();
+  for (const es of envasadoEstibas ?? []) {
+    unidadesPorCorte.set(
+      es.corte_id,
+      (unidadesPorCorte.get(es.corte_id) ?? 0) + (es.unidades_por_estiba ?? 0),
+    );
+  }
+  const rendimientoPorOperario = new Map<string, { horas: number; unidades: number }>();
+  let horasPlanta = 0;
+  let unidadesPlanta = 0;
+  for (const c of envasadoCortes ?? []) {
+    if (!c.ended_at) continue;
+    const horas = (new Date(c.ended_at).getTime() - new Date(c.started_at).getTime()) / 3_600_000;
+    if (horas <= 0) continue;
+    const unidades = unidadesPorCorte.get(c.id) ?? 0;
+    horasPlanta += horas;
+    unidadesPlanta += unidades;
+    for (const opId of [c.operario_id, c.operario_2_id]) {
+      if (!opId) continue;
+      const entry = rendimientoPorOperario.get(opId) ?? { horas: 0, unidades: 0 };
+      entry.horas += horas;
+      entry.unidades += unidades;
+      rendimientoPorOperario.set(opId, entry);
+    }
+  }
+  const unidadesPorHoraPlanta = horasPlanta > 0 ? unidadesPlanta / horasPlanta : null;
+  const rendimientoTurnos = Array.from(rendimientoPorOperario.entries())
+    .map(([operarioId, e]) => ({
+      operarioId,
+      nombre: operarioNames.get(operarioId) ?? "—",
+      horas: e.horas,
+      unidades: e.unidades,
+      unidadesPorHora: e.horas > 0 ? e.unidades / e.horas : 0,
+    }))
+    .sort((a, b) => b.unidadesPorHora - a.unidadesPorHora);
+
   const envasadoChartData = (envasadoStats ?? []).map((s) => ({
     label: s.operario_name,
     value: s.total_unidades,
@@ -656,6 +723,72 @@ export default async function EstadisticasPage() {
         </CardHeader>
         <CardContent>
           <EtapasPorOperario rows={etapaOperarioRows} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Rendimiento de envasado</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col rounded-lg border p-3">
+              <span className="text-xs text-muted-foreground">Tiempo promedio de empaque por bache</span>
+              <span className="text-xl font-semibold tabular-nums">
+                {minutesLabel(avgEmpaqueMinutes)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {empaqueDurations.length} envasado{empaqueDurations.length === 1 ? "" : "s"} finalizados
+              </span>
+            </div>
+            <div className="flex flex-col rounded-lg border p-3">
+              <span className="text-xs text-muted-foreground">Unidades promedio por hora (planta)</span>
+              <span className="text-xl font-semibold tabular-nums">
+                {unidadesPorHoraPlanta != null ? Math.round(unidadesPorHoraPlanta).toLocaleString("es-CO") : "—"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Calculado por turno, no desde el inicio de la máquina
+              </span>
+            </div>
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Operario</TableHead>
+                <TableHead className="text-right">Horas activas</TableHead>
+                <TableHead className="text-right">Unidades</TableHead>
+                <TableHead className="text-right">Unidades/hora</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rendimientoTurnos.map((r) => (
+                <TableRow key={r.operarioId}>
+                  <TableCell className="font-medium">{r.nombre}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {(Math.round(r.horas * 10) / 10).toLocaleString("es-CO")}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {r.unidades.toLocaleString("es-CO")}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {Math.round(r.unidadesPorHora).toLocaleString("es-CO")}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {rendimientoTurnos.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Sin turnos de envasado cerrados todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <p className="text-xs text-muted-foreground">
+            Las unidades/hora se calculan por turno (no por el envasado completo, que puede tener
+            huecos entre turnos) y se acreditan a los dos operarios que lo trabajaron.
+          </p>
         </CardContent>
       </Card>
 
