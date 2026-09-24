@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Beaker, ClipboardList, LineChart, Package, Tags, Warehouse } from "lucide-react";
+import { Activity, Beaker, ClipboardList, Factory, LineChart, Package, Tags, Warehouse } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth/dal";
 import type { UserRole } from "@/lib/supabase/types";
@@ -51,6 +51,13 @@ const CARDS: {
     title: "Inventario",
     description: "Stock de materia prima, empaque y vasos blancos.",
     icon: Warehouse,
+    roles: ["jefe_planta", "supervisor", "asistente_adm"],
+  },
+  {
+    href: "/equipos",
+    title: "Equipos",
+    description: "Ocupación en vivo, línea de tiempo y pronóstico de terminación.",
+    icon: Factory,
     roles: ["jefe_planta", "supervisor", "asistente_adm"],
   },
   {
