@@ -135,32 +135,37 @@ export default async function EstadisticasPage() {
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
 
   // -------------------------------------------------------------------
-  // Ocupación de equipos (últimos 7 días): % del tiempo y horas en desuso.
-  // usosDeEquipos ya resta -- mejor dicho, ya SUMA -- la hora de lavado
-  // después de cada uso (no cuenta como tiempo libre) y extiende los
-  // tanques de almacenamiento hasta que termina de envasarse el bache.
+  // Ocupación de equipos: promedio POR DÍA (horas ocupado/desuso de un día
+  // típico de 24 h), no el total acumulado de la semana -- se toman los
+  // últimos 7 días como muestra para que un día suelto sin movimiento no
+  // haga parecer que el equipo nunca se usa, pero el número que se
+  // muestra es "por día", no "en la semana". usosDeEquipos ya suma la
+  // hora de lavado después de cada uso (no cuenta como tiempo libre) y
+  // extiende los tanques de almacenamiento hasta que termina de
+  // envasarse el bache.
   // -------------------------------------------------------------------
-  const equiposCutoff = daysAgoISO(7);
+  const DIAS_MUESTRA_OCUPACION = 7;
+  const equiposCutoff = daysAgoISO(DIAS_MUESTRA_OCUPACION);
   const usosEquipos = await usosDeEquipos(supabase);
-  const ventanaHorasEquipos = 7 * 24;
   const equiposCutoffMs = new Date(equiposCutoff).getTime();
   const ocupacionEquipos = (equipos ?? [])
     .map((equipo) => {
       const propios = usosEquipos.filter(
         (u) => u.equipoId === equipo.id && (u.enCurso || u.start >= equiposCutoff),
       );
-      const horasOcupado = propios.reduce((sum, u) => {
+      const horasOcupadoTotal = propios.reduce((sum, u) => {
         const start = new Date(u.start).getTime();
         const end = u.end ? new Date(u.end).getTime() : nowMs();
         return sum + Math.max(0, Math.min(end, nowMs()) - Math.max(start, equiposCutoffMs)) / 3_600_000;
       }, 0);
-      const horasDesuso = Math.max(0, ventanaHorasEquipos - horasOcupado);
+      const horasOcupado = horasOcupadoTotal / DIAS_MUESTRA_OCUPACION;
+      const horasDesuso = Math.max(0, 24 - horasOcupado);
       return {
         equipoId: equipo.id,
         nombre: equipo.name,
         horasOcupado,
         horasDesuso,
-        ocupacionPct: Math.min(100, Math.round((horasOcupado / ventanaHorasEquipos) * 100)),
+        ocupacionPct: Math.min(100, Math.round((horasOcupado / 24) * 100)),
       };
     })
     .sort((a, b) => b.ocupacionPct - a.ocupacionPct);
@@ -769,7 +774,7 @@ export default async function EstadisticasPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Ocupación de equipos (últimos 7 días)</CardTitle>
+          <CardTitle className="text-base">Ocupación de equipos (promedio diario)</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -777,8 +782,8 @@ export default async function EstadisticasPage() {
               <TableRow>
                 <TableHead>Equipo</TableHead>
                 <TableHead className="text-right">Ocupación</TableHead>
-                <TableHead className="text-right">Horas ocupado</TableHead>
-                <TableHead className="text-right">Horas en desuso</TableHead>
+                <TableHead className="text-right">Horas ocupado/día</TableHead>
+                <TableHead className="text-right">Horas en desuso/día</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -808,9 +813,11 @@ export default async function EstadisticasPage() {
             </TableBody>
           </Table>
           <p className="mt-2 text-xs text-muted-foreground">
-            Incluye 1 hora de lavado después de cada uso (no cuenta como tiempo libre) y, para
-            tanques de almacenamiento, el tiempo hasta que se termina de envasar todo el bache
-            (no solo la etapa donde se eligió el tanque). Detalle y línea de tiempo en Equipos.
+            Promedio de un día típico (24 h), calculado sobre los últimos 7 días para que un
+            día suelto sin movimiento no distorsione el número. Incluye 1 hora de lavado
+            después de cada uso (no cuenta como tiempo libre) y, para tanques de
+            almacenamiento, el tiempo hasta que se termina de envasar todo el bache (no solo la
+            etapa donde se eligió el tanque). Detalle y línea de tiempo en Equipos.
           </p>
         </CardContent>
       </Card>
