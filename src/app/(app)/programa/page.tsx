@@ -34,13 +34,68 @@ export default async function ProgramaPage() {
     supabase.from("envasado_referencias").select("*"),
     supabase
       .from("baches")
-      .select("production_order_id, started_at, completed_at")
+      .select("id, product_id, production_order_id, started_at, completed_at")
       .not("production_order_id", "is", null),
     supabase
       .from("envasados")
       .select("envasado_order_id, cantidad_unidades, started_at, ended_at")
       .not("envasado_order_id", "is", null),
   ]);
+
+  // Si a alguien se le olvida cerrar el bache, "completed_at" queda vacío
+  // aunque el proceso ya terminó -- para no perder la métrica (ni mostrar un
+  // final falso en un bache que sigue realmente en curso), se usa como
+  // respaldo la hora en que se cerró la ÚLTIMA etapa de la secuencia de ese
+  // producto, solo si esa etapa puntual ya está cerrada.
+  const bacheIds = (baches ?? []).map((b) => b.id);
+  const [{ data: stageRecordsForReal }, { data: stageTemplatesForReal }] =
+    bacheIds.length > 0
+      ? await Promise.all([
+          supabase
+            .from("bache_stage_records")
+            .select("bache_id, stage_template_id, ended_at")
+            .in("bache_id", bacheIds)
+            .not("ended_at", "is", null),
+          supabase
+            .from("process_stage_templates")
+            .select("id, product_id, sequence_order")
+            .eq("active", true),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+  const stagesByProductForReal = new Map<string, { id: string; sequence_order: number }[]>();
+  const defaultStagesForReal: { id: string; sequence_order: number }[] = [];
+  for (const s of stageTemplatesForReal ?? []) {
+    if (s.product_id) {
+      const arr = stagesByProductForReal.get(s.product_id) ?? [];
+      arr.push(s);
+      stagesByProductForReal.set(s.product_id, arr);
+    } else {
+      defaultStagesForReal.push(s);
+    }
+  }
+  function ultimaEtapaIdDe(productId: string) {
+    const own = stagesByProductForReal.get(productId);
+    const pool = own && own.length > 0 ? own : defaultStagesForReal;
+    if (pool.length === 0) return null;
+    return pool.reduce((a, b) => (b.sequence_order > a.sequence_order ? b : a)).id;
+  }
+  const recordsByBacheForReal = new Map<string, { stage_template_id: string; ended_at: string }[]>();
+  for (const r of stageRecordsForReal ?? []) {
+    if (!r.ended_at) continue;
+    const arr = recordsByBacheForReal.get(r.bache_id) ?? [];
+    arr.push({ stage_template_id: r.stage_template_id, ended_at: r.ended_at });
+    recordsByBacheForReal.set(r.bache_id, arr);
+  }
+  const lastStageEndedAtByBache = new Map<string, string>();
+  for (const bache of baches ?? []) {
+    const ultimaEtapaId = ultimaEtapaIdDe(bache.product_id);
+    if (!ultimaEtapaId) continue;
+    const record = (recordsByBacheForReal.get(bache.id) ?? []).find(
+      (r) => r.stage_template_id === ultimaEtapaId,
+    );
+    if (record) lastStageEndedAtByBache.set(bache.id, record.ended_at);
+  }
 
   // Planeación arma/edita el programa igual que el jefe de planta, pero
   // borrar (órdenes o el programa entero) queda exclusivo del jefe de planta.
@@ -52,13 +107,12 @@ export default async function ProgramaPage() {
   const realTimesByOrder = new Map<string, { start: string; end: string | null }>();
   for (const bache of baches ?? []) {
     if (!bache.production_order_id) continue;
+    const bacheEnd = bache.completed_at ?? lastStageEndedAtByBache.get(bache.id) ?? null;
     const current = realTimesByOrder.get(bache.production_order_id);
     const start =
       !current || bache.started_at < current.start ? bache.started_at : current.start;
     const end =
-      !current?.end || (bache.completed_at && bache.completed_at > current.end)
-        ? bache.completed_at
-        : current.end;
+      !current?.end || (bacheEnd && bacheEnd > current.end) ? bacheEnd : current.end;
     realTimesByOrder.set(bache.production_order_id, { start, end });
   }
 
