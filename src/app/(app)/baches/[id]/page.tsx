@@ -41,6 +41,8 @@ export default async function BacheDetailPage({
     { data: productInsumos },
     { data: insumos },
     { data: tanques },
+    { data: equipos },
+    { data: equiposEnUso },
     { data: firmas },
     { data: allProfiles },
   ] = await Promise.all([
@@ -58,10 +60,25 @@ export default async function BacheDetailPage({
       .select("*")
       .eq("product_id", bache.product_id),
     supabase.from("insumos").select("*").eq("active", true),
+    // "tanque" como tipo de parámetro queda obsoleto (reemplazado por
+    // "requiere equipo"), pero se sigue trayendo para no romper etapas
+    // viejas que todavía lo usen.
     supabase.from("tanques").select("*").eq("active", true).order("name"),
+    supabase.from("equipos").select("*").eq("active", true).order("name"),
+    // Equipos ocupados AHORA en cualquier bache (etapa iniciada sin cerrar
+    // todavía), para no ofrecer un equipo que ya está en uso en otro lado.
+    supabase
+      .from("bache_stage_records")
+      .select("equipo_id")
+      .is("ended_at", null)
+      .not("equipo_id", "is", null),
     supabase.from("bache_stage_firmas").select("*"),
     supabase.from("profiles").select("id, full_name"),
   ]);
+
+  const equiposOcupadosIds = new Set(
+    (equiposEnUso ?? []).map((r) => r.equipo_id).filter((id): id is string => Boolean(id)),
+  );
 
   const firmasByStageRecord = new Map((firmas ?? []).map((f) => [f.stage_record_id, f]));
   const profileNames = new Map((allProfiles ?? []).map((p) => [p.id, p.full_name]));
@@ -179,6 +196,8 @@ export default async function BacheDetailPage({
               canAct={canAct}
               unlocked={unlocked}
               tanques={tanques ?? []}
+              equipos={equipos ?? []}
+              equiposOcupadosIds={equiposOcupadosIds}
               firma={
                 firma
                   ? {

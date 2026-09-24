@@ -241,6 +241,7 @@ const StartStageSchema = z.object({
   bache_id: z.string().uuid(),
   stage_template_id: z.string().uuid(),
   operario_id: z.string().uuid({ message: "Elegí quién realiza la etapa." }),
+  equipo_id: z.string().uuid().optional(),
 });
 
 export async function startStage(
@@ -253,12 +254,37 @@ export async function startStage(
     bache_id: formData.get("bache_id"),
     stage_template_id: formData.get("stage_template_id"),
     operario_id: formData.get("operario_id"),
+    equipo_id: formData.get("equipo_id") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
   const supabase = await createClient();
+
+  // El equipo es obligatorio server-side si la etapa lo requiere (no basta
+  // con ocultar el campo en el formulario), y no se puede tomar uno que ya
+  // esté en uso en otro bache en este mismo instante.
+  const { data: template } = await supabase
+    .from("process_stage_templates")
+    .select("requires_equipo")
+    .eq("id", parsed.data.stage_template_id)
+    .single();
+  if (template?.requires_equipo) {
+    if (!parsed.data.equipo_id) {
+      return { error: "Esta etapa requiere elegir un equipo." };
+    }
+    const { data: enUso } = await supabase
+      .from("bache_stage_records")
+      .select("id")
+      .eq("equipo_id", parsed.data.equipo_id)
+      .is("ended_at", null)
+      .limit(1);
+    if (enUso && enUso.length > 0) {
+      return { error: "Ese equipo ya está en uso en otro bache." };
+    }
+  }
+
   const { error } = await supabase.from("bache_stage_records").insert({
     ...parsed.data,
     created_by: profile.id,

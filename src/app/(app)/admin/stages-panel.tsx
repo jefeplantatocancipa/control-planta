@@ -86,7 +86,6 @@ function ParameterEditor({
             <option value="number">Número</option>
             <option value="text">Texto</option>
             <option value="time">Hora</option>
-            <option value="tanque">Tanque</option>
             <option value="porcentaje">Porcentaje</option>
             <option value="positivo_negativo">Positivo/Negativo</option>
           </select>
@@ -130,6 +129,7 @@ function StageForm({
   const [parameters, setParameters] = useState<StageParameterDef[]>(
     stage?.parameter_schema ?? [],
   );
+  const [requiresEquipo, setRequiresEquipo] = useState(stage?.requires_equipo ?? false);
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -217,6 +217,32 @@ function StageForm({
         agregar varias lecturas mientras la etapa está en curso (cada una con
         su hora automática) — por ejemplo una curva de fermentación.
       </p>
+
+      <Label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="requires_equipo"
+          checked={requiresEquipo}
+          onChange={(e) => setRequiresEquipo(e.target.checked)}
+          className="size-4"
+        />
+        Requiere un equipo
+      </Label>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Al iniciar la etapa, hay que elegir un equipo del catálogo (tanque,
+        pasteurizador, etc.) antes de poder arrancarla.
+      </p>
+      {requiresEquipo && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="equipo_tipo">Tipo de equipo (opcional)</Label>
+          <Input
+            id="equipo_tipo"
+            name="equipo_tipo"
+            placeholder="Ej: tanque, pasteurizador — vacío ofrece todos"
+            defaultValue={stage?.equipo_tipo ?? ""}
+          />
+        </div>
+      )}
 
       <Label className="flex items-center gap-2">
         <input

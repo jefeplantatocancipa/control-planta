@@ -37,6 +37,7 @@ type StageTemplate =
 type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type Tanque = Database["public"]["Tables"]["tanques"]["Row"];
+type Equipo = Database["public"]["Tables"]["equipos"]["Row"];
 
 const SELECT_CLASSNAME =
   "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm";
@@ -150,11 +151,13 @@ function ConfirmStartForm({
   bacheId,
   stageTemplateId,
   operarioId,
+  equipoId,
   onSuccess,
 }: {
   bacheId: string;
   stageTemplateId: string;
   operarioId: string;
+  equipoId: string;
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -171,6 +174,7 @@ function ConfirmStartForm({
       <input type="hidden" name="bache_id" value={bacheId} />
       <input type="hidden" name="stage_template_id" value={stageTemplateId} />
       <input type="hidden" name="operario_id" value={operarioId} />
+      {equipoId && <input type="hidden" name="equipo_id" value={equipoId} />}
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
@@ -189,14 +193,25 @@ function StartStageForm({
   bacheId,
   stage,
   operarios,
+  equipos,
+  equiposOcupadosIds,
 }: {
   bacheId: string;
   stage: StageTemplate;
   operarios: Profile[];
+  equipos: Equipo[];
+  equiposOcupadosIds: Set<string>;
 }) {
   const [operarioId, setOperarioId] = useState("");
+  const [equipoId, setEquipoId] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const operarioName = operarios.find((o) => o.id === operarioId)?.full_name;
+  const equipoName = equipos.find((e) => e.id === equipoId)?.name;
+
+  const equiposDisponibles = stage.equipo_tipo
+    ? equipos.filter((e) => e.tipo === stage.equipo_tipo)
+    : equipos;
+  const canStart = Boolean(operarioId) && (!stage.requires_equipo || Boolean(equipoId));
 
   return (
     <div className="flex flex-col gap-3">
@@ -222,10 +237,42 @@ function StartStageForm({
           </SelectContent>
         </Select>
       </div>
+
+      {stage.requires_equipo && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`equipo-${stage.id}`}>Equipo</Label>
+          <Select
+            value={equipoId}
+            onValueChange={(value) => setEquipoId(value ?? "")}
+            items={equiposDisponibles.map((e) => ({
+              value: e.id,
+              label: equiposOcupadosIds.has(e.id) ? `${e.name} (en uso)` : e.name,
+            }))}
+          >
+            <SelectTrigger id={`equipo-${stage.id}`} className="w-full">
+              <SelectValue placeholder="Elegí un equipo" />
+            </SelectTrigger>
+            <SelectContent>
+              {equiposDisponibles.map((e) => (
+                <SelectItem key={e.id} value={e.id} disabled={equiposOcupadosIds.has(e.id)}>
+                  {equiposOcupadosIds.has(e.id) ? `${e.name} (en uso)` : e.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {equiposDisponibles.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Sin equipos{stage.equipo_tipo ? ` de tipo "${stage.equipo_tipo}"` : ""} en
+              Administración.
+            </p>
+          )}
+        </div>
+      )}
+
       <Button
         type="button"
         size="sm"
-        disabled={!operarioId}
+        disabled={!canStart}
         onClick={() => setConfirmOpen(true)}
         className="self-start"
       >
@@ -238,12 +285,14 @@ function StartStageForm({
             <DialogTitle>Confirmar inicio de etapa</DialogTitle>
             <DialogDescription>
               {stage.name} · {operarioName}
+              {equipoName ? ` · ${equipoName}` : ""}
             </DialogDescription>
           </DialogHeader>
           <ConfirmStartForm
             bacheId={bacheId}
             stageTemplateId={stage.id}
             operarioId={operarioId}
+            equipoId={equipoId}
             onSuccess={() => setConfirmOpen(false)}
           />
         </DialogContent>
@@ -853,6 +902,8 @@ export function StageCard({
   canAct,
   unlocked,
   tanques,
+  equipos,
+  equiposOcupadosIds,
   firma,
   canFirmar,
 }: {
@@ -864,6 +915,8 @@ export function StageCard({
   canAct: boolean;
   unlocked: boolean;
   tanques: Tanque[];
+  equipos: Equipo[];
+  equiposOcupadosIds: Set<string>;
   firma?: FirmaDisplay | null;
   canFirmar?: boolean;
 }) {
@@ -871,6 +924,9 @@ export function StageCard({
   const operarioName = record
     ? operarios.find((o) => o.id === record.operario_id)?.full_name
     : undefined;
+  const equipoName = record?.equipo_id
+    ? (equipos.find((e) => e.id === record.equipo_id)?.name ?? "Equipo eliminado")
+    : null;
   const insumos =
     record && stage.captures_insumos && Array.isArray(record.parameters.insumos)
       ? record.parameters.insumos
@@ -916,6 +972,7 @@ export function StageCard({
               {operarioName ?? "—"} · {formatTime(record.started_at)}–
               {formatTime(record.ended_at)} ({durationLabel(record.started_at, record.ended_at)})
             </p>
+            {equipoName && <p>Equipo: {equipoName}</p>}
             {record.closed_by && (
               <p>
                 Firmado por:{" "}
@@ -971,6 +1028,7 @@ export function StageCard({
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               Iniciada por {operarioName ?? "—"} a las {formatTime(record!.started_at)}
+              {equipoName ? ` · ${equipoName}` : ""}
             </p>
             {canAct ? (
               <FinishStageForm
@@ -996,6 +1054,8 @@ export function StageCard({
               operarios={operarios.filter(
                 (o) => o.role === "operario" || o.role === "supervisor",
               )}
+              equipos={equipos}
+              equiposOcupadosIds={equiposOcupadosIds}
             />
           ) : (
             <p className="text-sm text-muted-foreground">

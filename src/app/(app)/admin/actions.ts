@@ -170,18 +170,27 @@ export async function upsertStageTemplate(
   const active = formData.get("active") === "on";
   const captures_insumos = formData.get("captures_insumos") === "on";
   const captures_readings = formData.get("captures_readings") === "on";
+  const requires_equipo = formData.get("requires_equipo") === "on";
+  const equipoTipoRaw = formData.get("equipo_tipo");
+  const equipo_tipo =
+    requires_equipo && typeof equipoTipoRaw === "string" && equipoTipoRaw.trim()
+      ? equipoTipoRaw.trim()
+      : null;
   const supabase = await createClient();
 
   await makeRoomAtSequenceOrder(supabase, values.product_id, values.sequence_order, id);
 
+  const payload = {
+    ...values,
+    active,
+    captures_insumos,
+    captures_readings,
+    requires_equipo,
+    equipo_tipo,
+  };
   const { error } = id
-    ? await supabase
-        .from("process_stage_templates")
-        .update({ ...values, active, captures_insumos, captures_readings })
-        .eq("id", id)
-    : await supabase
-        .from("process_stage_templates")
-        .insert({ ...values, active, captures_insumos, captures_readings });
+    ? await supabase.from("process_stage_templates").update(payload).eq("id", id)
+    : await supabase.from("process_stage_templates").insert(payload);
 
   if (error) {
     return {
@@ -572,6 +581,77 @@ export async function upsertTanque(
 
   if (error) {
     return { error: "No se pudo guardar el tanque." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+const EquipoSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "El nombre es obligatorio."),
+  tipo: z.string().trim().min(1, "El tipo es obligatorio."),
+  capacidad: z.coerce.number().positive().nullable(),
+  unidad: z.string().trim().min(1, "La unidad es obligatoria."),
+});
+
+export async function upsertEquipo(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const capacidad = formData.get("capacidad");
+  const parsed = EquipoSchema.safeParse({
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+    tipo: formData.get("tipo"),
+    capacidad: capacidad || null,
+    unidad: formData.get("unidad"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const { id, ...values } = parsed.data;
+  const active = formData.get("active") === "on";
+  const supabase = await createClient();
+
+  const { error } = id
+    ? await supabase.from("equipos").update({ ...values, active }).eq("id", id)
+    : await supabase.from("equipos").insert({ ...values, active });
+
+  if (error) {
+    return { error: "No se pudo guardar el equipo." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+const DeleteEquipoSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteEquipo(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteEquipoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("equipos").delete().eq("id", parsed.data.id);
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "No se puede eliminar: ya está usado en alguna etapa registrada. Marcalo como inactivo en su lugar."
+          : "No se pudo eliminar el equipo.",
+    };
   }
 
   revalidatePath("/admin");

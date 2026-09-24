@@ -140,6 +140,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["tanques"]["Insert"]>;
         Relationships: [];
       };
+      equipos: {
+        Row: {
+          id: string;
+          name: string;
+          tipo: string;
+          capacidad: number | null;
+          unidad: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          tipo?: string;
+          capacidad?: number | null;
+          unidad?: string;
+          active?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["equipos"]["Insert"]>;
+        Relationships: [];
+      };
       product_insumos: {
         Row: {
           product_id: string;
@@ -164,6 +184,8 @@ export interface Database {
           parameter_schema: StageParameterDef[];
           captures_insumos: boolean;
           captures_readings: boolean;
+          requires_equipo: boolean;
+          equipo_tipo: string | null;
           active: boolean;
           created_at: string;
         };
@@ -175,6 +197,8 @@ export interface Database {
           parameter_schema?: StageParameterDef[];
           captures_insumos?: boolean;
           captures_readings?: boolean;
+          requires_equipo?: boolean;
+          equipo_tipo?: string | null;
           active?: boolean;
         };
         Update: Partial<
@@ -424,6 +448,7 @@ export interface Database {
           bache_id: string;
           stage_template_id: string;
           operario_id: string;
+          equipo_id: string | null;
           started_at: string;
           ended_at: string | null;
           parameters: StageRecordParameters;
@@ -436,6 +461,7 @@ export interface Database {
           bache_id: string;
           stage_template_id: string;
           operario_id: string;
+          equipo_id?: string | null;
           started_at?: string;
           ended_at?: string | null;
           parameters?: StageRecordParameters;

@@ -7,7 +7,7 @@ import { ProductsPanel } from "./products-panel";
 import { StagesPanel } from "./stages-panel";
 import { UsersPanel } from "./users-panel";
 import { InsumosPanel } from "./insumos-panel";
-import { TanquesPanel } from "./tanques-panel";
+import { EquiposPanel } from "./equipos-panel";
 import { EnvasadoReferenciasPanel } from "./envasado-referencias-panel";
 import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
 import { TurnosPanel } from "./turnos-panel";
@@ -29,7 +29,7 @@ export default async function AdminPage() {
     { data: envasadoInsumos },
     { data: envasadoReferenciaInsumos },
     { data: turnos },
-    { data: tanques },
+    { data: equipos },
     { data: inventarioCategorias },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
@@ -44,7 +44,7 @@ export default async function AdminPage() {
     supabase.from("envasado_insumos").select("*").order("name"),
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").order("hora_inicio"),
-    supabase.from("tanques").select("*").order("name"),
+    supabase.from("equipos").select("*").order("name"),
     supabase.from("inventario_categorias").select("*").order("nombre"),
   ]);
 
@@ -98,7 +98,7 @@ export default async function AdminPage() {
               canWrite={canWrite}
             />
             <Separator />
-            <TanquesPanel tanques={tanques ?? []} canWrite={canWrite} />
+            <EquiposPanel equipos={equipos ?? []} canWrite={canWrite} />
           </div>
         </TabsContent>
         <TabsContent value="envasado">
