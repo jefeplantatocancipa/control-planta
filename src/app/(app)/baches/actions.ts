@@ -368,35 +368,40 @@ export async function finishStage(
     return { error: "No se pudo finalizar la etapa." };
   }
 
-  // Consumo de materia prima: se registra solo al cerrar la ÚLTIMA etapa
-  // del bache con checklist de insumos (mismo criterio que el balance de
-  // masa de los informes) -- si un insumo se "arrastra" y se reconfirma en
-  // una etapa posterior, no se cuenta dos veces. Nunca bloquea: si falla,
-  // la etapa ya quedó guardada igual.
-  if (template?.captures_insumos && parameters.insumos && parameters.insumos.length > 0) {
-    const [{ data: bache }, { data: currentStage }] = await Promise.all([
-      supabase.from("baches").select("product_id").eq("id", parsed.data.bache_id).single(),
-      supabase
-        .from("process_stage_templates")
-        .select("sequence_order")
-        .eq("id", parsed.data.stage_template_id)
-        .single(),
-    ]);
-    if (bache && currentStage) {
-      const { data: ownStages } = await supabase
+  // Bache y etapa recién cerrada: hacen falta para dos cosas -- el consumo
+  // automático de insumos y saber si esta era la ÚLTIMA etapa del proceso
+  // (para cerrar el bache solo).
+  const [{ data: bache }, { data: currentStage }] = await Promise.all([
+    supabase.from("baches").select("product_id, status").eq("id", parsed.data.bache_id).single(),
+    supabase
+      .from("process_stage_templates")
+      .select("sequence_order")
+      .eq("id", parsed.data.stage_template_id)
+      .single(),
+  ]);
+
+  if (bache && currentStage) {
+    const { data: ownStages } = await supabase
+      .from("process_stage_templates")
+      .select("sequence_order, captures_insumos")
+      .eq("product_id", bache.product_id)
+      .eq("active", true);
+    let pool = ownStages ?? [];
+    if (pool.length === 0) {
+      const { data: defaultStages } = await supabase
         .from("process_stage_templates")
         .select("sequence_order, captures_insumos")
-        .eq("product_id", bache.product_id)
+        .is("product_id", null)
         .eq("active", true);
-      let pool = ownStages ?? [];
-      if (pool.length === 0) {
-        const { data: defaultStages } = await supabase
-          .from("process_stage_templates")
-          .select("sequence_order, captures_insumos")
-          .is("product_id", null)
-          .eq("active", true);
-        pool = defaultStages ?? [];
-      }
+      pool = defaultStages ?? [];
+    }
+
+    // Consumo de materia prima: se registra solo al cerrar la ÚLTIMA etapa
+    // del bache con checklist de insumos (mismo criterio que el balance de
+    // masa de los informes) -- si un insumo se "arrastra" y se reconfirma
+    // en una etapa posterior, no se cuenta dos veces. Nunca bloquea: si
+    // falla, la etapa ya quedó guardada igual.
+    if (template?.captures_insumos && parameters.insumos && parameters.insumos.length > 0) {
       const hayEtapaPosteriorDeInsumos = pool.some(
         (s) => s.captures_insumos && s.sequence_order > currentStage.sequence_order,
       );
@@ -415,9 +420,23 @@ export async function finishStage(
         );
       }
     }
+
+    // Cierre automático del bache: si esta era la última etapa de la
+    // secuencia del producto, el bache pasa solo a "completado" -- cerrarlo
+    // a mano se olvidaba seguido y dejaba las métricas de tiempo real sin
+    // dato aunque el proceso ya había terminado.
+    const hayEtapaPosterior = pool.some((s) => s.sequence_order > currentStage.sequence_order);
+    if (!hayEtapaPosterior && bache.status === "en_proceso") {
+      await supabase
+        .from("baches")
+        .update({ status: "completado", completed_at: new Date().toISOString() })
+        .eq("id", parsed.data.bache_id);
+    }
   }
 
   revalidatePath(`/baches/${parsed.data.bache_id}`);
+  revalidatePath("/baches");
+  revalidatePath("/programa");
   return { success: true };
 }
 
