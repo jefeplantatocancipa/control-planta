@@ -80,7 +80,12 @@ export default async function AdminPage() {
           <ProductsPanel products={products ?? []} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="etapas">
-          <StagesPanel stages={stages ?? []} products={products ?? []} canWrite={canWrite} />
+          <StagesPanel
+            stages={stages ?? []}
+            products={products ?? []}
+            equipos={equipos ?? []}
+            canWrite={canWrite}
+          />
         </TabsContent>
         <TabsContent value="insumos">
           <div className="flex flex-col gap-8">

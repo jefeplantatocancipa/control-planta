@@ -170,12 +170,24 @@ export async function upsertStageTemplate(
   const active = formData.get("active") === "on";
   const captures_insumos = formData.get("captures_insumos") === "on";
   const captures_readings = formData.get("captures_readings") === "on";
-  const requires_equipo = formData.get("requires_equipo") === "on";
+
+  // Modo de equipo de la etapa: "fijo" (siempre el mismo, se asigna acá y
+  // el operario no elige nada al iniciar la etapa) o "elige" (hay varios
+  // posibles -- ej. tanques de almacenamiento -- y el operario elige el
+  // que esté libre). Son excluyentes entre sí.
+  const equipoModo = formData.get("equipo_modo");
+  const equipoIdRaw = formData.get("equipo_id");
   const equipoTipoRaw = formData.get("equipo_tipo");
+  const requires_equipo = equipoModo === "elige";
+  const equipo_id =
+    equipoModo === "fijo" && typeof equipoIdRaw === "string" && equipoIdRaw ? equipoIdRaw : null;
   const equipo_tipo =
     requires_equipo && typeof equipoTipoRaw === "string" && equipoTipoRaw.trim()
       ? equipoTipoRaw.trim()
       : null;
+  if (equipoModo === "fijo" && !equipo_id) {
+    return { error: "Elegí cuál es el equipo fijo de esta etapa." };
+  }
   const supabase = await createClient();
 
   await makeRoomAtSequenceOrder(supabase, values.product_id, values.sequence_order, id);
@@ -187,6 +199,7 @@ export async function upsertStageTemplate(
     captures_readings,
     requires_equipo,
     equipo_tipo,
+    equipo_id,
   };
   const { error } = id
     ? await supabase.from("process_stage_templates").update(payload).eq("id", id)

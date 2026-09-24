@@ -43,6 +43,15 @@ import type { Database, StageParameterDef } from "@/lib/supabase/types";
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
+type Equipo = Database["public"]["Tables"]["equipos"]["Row"];
+
+type EquipoModo = "ninguno" | "fijo" | "elige";
+
+function equipoModoDe(stage: StageTemplate | null): EquipoModo {
+  if (stage?.equipo_id) return "fijo";
+  if (stage?.requires_equipo) return "elige";
+  return "ninguno";
+}
 
 function ParameterEditor({
   parameters,
@@ -116,10 +125,12 @@ function ParameterEditor({
 function StageForm({
   stage,
   products,
+  equipos,
   onSuccess,
 }: {
   stage: StageTemplate | null;
   products: Product[];
+  equipos: Equipo[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -129,7 +140,8 @@ function StageForm({
   const [parameters, setParameters] = useState<StageParameterDef[]>(
     stage?.parameter_schema ?? [],
   );
-  const [requiresEquipo, setRequiresEquipo] = useState(stage?.requires_equipo ?? false);
+  const [equipoModo, setEquipoModo] = useState<EquipoModo>(equipoModoDe(stage));
+  const [equipoId, setEquipoId] = useState(stage?.equipo_id ?? "");
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -218,27 +230,63 @@ function StageForm({
         su hora automática) — por ejemplo una curva de fermentación.
       </p>
 
-      <Label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          name="requires_equipo"
-          checked={requiresEquipo}
-          onChange={(e) => setRequiresEquipo(e.target.checked)}
-          className="size-4"
-        />
-        Requiere un equipo
-      </Label>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        Al iniciar la etapa, hay que elegir un equipo del catálogo (tanque,
-        pasteurizador, etc.) antes de poder arrancarla.
-      </p>
-      {requiresEquipo && (
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="equipo_modo">Equipo</Label>
+        <select
+          id="equipo_modo"
+          name="equipo_modo"
+          value={equipoModo}
+          onChange={(e) => setEquipoModo(e.target.value as EquipoModo)}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+        >
+          <option value="ninguno">Sin equipo</option>
+          <option value="fijo">Equipo fijo (siempre el mismo)</option>
+          <option value="elige">El operario elige (hay varios)</option>
+        </select>
+        <p className="text-xs text-muted-foreground">
+          &quot;Equipo fijo&quot; es para cuando solo hay una unidad (ej. el
+          pasteurizador): se asigna acá una sola vez y el operario no tiene
+          que elegir nada al iniciar la etapa. &quot;El operario elige&quot;
+          es para cuando hay varios equivalentes (ej. tanques de
+          almacenamiento) y depende de cuál esté libre.
+        </p>
+      </div>
+
+      {equipoModo === "fijo" && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="equipo_id">Cuál equipo</Label>
+          <Select
+            name="equipo_id"
+            value={equipoId}
+            onValueChange={(value) => setEquipoId(value ?? "")}
+            items={equipos.map((e) => ({ value: e.id, label: e.name }))}
+          >
+            <SelectTrigger id="equipo_id" className="w-full">
+              <SelectValue placeholder="Elegí un equipo" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipos.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {equipos.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Sin equipos cargados en Administración → Insumos.
+            </p>
+          )}
+        </div>
+      )}
+
+      {equipoModo === "elige" && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="equipo_tipo">Tipo de equipo (opcional)</Label>
           <Input
             id="equipo_tipo"
             name="equipo_tipo"
-            placeholder="Ej: tanque, pasteurizador — vacío ofrece todos"
+            placeholder="Ej: tanque — vacío ofrece todos"
             defaultValue={stage?.equipo_tipo ?? ""}
           />
         </div>
@@ -481,10 +529,12 @@ function StagesTable({
 export function StagesPanel({
   stages,
   products,
+  equipos,
   canWrite = true,
 }: {
   stages: StageTemplate[];
   products: Product[];
+  equipos: Equipo[];
   canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -575,6 +625,7 @@ export function StagesPanel({
             key={editing?.id ?? "new"}
             stage={editing}
             products={products}
+            equipos={equipos}
             onSuccess={() => setOpen(false)}
           />
         </DialogContent>

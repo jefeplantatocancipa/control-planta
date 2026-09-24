@@ -262,22 +262,34 @@ export async function startStage(
 
   const supabase = await createClient();
 
-  // El equipo es obligatorio server-side si la etapa lo requiere (no basta
-  // con ocultar el campo en el formulario), y no se puede tomar uno que ya
-  // esté en uso en otro bache en este mismo instante.
+  // El equipo lo resuelve el servidor, no lo que venga del formulario: si
+  // la etapa tiene un equipo fijo (siempre el mismo, ej. el pasteurizador)
+  // se usa ese directo, sin depender de que el cliente lo mande bien. Si
+  // en cambio el operario tiene que elegir (varios equipos posibles, ej.
+  // tanques), es obligatorio acá también, no solo en el formulario. En
+  // los dos casos, no se puede tomar un equipo que ya esté en uso en otro
+  // bache en este mismo instante.
   const { data: template } = await supabase
     .from("process_stage_templates")
-    .select("requires_equipo")
+    .select("requires_equipo, equipo_id")
     .eq("id", parsed.data.stage_template_id)
     .single();
-  if (template?.requires_equipo) {
+
+  let equipoId: string | null = null;
+  if (template?.equipo_id) {
+    equipoId = template.equipo_id;
+  } else if (template?.requires_equipo) {
     if (!parsed.data.equipo_id) {
       return { error: "Esta etapa requiere elegir un equipo." };
     }
+    equipoId = parsed.data.equipo_id;
+  }
+
+  if (equipoId) {
     const { data: enUso } = await supabase
       .from("bache_stage_records")
       .select("id")
-      .eq("equipo_id", parsed.data.equipo_id)
+      .eq("equipo_id", equipoId)
       .is("ended_at", null)
       .limit(1);
     if (enUso && enUso.length > 0) {
@@ -286,7 +298,10 @@ export async function startStage(
   }
 
   const { error } = await supabase.from("bache_stage_records").insert({
-    ...parsed.data,
+    bache_id: parsed.data.bache_id,
+    stage_template_id: parsed.data.stage_template_id,
+    operario_id: parsed.data.operario_id,
+    equipo_id: equipoId,
     created_by: profile.id,
   });
 

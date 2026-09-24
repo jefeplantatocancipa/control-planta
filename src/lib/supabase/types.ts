@@ -186,6 +186,7 @@ export interface Database {
           captures_readings: boolean;
           requires_equipo: boolean;
           equipo_tipo: string | null;
+          equipo_id: string | null;
           active: boolean;
           created_at: string;
         };
@@ -199,6 +200,7 @@ export interface Database {
           captures_readings?: boolean;
           requires_equipo?: boolean;
           equipo_tipo?: string | null;
+          equipo_id?: string | null;
           active?: boolean;
         };
         Update: Partial<

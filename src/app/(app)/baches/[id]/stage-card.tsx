@@ -206,12 +206,18 @@ function StartStageForm({
   const [equipoId, setEquipoId] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const operarioName = operarios.find((o) => o.id === operarioId)?.full_name;
-  const equipoName = equipos.find((e) => e.id === equipoId)?.name;
+
+  const equipoFijo = stage.equipo_id ? equipos.find((e) => e.id === stage.equipo_id) : null;
+  const equipoFijoOcupado = Boolean(stage.equipo_id && equiposOcupadosIds.has(stage.equipo_id));
+  const equipoName = equipoFijo?.name ?? equipos.find((e) => e.id === equipoId)?.name;
 
   const equiposDisponibles = stage.equipo_tipo
     ? equipos.filter((e) => e.tipo === stage.equipo_tipo)
     : equipos;
-  const canStart = Boolean(operarioId) && (!stage.requires_equipo || Boolean(equipoId));
+  const canStart =
+    Boolean(operarioId) &&
+    (!stage.requires_equipo || Boolean(equipoId)) &&
+    !equipoFijoOcupado;
 
   return (
     <div className="flex flex-col gap-3">
@@ -237,6 +243,15 @@ function StartStageForm({
           </SelectContent>
         </Select>
       </div>
+
+      {stage.equipo_id && (
+        <p className="text-sm text-muted-foreground">
+          Equipo: {equipoFijo?.name ?? "—"}
+          {equipoFijoOcupado && (
+            <span className="text-destructive"> · en uso en otro bache</span>
+          )}
+        </p>
+      )}
 
       {stage.requires_equipo && (
         <div className="flex flex-col gap-2">
