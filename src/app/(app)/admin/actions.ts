@@ -118,6 +118,20 @@ const StageTemplateSchema = z.object({
     }),
 });
 
+// Una etapa puede necesitar varios equipos a la vez (ej. un tanque Y un
+// pasteurizador). Cada requerimiento es "fijo" (siempre el mismo equipo,
+// el operario no elige nada) o "elige" (hay varios posibles -- ej.
+// tanques de almacenamiento -- y el operario elige el que esté libre).
+const EquipoRequirementSchema = z
+  .object({
+    modo: z.enum(["fijo", "elige"]),
+    equipo_id: z.string().uuid().nullable().optional(),
+    equipo_tipo: z.string().trim().nullable().optional(),
+  })
+  .refine((r) => r.modo !== "fijo" || Boolean(r.equipo_id), {
+    message: "Elegí cuál es el equipo fijo de esa fila.",
+  });
+
 // Corre una posición hacia adelante (sequence_order + 1) a cualquier etapa
 // del mismo producto que ya esté en el orden pedido o más adelante, para
 // que insertar/mover una etapa a un orden ocupado nunca falle: en vez de
@@ -171,46 +185,52 @@ export async function upsertStageTemplate(
   const captures_insumos = formData.get("captures_insumos") === "on";
   const captures_readings = formData.get("captures_readings") === "on";
 
-  // Modo de equipo de la etapa: "fijo" (siempre el mismo, se asigna acá y
-  // el operario no elige nada al iniciar la etapa) o "elige" (hay varios
-  // posibles -- ej. tanques de almacenamiento -- y el operario elige el
-  // que esté libre). Son excluyentes entre sí.
-  const equipoModo = formData.get("equipo_modo");
-  const equipoIdRaw = formData.get("equipo_id");
-  const equipoTipoRaw = formData.get("equipo_tipo");
-  const requires_equipo = equipoModo === "elige";
-  const equipo_id =
-    equipoModo === "fijo" && typeof equipoIdRaw === "string" && equipoIdRaw ? equipoIdRaw : null;
-  const equipo_tipo =
-    requires_equipo && typeof equipoTipoRaw === "string" && equipoTipoRaw.trim()
-      ? equipoTipoRaw.trim()
-      : null;
-  if (equipoModo === "fijo" && !equipo_id) {
-    return { error: "Elegí cuál es el equipo fijo de esta etapa." };
+  const requirementsParsed = z
+    .array(EquipoRequirementSchema)
+    .safeParse(JSON.parse(String(formData.get("equipo_requirements") || "[]")));
+  if (!requirementsParsed.success) {
+    return { error: requirementsParsed.error.issues[0]?.message ?? "Equipos inválidos." };
   }
+
   const supabase = await createClient();
 
   await makeRoomAtSequenceOrder(supabase, values.product_id, values.sequence_order, id);
 
-  const payload = {
-    ...values,
-    active,
-    captures_insumos,
-    captures_readings,
-    requires_equipo,
-    equipo_tipo,
-    equipo_id,
-  };
-  const { error } = id
-    ? await supabase.from("process_stage_templates").update(payload).eq("id", id)
-    : await supabase.from("process_stage_templates").insert(payload);
+  const payload = { ...values, active, captures_insumos, captures_readings };
+  const { data: saved, error } = id
+    ? await supabase
+        .from("process_stage_templates")
+        .update(payload)
+        .eq("id", id)
+        .select("id")
+        .single()
+    : await supabase.from("process_stage_templates").insert(payload).select("id").single();
 
-  if (error) {
+  if (error || !saved) {
     return {
       error: isUniqueViolation(error)
         ? "Ya existe una etapa con ese orden para ese producto."
         : "No se pudo guardar la etapa.",
     };
+  }
+
+  // Se reemplaza la lista completa de requerimientos de equipo (mismo
+  // criterio que parameter_schema: el cliente arma la lista final y el
+  // servidor la pisa entera, más simple que hacer un diff fila por fila).
+  await supabase.from("stage_equipo_requirements").delete().eq("stage_template_id", saved.id);
+  if (requirementsParsed.data.length > 0) {
+    const { error: reqError } = await supabase.from("stage_equipo_requirements").insert(
+      requirementsParsed.data.map((r, i) => ({
+        stage_template_id: saved.id,
+        modo: r.modo,
+        equipo_id: r.modo === "fijo" ? r.equipo_id : null,
+        equipo_tipo: r.modo === "elige" ? r.equipo_tipo || null : null,
+        orden: i + 1,
+      })),
+    );
+    if (reqError) {
+      return { error: "La etapa se guardó, pero no se pudieron guardar los equipos." };
+    }
   }
 
   revalidatePath("/admin");

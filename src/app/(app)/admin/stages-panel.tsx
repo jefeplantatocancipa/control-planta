@@ -44,13 +44,109 @@ type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
 type Equipo = Database["public"]["Tables"]["equipos"]["Row"];
+type EquipoRequirement =
+  Database["public"]["Tables"]["stage_equipo_requirements"]["Row"];
 
-type EquipoModo = "ninguno" | "fijo" | "elige";
+interface EquipoRequirementDraft {
+  modo: "fijo" | "elige";
+  equipo_id: string | null;
+  equipo_tipo: string | null;
+}
 
-function equipoModoDe(stage: StageTemplate | null): EquipoModo {
-  if (stage?.equipo_id) return "fijo";
-  if (stage?.requires_equipo) return "elige";
-  return "ninguno";
+const NATIVE_SELECT_CLASSNAME =
+  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm";
+
+function EquipoRequirementsEditor({
+  requirements,
+  onChange,
+  equipos,
+}: {
+  requirements: EquipoRequirementDraft[];
+  onChange: (requirements: EquipoRequirementDraft[]) => void;
+  equipos: Equipo[];
+}) {
+  function updateAt(index: number, patch: Partial<EquipoRequirementDraft>) {
+    onChange(requirements.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>Equipos que requiere esta etapa</Label>
+      <p className="-mt-1 text-xs text-muted-foreground">
+        &quot;Equipo fijo&quot; es para cuando solo hay una unidad (ej. el
+        pasteurizador): se asigna acá y el operario no elige nada al iniciar
+        la etapa. &quot;El operario elige&quot; es para cuando hay varios
+        equivalentes (ej. tanques de almacenamiento) y depende de cuál esté
+        libre. Se pueden agregar varios si la etapa necesita más de uno a
+        la vez.
+      </p>
+      {requirements.map((r, index) => (
+        <div key={index} className="flex flex-col gap-2 rounded-lg border p-3">
+          <div className="flex items-center gap-2">
+            <select
+              value={r.modo}
+              onChange={(e) =>
+                updateAt(index, {
+                  modo: e.target.value as EquipoRequirementDraft["modo"],
+                  equipo_id: null,
+                  equipo_tipo: null,
+                })
+              }
+              className={NATIVE_SELECT_CLASSNAME}
+            >
+              <option value="fijo">Equipo fijo</option>
+              <option value="elige">El operario elige</option>
+            </select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onChange(requirements.filter((_, i) => i !== index))}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+          {r.modo === "fijo" ? (
+            <select
+              value={r.equipo_id ?? ""}
+              onChange={(e) => updateAt(index, { equipo_id: e.target.value || null })}
+              className={NATIVE_SELECT_CLASSNAME}
+            >
+              <option value="">Elegí un equipo</option>
+              {equipos.map((equipo) => (
+                <option key={equipo.id} value={equipo.id}>
+                  {equipo.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              placeholder="Tipo de equipo (opcional) — vacío ofrece todos"
+              value={r.equipo_tipo ?? ""}
+              onChange={(e) => updateAt(index, { equipo_tipo: e.target.value })}
+            />
+          )}
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start"
+        onClick={() =>
+          onChange([...requirements, { modo: "fijo", equipo_id: null, equipo_tipo: null }])
+        }
+      >
+        <Plus className="size-4" />
+        Agregar equipo
+      </Button>
+      {equipos.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Sin equipos cargados en Administración → Insumos.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function ParameterEditor({
@@ -126,11 +222,13 @@ function StageForm({
   stage,
   products,
   equipos,
+  initialRequirements,
   onSuccess,
 }: {
   stage: StageTemplate | null;
   products: Product[];
   equipos: Equipo[];
+  initialRequirements: EquipoRequirement[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -140,8 +238,12 @@ function StageForm({
   const [parameters, setParameters] = useState<StageParameterDef[]>(
     stage?.parameter_schema ?? [],
   );
-  const [equipoModo, setEquipoModo] = useState<EquipoModo>(equipoModoDe(stage));
-  const [equipoId, setEquipoId] = useState(stage?.equipo_id ?? "");
+  const [equipoRequirements, setEquipoRequirements] = useState<EquipoRequirementDraft[]>(
+    initialRequirements
+      .slice()
+      .sort((a, b) => a.orden - b.orden)
+      .map((r) => ({ modo: r.modo, equipo_id: r.equipo_id, equipo_tipo: r.equipo_tipo })),
+  );
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -151,6 +253,11 @@ function StageForm({
     <form action={action} className="flex flex-col gap-4">
       {stage && <input type="hidden" name="id" value={stage.id} />}
       <input type="hidden" name="parameter_schema" value={JSON.stringify(parameters)} />
+      <input
+        type="hidden"
+        name="equipo_requirements"
+        value={JSON.stringify(equipoRequirements)}
+      />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="name">Nombre</Label>
@@ -230,67 +337,11 @@ function StageForm({
         su hora automática) — por ejemplo una curva de fermentación.
       </p>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="equipo_modo">Equipo</Label>
-        <select
-          id="equipo_modo"
-          name="equipo_modo"
-          value={equipoModo}
-          onChange={(e) => setEquipoModo(e.target.value as EquipoModo)}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-        >
-          <option value="ninguno">Sin equipo</option>
-          <option value="fijo">Equipo fijo (siempre el mismo)</option>
-          <option value="elige">El operario elige (hay varios)</option>
-        </select>
-        <p className="text-xs text-muted-foreground">
-          &quot;Equipo fijo&quot; es para cuando solo hay una unidad (ej. el
-          pasteurizador): se asigna acá una sola vez y el operario no tiene
-          que elegir nada al iniciar la etapa. &quot;El operario elige&quot;
-          es para cuando hay varios equivalentes (ej. tanques de
-          almacenamiento) y depende de cuál esté libre.
-        </p>
-      </div>
-
-      {equipoModo === "fijo" && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="equipo_id">Cuál equipo</Label>
-          <Select
-            name="equipo_id"
-            value={equipoId}
-            onValueChange={(value) => setEquipoId(value ?? "")}
-            items={equipos.map((e) => ({ value: e.id, label: e.name }))}
-          >
-            <SelectTrigger id="equipo_id" className="w-full">
-              <SelectValue placeholder="Elegí un equipo" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipos.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
-                  {e.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {equipos.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              Sin equipos cargados en Administración → Insumos.
-            </p>
-          )}
-        </div>
-      )}
-
-      {equipoModo === "elige" && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="equipo_tipo">Tipo de equipo (opcional)</Label>
-          <Input
-            id="equipo_tipo"
-            name="equipo_tipo"
-            placeholder="Ej: tanque — vacío ofrece todos"
-            defaultValue={stage?.equipo_tipo ?? ""}
-          />
-        </div>
-      )}
+      <EquipoRequirementsEditor
+        requirements={equipoRequirements}
+        onChange={setEquipoRequirements}
+        equipos={equipos}
+      />
 
       <Label className="flex items-center gap-2">
         <input
@@ -467,12 +518,14 @@ function DeleteProductStagesButton({
 function StagesTable({
   title,
   stages,
+  requirementsByStage,
   onEdit,
   titleAction,
   canWrite,
 }: {
   title: string;
   stages: StageTemplate[];
+  requirementsByStage: Map<string, EquipoRequirement[]>;
   onEdit: (stage: StageTemplate) => void;
   titleAction?: ReactNode;
   canWrite: boolean;
@@ -491,6 +544,7 @@ function StagesTable({
             <TableHead>Parámetros</TableHead>
             <TableHead>Insumos</TableHead>
             <TableHead>Lecturas</TableHead>
+            <TableHead>Equipos</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead />
           </TableRow>
@@ -499,27 +553,31 @@ function StagesTable({
           {stages
             .slice()
             .sort((a, b) => a.sequence_order - b.sequence_order)
-            .map((stage) => (
-              <TableRow key={stage.id}>
-                <TableCell>{stage.sequence_order}</TableCell>
-                <TableCell className="font-medium">{stage.name}</TableCell>
-                <TableCell>{stage.parameter_schema.length}</TableCell>
-                <TableCell>{stage.captures_insumos ? "Sí" : "—"}</TableCell>
-                <TableCell>{stage.captures_readings ? "Sí" : "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={stage.active ? "default" : "outline"}>
-                    {stage.active ? "Activa" : "Inactiva"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  {canWrite && (
-                    <Button variant="ghost" size="sm" onClick={() => onEdit(stage)}>
-                      Editar
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+            .map((stage) => {
+              const requirements = requirementsByStage.get(stage.id) ?? [];
+              return (
+                <TableRow key={stage.id}>
+                  <TableCell>{stage.sequence_order}</TableCell>
+                  <TableCell className="font-medium">{stage.name}</TableCell>
+                  <TableCell>{stage.parameter_schema.length}</TableCell>
+                  <TableCell>{stage.captures_insumos ? "Sí" : "—"}</TableCell>
+                  <TableCell>{stage.captures_readings ? "Sí" : "—"}</TableCell>
+                  <TableCell>{requirements.length > 0 ? requirements.length : "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={stage.active ? "default" : "outline"}>
+                      {stage.active ? "Activa" : "Inactiva"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {canWrite && (
+                      <Button variant="ghost" size="sm" onClick={() => onEdit(stage)}>
+                        Editar
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
         </TableBody>
       </Table>
     </div>
@@ -530,15 +588,23 @@ export function StagesPanel({
   stages,
   products,
   equipos,
+  stageRequirements,
   canWrite = true,
 }: {
   stages: StageTemplate[];
   products: Product[];
   equipos: Equipo[];
+  stageRequirements: EquipoRequirement[];
   canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StageTemplate | null>(null);
+  const requirementsByStage = new Map<string, EquipoRequirement[]>();
+  for (const r of stageRequirements) {
+    const list = requirementsByStage.get(r.stage_template_id) ?? [];
+    list.push(r);
+    requirementsByStage.set(r.stage_template_id, list);
+  }
   const groups = new Map<string, StageTemplate[]>();
   for (const stage of stages) {
     const key = stage.product_id ?? "all";
@@ -587,6 +653,7 @@ export function StagesPanel({
         <StagesTable
           title="Todos los productos (secuencia compartida)"
           stages={groups.get("all")!}
+          requirementsByStage={requirementsByStage}
           onEdit={openEdit}
           canWrite={canWrite}
         />
@@ -599,6 +666,7 @@ export function StagesPanel({
             key={product.id}
             title={product.name}
             stages={groups.get(product.id)!}
+            requirementsByStage={requirementsByStage}
             onEdit={openEdit}
             canWrite={canWrite}
             titleAction={
@@ -626,6 +694,7 @@ export function StagesPanel({
             stage={editing}
             products={products}
             equipos={equipos}
+            initialRequirements={editing ? requirementsByStage.get(editing.id) ?? [] : []}
             onSuccess={() => setOpen(false)}
           />
         </DialogContent>

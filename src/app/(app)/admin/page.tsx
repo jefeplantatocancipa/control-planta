@@ -30,6 +30,7 @@ export default async function AdminPage() {
     { data: envasadoReferenciaInsumos },
     { data: turnos },
     { data: equipos },
+    { data: stageEquipoRequirements },
     { data: inventarioCategorias },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
@@ -45,6 +46,7 @@ export default async function AdminPage() {
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").order("hora_inicio"),
     supabase.from("equipos").select("*").order("name"),
+    supabase.from("stage_equipo_requirements").select("*"),
     supabase.from("inventario_categorias").select("*").order("nombre"),
   ]);
 
@@ -84,6 +86,7 @@ export default async function AdminPage() {
             stages={stages ?? []}
             products={products ?? []}
             equipos={equipos ?? []}
+            stageRequirements={stageEquipoRequirements ?? []}
             canWrite={canWrite}
           />
         </TabsContent>

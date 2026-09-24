@@ -42,7 +42,8 @@ export default async function BacheDetailPage({
     { data: insumos },
     { data: tanques },
     { data: equipos },
-    { data: equiposEnUso },
+    { data: stageRequirements },
+    { data: activeStageRecords },
     { data: firmas },
     { data: allProfiles },
   ] = await Promise.all([
@@ -65,20 +66,45 @@ export default async function BacheDetailPage({
     // viejas que todavía lo usen.
     supabase.from("tanques").select("*").eq("active", true).order("name"),
     supabase.from("equipos").select("*").eq("active", true).order("name"),
-    // Equipos ocupados AHORA en cualquier bache (etapa iniciada sin cerrar
-    // todavía), para no ofrecer un equipo que ya está en uso en otro lado.
-    supabase
-      .from("bache_stage_records")
-      .select("equipo_id")
-      .is("ended_at", null)
-      .not("equipo_id", "is", null),
+    supabase.from("stage_equipo_requirements").select("*"),
+    // Etapas activas en CUALQUIER bache (iniciadas sin cerrar todavía),
+    // para saber qué equipos están ocupados ahora en otro lado.
+    supabase.from("bache_stage_records").select("id").is("ended_at", null),
     supabase.from("bache_stage_firmas").select("*"),
     supabase.from("profiles").select("id, full_name"),
   ]);
 
-  const equiposOcupadosIds = new Set(
-    (equiposEnUso ?? []).map((r) => r.equipo_id).filter((id): id is string => Boolean(id)),
-  );
+  const activeRecordIds = (activeStageRecords ?? []).map((r) => r.id);
+  const { data: equiposEnUso } =
+    activeRecordIds.length > 0
+      ? await supabase
+          .from("bache_stage_record_equipos")
+          .select("equipo_id")
+          .in("stage_record_id", activeRecordIds)
+      : { data: [] };
+  const equiposOcupadosIds = new Set((equiposEnUso ?? []).map((r) => r.equipo_id));
+
+  const recordIds = (records ?? []).map((r) => r.id);
+  const { data: recordEquiposData } =
+    recordIds.length > 0
+      ? await supabase
+          .from("bache_stage_record_equipos")
+          .select("stage_record_id, equipo_id")
+          .in("stage_record_id", recordIds)
+      : { data: [] };
+  const equipoIdsByRecord = new Map<string, string[]>();
+  for (const re of recordEquiposData ?? []) {
+    const arr = equipoIdsByRecord.get(re.stage_record_id) ?? [];
+    arr.push(re.equipo_id);
+    equipoIdsByRecord.set(re.stage_record_id, arr);
+  }
+
+  const requirementsByStage = new Map<string, NonNullable<typeof stageRequirements>>();
+  for (const r of stageRequirements ?? []) {
+    const arr = requirementsByStage.get(r.stage_template_id) ?? [];
+    arr.push(r);
+    requirementsByStage.set(r.stage_template_id, arr);
+  }
 
   const firmasByStageRecord = new Map((firmas ?? []).map((f) => [f.stage_record_id, f]));
   const profileNames = new Map((allProfiles ?? []).map((p) => [p.id, p.full_name]));
@@ -197,6 +223,8 @@ export default async function BacheDetailPage({
               unlocked={unlocked}
               tanques={tanques ?? []}
               equipos={equipos ?? []}
+              requirements={requirementsByStage.get(stage.id) ?? []}
+              recordEquipoIds={record ? equipoIdsByRecord.get(record.id) ?? [] : []}
               equiposOcupadosIds={equiposOcupadosIds}
               firma={
                 firma

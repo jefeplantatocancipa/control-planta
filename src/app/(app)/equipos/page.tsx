@@ -29,19 +29,18 @@ export default async function EquiposPage() {
 
   const [
     { data: equipos },
-    { data: registrosEquipo },
+    { data: registrosEnVentana },
     { data: registrosHistoricos },
     { data: baches },
     { data: stageTemplates },
     { data: products },
   ] = await Promise.all([
     supabase.from("equipos").select("*").eq("active", true).order("name"),
-    // Ocupación (últimos 7 días + lo que siga en curso) para el Gantt y
-    // las estadísticas de ocupación.
+    // Etapas dentro de la ventana (últimos 7 días + lo que siga en curso),
+    // para cruzar después con los equipos que usó cada una.
     supabase
       .from("bache_stage_records")
-      .select("id, bache_id, stage_template_id, equipo_id, started_at, ended_at")
-      .not("equipo_id", "is", null)
+      .select("id, bache_id, stage_template_id, started_at, ended_at")
       .or(`ended_at.is.null,started_at.gte.${cutoff}`),
     // Todas las etapas cerradas (sin filtrar por equipo) para calcular la
     // duración promedio histórica por producto + etapa, base del pronóstico.
@@ -56,6 +55,23 @@ export default async function EquiposPage() {
       .eq("active", true),
     supabase.from("products").select("id, name"),
   ]);
+
+  // Una etapa puede usar varios equipos a la vez: se trae la lista de
+  // asignaciones para las etapas de la ventana y se cruza en memoria.
+  const recordIdsEnVentana = (registrosEnVentana ?? []).map((r) => r.id);
+  const { data: equiposDeRegistros } =
+    recordIdsEnVentana.length > 0
+      ? await supabase
+          .from("bache_stage_record_equipos")
+          .select("stage_record_id, equipo_id")
+          .in("stage_record_id", recordIdsEnVentana)
+      : { data: [] };
+  const equipoIdsByRecordId = new Map<string, string[]>();
+  for (const re of equiposDeRegistros ?? []) {
+    const arr = equipoIdsByRecordId.get(re.stage_record_id) ?? [];
+    arr.push(re.equipo_id);
+    equipoIdsByRecordId.set(re.stage_record_id, arr);
+  }
 
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const bacheById = new Map((baches ?? []).map((b) => [b.id, b]));
@@ -82,20 +98,19 @@ export default async function EquiposPage() {
   // -------------------------------------------------------------------
   // Estado actual + segmentos del Gantt.
   // -------------------------------------------------------------------
-  const segmentos: GanttSegment[] = (registrosEquipo ?? [])
-    .map((r) => {
-      const bache = r.equipo_id ? bacheById.get(r.bache_id) : undefined;
-      if (!bache || !r.equipo_id) return null;
-      return {
-        equipoId: r.equipo_id,
-        bacheId: r.bache_id,
-        bacheLabel: bache.batch_code,
-        stageName: stageNameById.get(r.stage_template_id) ?? "—",
-        start: r.started_at,
-        end: r.ended_at,
-      } satisfies GanttSegment;
-    })
-    .filter((s): s is GanttSegment => s !== null);
+  const segmentos: GanttSegment[] = (registrosEnVentana ?? []).flatMap((r) => {
+    const bache = bacheById.get(r.bache_id);
+    const equipoIds = equipoIdsByRecordId.get(r.id) ?? [];
+    if (!bache || equipoIds.length === 0) return [];
+    return equipoIds.map((equipoId) => ({
+      equipoId,
+      bacheId: r.bache_id,
+      bacheLabel: bache.batch_code,
+      stageName: stageNameById.get(r.stage_template_id) ?? "—",
+      start: r.started_at,
+      end: r.ended_at,
+    }));
+  });
 
   const enCursoPorEquipo = new Map<string, GanttSegment>();
   for (const s of segmentos) {
@@ -167,7 +182,7 @@ export default async function EquiposPage() {
   // También hace falta el registro EN CURSO de cada bache (no está en
   // registrosHistoricos porque ese solo trae etapas ya cerradas).
   const enCursoPorBache = new Map<string, { stage_template_id: string; started_at: string }>();
-  for (const r of registrosEquipo ?? []) {
+  for (const r of registrosEnVentana ?? []) {
     if (!r.ended_at) enCursoPorBache.set(r.bache_id, r);
   }
 

@@ -241,7 +241,11 @@ const StartStageSchema = z.object({
   bache_id: z.string().uuid(),
   stage_template_id: z.string().uuid(),
   operario_id: z.string().uuid({ message: "Elegí quién realiza la etapa." }),
-  equipo_id: z.string().uuid().optional(),
+});
+
+const EquipoSeleccionSchema = z.object({
+  requirement_id: z.string().uuid(),
+  equipo_id: z.string().uuid(),
 });
 
 export async function startStage(
@@ -254,63 +258,97 @@ export async function startStage(
     bache_id: formData.get("bache_id"),
     stage_template_id: formData.get("stage_template_id"),
     operario_id: formData.get("operario_id"),
-    equipo_id: formData.get("equipo_id") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  const seleccionesParsed = z
+    .array(EquipoSeleccionSchema)
+    .safeParse(JSON.parse(String(formData.get("equipo_selecciones") || "[]")));
+  if (!seleccionesParsed.success) {
+    return { error: "Equipos inválidos." };
+  }
+  const seleccionPorRequirement = new Map(
+    seleccionesParsed.data.map((s) => [s.requirement_id, s.equipo_id]),
+  );
+
   const supabase = await createClient();
 
-  // El equipo lo resuelve el servidor, no lo que venga del formulario: si
-  // la etapa tiene un equipo fijo (siempre el mismo, ej. el pasteurizador)
-  // se usa ese directo, sin depender de que el cliente lo mande bien. Si
-  // en cambio el operario tiene que elegir (varios equipos posibles, ej.
-  // tanques), es obligatorio acá también, no solo en el formulario. En
-  // los dos casos, no se puede tomar un equipo que ya esté en uso en otro
-  // bache en este mismo instante.
-  const { data: template } = await supabase
-    .from("process_stage_templates")
-    .select("requires_equipo, equipo_id")
-    .eq("id", parsed.data.stage_template_id)
-    .single();
+  // Los equipos los resuelve el servidor, no lo que venga del formulario:
+  // los "fijos" (siempre el mismo, ej. el pasteurizador) se toman directo
+  // de la etapa; los que el operario elige (ej. tanques) tienen que venir
+  // seleccionados. En los dos casos, ningún equipo puede estar ya en uso
+  // en otro bache en este mismo instante -- una etapa puede necesitar más
+  // de un equipo a la vez.
+  const { data: requirements } = await supabase
+    .from("stage_equipo_requirements")
+    .select("id, modo, equipo_id")
+    .eq("stage_template_id", parsed.data.stage_template_id);
 
-  let equipoId: string | null = null;
-  if (template?.equipo_id) {
-    equipoId = template.equipo_id;
-  } else if (template?.requires_equipo) {
-    if (!parsed.data.equipo_id) {
-      return { error: "Esta etapa requiere elegir un equipo." };
+  const equiposAUsar: { requirement_id: string; equipo_id: string }[] = [];
+  for (const req of requirements ?? []) {
+    if (req.modo === "fijo") {
+      if (req.equipo_id) equiposAUsar.push({ requirement_id: req.id, equipo_id: req.equipo_id });
+      continue;
     }
-    equipoId = parsed.data.equipo_id;
+    const elegido = seleccionPorRequirement.get(req.id);
+    if (!elegido) {
+      return { error: "Esta etapa requiere elegir todos sus equipos." };
+    }
+    equiposAUsar.push({ requirement_id: req.id, equipo_id: elegido });
   }
 
-  if (equipoId) {
-    const { data: enUso } = await supabase
+  if (equiposAUsar.length > 0) {
+    const { data: activos } = await supabase
       .from("bache_stage_records")
       .select("id")
-      .eq("equipo_id", equipoId)
-      .is("ended_at", null)
-      .limit(1);
-    if (enUso && enUso.length > 0) {
-      return { error: "Ese equipo ya está en uso en otro bache." };
+      .is("ended_at", null);
+    const activeIds = (activos ?? []).map((r) => r.id);
+    if (activeIds.length > 0) {
+      const { data: enUso } = await supabase
+        .from("bache_stage_record_equipos")
+        .select("equipo_id")
+        .in("stage_record_id", activeIds)
+        .in(
+          "equipo_id",
+          equiposAUsar.map((e) => e.equipo_id),
+        );
+      const ocupados = new Set((enUso ?? []).map((e) => e.equipo_id));
+      if (equiposAUsar.some((e) => ocupados.has(e.equipo_id))) {
+        return { error: "Algún equipo de esta etapa ya está en uso en otro bache." };
+      }
     }
   }
 
-  const { error } = await supabase.from("bache_stage_records").insert({
-    bache_id: parsed.data.bache_id,
-    stage_template_id: parsed.data.stage_template_id,
-    operario_id: parsed.data.operario_id,
-    equipo_id: equipoId,
-    created_by: profile.id,
-  });
+  const { data: created, error } = await supabase
+    .from("bache_stage_records")
+    .insert({
+      bache_id: parsed.data.bache_id,
+      stage_template_id: parsed.data.stage_template_id,
+      operario_id: parsed.data.operario_id,
+      created_by: profile.id,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !created) {
     return {
       error: isUniqueViolation(error)
         ? "Esta etapa ya fue iniciada."
         : "No se pudo iniciar la etapa.",
     };
+  }
+
+  // Nunca bloquea: si esto falla, la etapa ya quedó iniciada igual.
+  if (equiposAUsar.length > 0) {
+    await supabase.from("bache_stage_record_equipos").insert(
+      equiposAUsar.map((e) => ({
+        stage_record_id: created.id,
+        requirement_id: e.requirement_id,
+        equipo_id: e.equipo_id,
+      })),
+    );
   }
 
   revalidatePath(`/baches/${parsed.data.bache_id}`);

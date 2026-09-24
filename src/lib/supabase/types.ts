@@ -184,9 +184,6 @@ export interface Database {
           parameter_schema: StageParameterDef[];
           captures_insumos: boolean;
           captures_readings: boolean;
-          requires_equipo: boolean;
-          equipo_tipo: string | null;
-          equipo_id: string | null;
           active: boolean;
           created_at: string;
         };
@@ -198,13 +195,32 @@ export interface Database {
           parameter_schema?: StageParameterDef[];
           captures_insumos?: boolean;
           captures_readings?: boolean;
-          requires_equipo?: boolean;
-          equipo_tipo?: string | null;
-          equipo_id?: string | null;
           active?: boolean;
         };
         Update: Partial<
           Database["public"]["Tables"]["process_stage_templates"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      stage_equipo_requirements: {
+        Row: {
+          id: string;
+          stage_template_id: string;
+          modo: "fijo" | "elige";
+          equipo_id: string | null;
+          equipo_tipo: string | null;
+          orden: number;
+          created_at: string;
+        };
+        Insert: {
+          stage_template_id: string;
+          modo: "fijo" | "elige";
+          equipo_id?: string | null;
+          equipo_tipo?: string | null;
+          orden?: number;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["stage_equipo_requirements"]["Insert"]
         >;
         Relationships: [];
       };
@@ -450,7 +466,6 @@ export interface Database {
           bache_id: string;
           stage_template_id: string;
           operario_id: string;
-          equipo_id: string | null;
           started_at: string;
           ended_at: string | null;
           parameters: StageRecordParameters;
@@ -463,7 +478,6 @@ export interface Database {
           bache_id: string;
           stage_template_id: string;
           operario_id: string;
-          equipo_id?: string | null;
           started_at?: string;
           ended_at?: string | null;
           parameters?: StageRecordParameters;
@@ -473,6 +487,24 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["bache_stage_records"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      bache_stage_record_equipos: {
+        Row: {
+          id: string;
+          stage_record_id: string;
+          requirement_id: string | null;
+          equipo_id: string;
+          created_at: string;
+        };
+        Insert: {
+          stage_record_id: string;
+          requirement_id?: string | null;
+          equipo_id: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["bache_stage_record_equipos"]["Insert"]
         >;
         Relationships: [];
       };

@@ -38,6 +38,8 @@ type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type Tanque = Database["public"]["Tables"]["tanques"]["Row"];
 type Equipo = Database["public"]["Tables"]["equipos"]["Row"];
+type EquipoRequirement =
+  Database["public"]["Tables"]["stage_equipo_requirements"]["Row"];
 
 const SELECT_CLASSNAME =
   "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm";
@@ -151,13 +153,13 @@ function ConfirmStartForm({
   bacheId,
   stageTemplateId,
   operarioId,
-  equipoId,
+  equipoSelecciones,
   onSuccess,
 }: {
   bacheId: string;
   stageTemplateId: string;
   operarioId: string;
-  equipoId: string;
+  equipoSelecciones: { requirement_id: string; equipo_id: string }[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -174,7 +176,11 @@ function ConfirmStartForm({
       <input type="hidden" name="bache_id" value={bacheId} />
       <input type="hidden" name="stage_template_id" value={stageTemplateId} />
       <input type="hidden" name="operario_id" value={operarioId} />
-      {equipoId && <input type="hidden" name="equipo_id" value={equipoId} />}
+      <input
+        type="hidden"
+        name="equipo_selecciones"
+        value={JSON.stringify(equipoSelecciones)}
+      />
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
@@ -194,30 +200,38 @@ function StartStageForm({
   stage,
   operarios,
   equipos,
+  requirements,
   equiposOcupadosIds,
 }: {
   bacheId: string;
   stage: StageTemplate;
   operarios: Profile[];
   equipos: Equipo[];
+  requirements: EquipoRequirement[];
   equiposOcupadosIds: Set<string>;
 }) {
   const [operarioId, setOperarioId] = useState("");
-  const [equipoId, setEquipoId] = useState("");
+  const [selecciones, setSelecciones] = useState<Record<string, string>>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
   const operarioName = operarios.find((o) => o.id === operarioId)?.full_name;
 
-  const equipoFijo = stage.equipo_id ? equipos.find((e) => e.id === stage.equipo_id) : null;
-  const equipoFijoOcupado = Boolean(stage.equipo_id && equiposOcupadosIds.has(stage.equipo_id));
-  const equipoName = equipoFijo?.name ?? equipos.find((e) => e.id === equipoId)?.name;
+  const fijosOcupados = requirements
+    .filter((r) => r.modo === "fijo" && r.equipo_id && equiposOcupadosIds.has(r.equipo_id))
+    .map((r) => equipos.find((e) => e.id === r.equipo_id)?.name ?? "—");
 
-  const equiposDisponibles = stage.equipo_tipo
-    ? equipos.filter((e) => e.tipo === stage.equipo_tipo)
-    : equipos;
-  const canStart =
-    Boolean(operarioId) &&
-    (!stage.requires_equipo || Boolean(equipoId)) &&
-    !equipoFijoOcupado;
+  const eligeRequirements = requirements.filter((r) => r.modo === "elige");
+  const faltanElegir = eligeRequirements.some((r) => !selecciones[r.id]);
+
+  const canStart = Boolean(operarioId) && fijosOcupados.length === 0 && !faltanElegir;
+
+  const equipoNombres = [
+    ...requirements
+      .filter((r) => r.modo === "fijo" && r.equipo_id)
+      .map((r) => equipos.find((e) => e.id === r.equipo_id)?.name ?? "—"),
+    ...eligeRequirements
+      .map((r) => equipos.find((e) => e.id === selecciones[r.id])?.name)
+      .filter((n): n is string => Boolean(n)),
+  ];
 
   return (
     <div className="flex flex-col gap-3">
@@ -244,45 +258,55 @@ function StartStageForm({
         </Select>
       </div>
 
-      {stage.equipo_id && (
-        <p className="text-sm text-muted-foreground">
-          Equipo: {equipoFijo?.name ?? "—"}
-          {equipoFijoOcupado && (
-            <span className="text-destructive"> · en uso en otro bache</span>
-          )}
-        </p>
-      )}
-
-      {stage.requires_equipo && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`equipo-${stage.id}`}>Equipo</Label>
-          <Select
-            value={equipoId}
-            onValueChange={(value) => setEquipoId(value ?? "")}
-            items={equiposDisponibles.map((e) => ({
-              value: e.id,
-              label: equiposOcupadosIds.has(e.id) ? `${e.name} (en uso)` : e.name,
-            }))}
-          >
-            <SelectTrigger id={`equipo-${stage.id}`} className="w-full">
-              <SelectValue placeholder="Elegí un equipo" />
-            </SelectTrigger>
-            <SelectContent>
-              {equiposDisponibles.map((e) => (
-                <SelectItem key={e.id} value={e.id} disabled={equiposOcupadosIds.has(e.id)}>
-                  {equiposOcupadosIds.has(e.id) ? `${e.name} (en uso)` : e.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {equiposDisponibles.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              Sin equipos{stage.equipo_tipo ? ` de tipo "${stage.equipo_tipo}"` : ""} en
-              Administración.
+      {requirements
+        .filter((r) => r.modo === "fijo")
+        .map((r) => {
+          const equipo = r.equipo_id ? equipos.find((e) => e.id === r.equipo_id) : null;
+          const ocupado = Boolean(r.equipo_id && equiposOcupadosIds.has(r.equipo_id));
+          return (
+            <p key={r.id} className="text-sm text-muted-foreground">
+              Equipo: {equipo?.name ?? "—"}
+              {ocupado && <span className="text-destructive"> · en uso en otro bache</span>}
             </p>
-          )}
-        </div>
-      )}
+          );
+        })}
+
+      {eligeRequirements.map((r) => {
+        const equiposDisponibles = r.equipo_tipo
+          ? equipos.filter((e) => e.tipo === r.equipo_tipo)
+          : equipos;
+        return (
+          <div key={r.id} className="flex flex-col gap-2">
+            <Label htmlFor={`equipo-${r.id}`}>Equipo{r.equipo_tipo ? ` (${r.equipo_tipo})` : ""}</Label>
+            <Select
+              value={selecciones[r.id] ?? ""}
+              onValueChange={(value) =>
+                setSelecciones((s) => ({ ...s, [r.id]: value ?? "" }))
+              }
+              items={equiposDisponibles.map((e) => ({
+                value: e.id,
+                label: equiposOcupadosIds.has(e.id) ? `${e.name} (en uso)` : e.name,
+              }))}
+            >
+              <SelectTrigger id={`equipo-${r.id}`} className="w-full">
+                <SelectValue placeholder="Elegí un equipo" />
+              </SelectTrigger>
+              <SelectContent>
+                {equiposDisponibles.map((e) => (
+                  <SelectItem key={e.id} value={e.id} disabled={equiposOcupadosIds.has(e.id)}>
+                    {equiposOcupadosIds.has(e.id) ? `${e.name} (en uso)` : e.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {equiposDisponibles.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Sin equipos{r.equipo_tipo ? ` de tipo "${r.equipo_tipo}"` : ""} en Administración.
+              </p>
+            )}
+          </div>
+        );
+      })}
 
       <Button
         type="button"
@@ -300,14 +324,17 @@ function StartStageForm({
             <DialogTitle>Confirmar inicio de etapa</DialogTitle>
             <DialogDescription>
               {stage.name} · {operarioName}
-              {equipoName ? ` · ${equipoName}` : ""}
+              {equipoNombres.length > 0 ? ` · ${equipoNombres.join(", ")}` : ""}
             </DialogDescription>
           </DialogHeader>
           <ConfirmStartForm
             bacheId={bacheId}
             stageTemplateId={stage.id}
             operarioId={operarioId}
-            equipoId={equipoId}
+            equipoSelecciones={eligeRequirements.map((r) => ({
+              requirement_id: r.id,
+              equipo_id: selecciones[r.id],
+            }))}
             onSuccess={() => setConfirmOpen(false)}
           />
         </DialogContent>
@@ -918,6 +945,8 @@ export function StageCard({
   unlocked,
   tanques,
   equipos,
+  requirements,
+  recordEquipoIds,
   equiposOcupadosIds,
   firma,
   canFirmar,
@@ -931,6 +960,8 @@ export function StageCard({
   unlocked: boolean;
   tanques: Tanque[];
   equipos: Equipo[];
+  requirements: EquipoRequirement[];
+  recordEquipoIds: string[];
   equiposOcupadosIds: Set<string>;
   firma?: FirmaDisplay | null;
   canFirmar?: boolean;
@@ -939,9 +970,9 @@ export function StageCard({
   const operarioName = record
     ? operarios.find((o) => o.id === record.operario_id)?.full_name
     : undefined;
-  const equipoName = record?.equipo_id
-    ? (equipos.find((e) => e.id === record.equipo_id)?.name ?? "Equipo eliminado")
-    : null;
+  const equipoNames = recordEquipoIds.map(
+    (id) => equipos.find((e) => e.id === id)?.name ?? "Equipo eliminado",
+  );
   const insumos =
     record && stage.captures_insumos && Array.isArray(record.parameters.insumos)
       ? record.parameters.insumos
@@ -987,7 +1018,7 @@ export function StageCard({
               {operarioName ?? "—"} · {formatTime(record.started_at)}–
               {formatTime(record.ended_at)} ({durationLabel(record.started_at, record.ended_at)})
             </p>
-            {equipoName && <p>Equipo: {equipoName}</p>}
+            {equipoNames.length > 0 && <p>Equipo: {equipoNames.join(", ")}</p>}
             {record.closed_by && (
               <p>
                 Firmado por:{" "}
@@ -1043,7 +1074,7 @@ export function StageCard({
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               Iniciada por {operarioName ?? "—"} a las {formatTime(record!.started_at)}
-              {equipoName ? ` · ${equipoName}` : ""}
+              {equipoNames.length > 0 ? ` · ${equipoNames.join(", ")}` : ""}
             </p>
             {canAct ? (
               <FinishStageForm
@@ -1070,6 +1101,7 @@ export function StageCard({
                 (o) => o.role === "operario" || o.role === "supervisor",
               )}
               equipos={equipos}
+              requirements={requirements}
               equiposOcupadosIds={equiposOcupadosIds}
             />
           ) : (
