@@ -19,6 +19,7 @@ import { OperarioBarChart } from "./operario-bar-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
 import { EtapasPorOperario, type EtapaOperarioRow } from "./etapas-por-operario";
+import { EtapaGantt } from "./etapa-gantt";
 import { fridayOfWeek } from "../programa/excel-utils";
 
 function minutesLabel(minutes: number | null) {
@@ -639,54 +640,6 @@ export default async function EstadisticasPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Ocupación de equipos (últimos 7 días)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Equipo</TableHead>
-                <TableHead className="text-right">Ocupación</TableHead>
-                <TableHead className="text-right">Horas ocupado</TableHead>
-                <TableHead className="text-right">Horas en desuso</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ocupacionEquipos.map((o) => (
-                <TableRow key={o.equipoId}>
-                  <TableCell className="font-medium">{o.nombre}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={o.ocupacionPct > 70 ? "default" : "outline"}>
-                      {o.ocupacionPct}%
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {(Math.round(o.horasOcupado * 10) / 10).toLocaleString("es-CO")}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {(Math.round(o.horasDesuso * 10) / 10).toLocaleString("es-CO")}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {ocupacionEquipos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Sin equipos configurados.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Incluye 1 hora de lavado después de cada uso (no cuenta como tiempo libre) y, para
-            tanques de almacenamiento, el tiempo hasta que se termina de envasar todo el bache
-            (no solo la etapa donde se eligió el tanque). Detalle y línea de tiempo en Equipos.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-base">Producción vs. empaque por semana</CardTitle>
         </CardHeader>
         <CardContent>
@@ -801,33 +754,7 @@ export default async function EstadisticasPage() {
           <CardTitle className="text-base">Duración promedio por etapa y producto</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Producto</TableHead>
-                <TableHead>Etapa</TableHead>
-                <TableHead>Completadas</TableHead>
-                <TableHead className="text-right">Duración promedio</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {duracionPorEtapaYProducto.map((e, i) => (
-                <TableRow key={`${e.productId}-${e.stageName}-${i}`}>
-                  <TableCell className="font-medium">{e.productName}</TableCell>
-                  <TableCell>{e.stageName}</TableCell>
-                  <TableCell>{e.cantidad}</TableCell>
-                  <TableCell className="text-right">{minutesLabel(e.promedioMin)}</TableCell>
-                </TableRow>
-              ))}
-              {duracionPorEtapaYProducto.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Sin etapas completadas todavía.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <EtapaGantt rows={duracionPorEtapaYProducto} />
         </CardContent>
       </Card>
 
@@ -837,6 +764,54 @@ export default async function EstadisticasPage() {
         </CardHeader>
         <CardContent>
           <EtapasPorOperario rows={etapaOperarioRows} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ocupación de equipos (últimos 7 días)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Equipo</TableHead>
+                <TableHead className="text-right">Ocupación</TableHead>
+                <TableHead className="text-right">Horas ocupado</TableHead>
+                <TableHead className="text-right">Horas en desuso</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ocupacionEquipos.map((o) => (
+                <TableRow key={o.equipoId}>
+                  <TableCell className="font-medium">{o.nombre}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant={o.ocupacionPct > 70 ? "default" : "outline"}>
+                      {o.ocupacionPct}%
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {(Math.round(o.horasOcupado * 10) / 10).toLocaleString("es-CO")}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {(Math.round(o.horasDesuso * 10) / 10).toLocaleString("es-CO")}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {ocupacionEquipos.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Sin equipos configurados.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Incluye 1 hora de lavado después de cada uso (no cuenta como tiempo libre) y, para
+            tanques de almacenamiento, el tiempo hasta que se termina de envasar todo el bache
+            (no solo la etapa donde se eligió el tanque). Detalle y línea de tiempo en Equipos.
+          </p>
         </CardContent>
       </Card>
 
