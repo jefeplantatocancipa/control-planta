@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
+import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import type { StageRecordParameters, StageReading } from "@/lib/supabase/types";
 
 export interface ActionState {
@@ -300,24 +301,13 @@ export async function startStage(
   }
 
   if (equiposAUsar.length > 0) {
-    const { data: activos } = await supabase
-      .from("bache_stage_records")
-      .select("id")
-      .is("ended_at", null);
-    const activeIds = (activos ?? []).map((r) => r.id);
-    if (activeIds.length > 0) {
-      const { data: enUso } = await supabase
-        .from("bache_stage_record_equipos")
-        .select("equipo_id")
-        .in("stage_record_id", activeIds)
-        .in(
-          "equipo_id",
-          equiposAUsar.map((e) => e.equipo_id),
-        );
-      const ocupados = new Set((enUso ?? []).map((e) => e.equipo_id));
-      if (equiposAUsar.some((e) => ocupados.has(e.equipo_id))) {
-        return { error: "Algún equipo de esta etapa ya está en uso en otro bache." };
-      }
+    const usos = await usosDeEquipos(supabase);
+    const ocupados = new Set(usos.filter((u) => u.enCurso).map((u) => u.equipoId));
+    if (equiposAUsar.some((e) => ocupados.has(e.equipo_id))) {
+      return {
+        error:
+          "Algún equipo de esta etapa ya está en uso en otro bache (o todavía en lavado / esperando que termine de envasarse).",
+      };
     }
   }
 

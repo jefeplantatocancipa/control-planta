@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { StageCard } from "./stage-card";
 import { BacheStatusActions } from "./bache-status-actions";
 import { FinalizarBacheBanner } from "./finalizar-bache-banner";
+import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import type { BacheStatus } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -43,7 +44,6 @@ export default async function BacheDetailPage({
     { data: tanques },
     { data: equipos },
     { data: stageRequirements },
-    { data: activeStageRecords },
     { data: firmas },
     { data: allProfiles },
   ] = await Promise.all([
@@ -67,22 +67,16 @@ export default async function BacheDetailPage({
     supabase.from("tanques").select("*").eq("active", true).order("name"),
     supabase.from("equipos").select("*").eq("active", true).order("name"),
     supabase.from("stage_equipo_requirements").select("*"),
-    // Etapas activas en CUALQUIER bache (iniciadas sin cerrar todavía),
-    // para saber qué equipos están ocupados ahora en otro lado.
-    supabase.from("bache_stage_records").select("id").is("ended_at", null),
     supabase.from("bache_stage_firmas").select("*"),
     supabase.from("profiles").select("id, full_name"),
   ]);
 
-  const activeRecordIds = (activeStageRecords ?? []).map((r) => r.id);
-  const { data: equiposEnUso } =
-    activeRecordIds.length > 0
-      ? await supabase
-          .from("bache_stage_record_equipos")
-          .select("equipo_id")
-          .in("stage_record_id", activeRecordIds)
-      : { data: [] };
-  const equiposOcupadosIds = new Set((equiposEnUso ?? []).map((r) => r.equipo_id));
+  // Un equipo puede seguir ocupado aunque su etapa ya haya cerrado (los
+  // tanques de almacenamiento siguen con producto adentro hasta que se
+  // termina de envasar todo el bache) más la hora de lavado -- mismo
+  // criterio que usa la reserva al iniciar una etapa.
+  const usos = await usosDeEquipos(supabase);
+  const equiposOcupadosIds = new Set(usos.filter((u) => u.enCurso).map((u) => u.equipoId));
 
   const recordIds = (records ?? []).map((r) => r.id);
   const { data: recordEquiposData } =

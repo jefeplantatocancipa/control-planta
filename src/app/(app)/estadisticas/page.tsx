@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,6 +39,10 @@ function todayISO() {
 
 function daysAgoISO(days: number) {
   return format(new Date(Date.now() - days * 24 * 60 * 60 * 1000), "yyyy-MM-dd");
+}
+
+function nowMs() {
+  return Date.now();
 }
 
 function KpiCard({
@@ -85,6 +90,7 @@ export default async function EstadisticasPage() {
     { data: stageTemplatesAll },
     { data: envasadoCortes },
     { data: envasadoEstibas },
+    { data: equipos },
   ] = await Promise.all([
     supabase
       .from("v_estadisticas_envasado_operario")
@@ -121,10 +127,42 @@ export default async function EstadisticasPage() {
       .from("envasado_cortes")
       .select("id, operario_id, operario_2_id, started_at, ended_at"),
     supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
+    supabase.from("equipos").select("id, name").eq("active", true).order("name"),
   ]);
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
+
+  // -------------------------------------------------------------------
+  // Ocupación de equipos (últimos 7 días): % del tiempo y horas en desuso.
+  // usosDeEquipos ya resta -- mejor dicho, ya SUMA -- la hora de lavado
+  // después de cada uso (no cuenta como tiempo libre) y extiende los
+  // tanques de almacenamiento hasta que termina de envasarse el bache.
+  // -------------------------------------------------------------------
+  const equiposCutoff = daysAgoISO(7);
+  const usosEquipos = await usosDeEquipos(supabase);
+  const ventanaHorasEquipos = 7 * 24;
+  const equiposCutoffMs = new Date(equiposCutoff).getTime();
+  const ocupacionEquipos = (equipos ?? [])
+    .map((equipo) => {
+      const propios = usosEquipos.filter(
+        (u) => u.equipoId === equipo.id && (u.enCurso || u.start >= equiposCutoff),
+      );
+      const horasOcupado = propios.reduce((sum, u) => {
+        const start = new Date(u.start).getTime();
+        const end = u.end ? new Date(u.end).getTime() : nowMs();
+        return sum + Math.max(0, Math.min(end, nowMs()) - Math.max(start, equiposCutoffMs)) / 3_600_000;
+      }, 0);
+      const horasDesuso = Math.max(0, ventanaHorasEquipos - horasOcupado);
+      return {
+        equipoId: equipo.id,
+        nombre: equipo.name,
+        horasOcupado,
+        horasDesuso,
+        ocupacionPct: Math.min(100, Math.round((horasOcupado / ventanaHorasEquipos) * 100)),
+      };
+    })
+    .sort((a, b) => b.ocupacionPct - a.ocupacionPct);
 
   // -------------------------------------------------------------------
   // KPI: tiempo promedio de preparación de un bache (planta completa) +
@@ -598,6 +636,54 @@ export default async function EstadisticasPage() {
           sublabel="Últimos 30 días"
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ocupación de equipos (últimos 7 días)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Equipo</TableHead>
+                <TableHead className="text-right">Ocupación</TableHead>
+                <TableHead className="text-right">Horas ocupado</TableHead>
+                <TableHead className="text-right">Horas en desuso</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ocupacionEquipos.map((o) => (
+                <TableRow key={o.equipoId}>
+                  <TableCell className="font-medium">{o.nombre}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant={o.ocupacionPct > 70 ? "default" : "outline"}>
+                      {o.ocupacionPct}%
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {(Math.round(o.horasOcupado * 10) / 10).toLocaleString("es-CO")}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {(Math.round(o.horasDesuso * 10) / 10).toLocaleString("es-CO")}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {ocupacionEquipos.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Sin equipos configurados.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Incluye 1 hora de lavado después de cada uso (no cuenta como tiempo libre) y, para
+            tanques de almacenamiento, el tiempo hasta que se termina de envasar todo el bache
+            (no solo la etapa donde se eligió el tanque). Detalle y línea de tiempo en Equipos.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

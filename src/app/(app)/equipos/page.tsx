@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -29,19 +30,20 @@ export default async function EquiposPage() {
 
   const [
     { data: equipos },
-    { data: registrosEnVentana },
+    { data: activeRecords },
     { data: registrosHistoricos },
     { data: baches },
     { data: stageTemplates },
     { data: products },
   ] = await Promise.all([
     supabase.from("equipos").select("*").eq("active", true).order("name"),
-    // Etapas dentro de la ventana (últimos 7 días + lo que siga en curso),
-    // para cruzar después con los equipos que usó cada una.
+    // Etapas activas en CUALQUIER bache, para saber la etapa actual de cada
+    // bache en proceso (pronóstico) -- la ocupación de equipos en sí viene
+    // de usosDeEquipos, más abajo.
     supabase
       .from("bache_stage_records")
-      .select("id, bache_id, stage_template_id, started_at, ended_at")
-      .or(`ended_at.is.null,started_at.gte.${cutoff}`),
+      .select("bache_id, stage_template_id, started_at, ended_at")
+      .is("ended_at", null),
     // Todas las etapas cerradas (sin filtrar por equipo) para calcular la
     // duración promedio histórica por producto + etapa, base del pronóstico.
     supabase
@@ -56,22 +58,10 @@ export default async function EquiposPage() {
     supabase.from("products").select("id, name"),
   ]);
 
-  // Una etapa puede usar varios equipos a la vez: se trae la lista de
-  // asignaciones para las etapas de la ventana y se cruza en memoria.
-  const recordIdsEnVentana = (registrosEnVentana ?? []).map((r) => r.id);
-  const { data: equiposDeRegistros } =
-    recordIdsEnVentana.length > 0
-      ? await supabase
-          .from("bache_stage_record_equipos")
-          .select("stage_record_id, equipo_id")
-          .in("stage_record_id", recordIdsEnVentana)
-      : { data: [] };
-  const equipoIdsByRecordId = new Map<string, string[]>();
-  for (const re of equiposDeRegistros ?? []) {
-    const arr = equipoIdsByRecordId.get(re.stage_record_id) ?? [];
-    arr.push(re.equipo_id);
-    equipoIdsByRecordId.set(re.stage_record_id, arr);
-  }
+  // Fuente única de "qué equipo está usando cada etapa, desde cuándo hasta
+  // cuándo" -- ya incluye la extensión de los tanques hasta que termina de
+  // envasarse el bache, y la hora de lavado al final de cualquier uso.
+  const usos = await usosDeEquipos(supabase);
 
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const bacheById = new Map((baches ?? []).map((b) => [b.id, b]));
@@ -96,20 +86,23 @@ export default async function EquiposPage() {
   const stageNameById = new Map((stageTemplates ?? []).map((s) => [s.id, s.name]));
 
   // -------------------------------------------------------------------
-  // Estado actual + segmentos del Gantt.
+  // Estado actual + segmentos del Gantt: se muestran los usos de los
+  // últimos 7 días, más cualquiera que siga en curso aunque sea más viejo.
   // -------------------------------------------------------------------
-  const segmentos: GanttSegment[] = (registrosEnVentana ?? []).flatMap((r) => {
-    const bache = bacheById.get(r.bache_id);
-    const equipoIds = equipoIdsByRecordId.get(r.id) ?? [];
-    if (!bache || equipoIds.length === 0) return [];
-    return equipoIds.map((equipoId) => ({
-      equipoId,
-      bacheId: r.bache_id,
-      bacheLabel: bache.batch_code,
-      stageName: stageNameById.get(r.stage_template_id) ?? "—",
-      start: r.started_at,
-      end: r.ended_at,
-    }));
+  const usosVisibles = usos.filter((u) => u.enCurso || u.start >= cutoff);
+  const segmentos: GanttSegment[] = usosVisibles.flatMap((u) => {
+    const bache = bacheById.get(u.bacheId);
+    if (!bache) return [];
+    return [
+      {
+        equipoId: u.equipoId,
+        bacheId: u.bacheId,
+        bacheLabel: bache.batch_code,
+        stageName: stageNameById.get(u.stageTemplateId) ?? "—",
+        start: u.start,
+        end: u.end,
+      },
+    ];
   });
 
   const enCursoPorEquipo = new Map<string, GanttSegment>();
@@ -118,29 +111,30 @@ export default async function EquiposPage() {
   }
 
   // -------------------------------------------------------------------
-  // Ocupación: % del tiempo (últimos 7 días) y aprovechamiento de
-  // capacidad promedio (volumen del bache vs. capacidad del equipo).
+  // Ocupación: % del tiempo (últimos 7 días, ya con la hora de lavado y la
+  // extensión de tanques incluidas) y aprovechamiento de capacidad
+  // promedio (volumen del bache vs. capacidad del equipo).
   // -------------------------------------------------------------------
   const ventanaHoras = 7 * 24;
   const ocupacionPorEquipo = (equipos ?? []).map((equipo) => {
-    const propios = segmentos.filter((s) => s.equipoId === equipo.id);
-    const horasOcupado = propios.reduce((sum, s) => {
-      const start = new Date(s.start).getTime();
-      const end = s.end ? new Date(s.end).getTime() : nowMs();
-      return sum + Math.max(0, end - start) / 3_600_000;
+    const propios = usosVisibles.filter((u) => u.equipoId === equipo.id);
+    const horasOcupado = propios.reduce((sum, u) => {
+      const start = new Date(u.start).getTime();
+      const end = u.end ? new Date(u.end).getTime() : nowMs();
+      return sum + Math.max(0, Math.min(end, nowMs()) - Math.max(start, new Date(cutoff).getTime())) / 3_600_000;
     }, 0);
-    const usos = propios
-      .map((s) => bacheById.get(s.bacheId)?.volumen_total_litros ?? null)
+    const volumenes = propios
+      .map((u) => bacheById.get(u.bacheId)?.volumen_total_litros ?? null)
       .filter((v): v is number => v != null && v > 0);
     const capacidadPromedioPct =
-      equipo.capacidad && usos.length > 0
-        ? (usos.reduce((s, v) => s + v, 0) / usos.length / equipo.capacidad) * 100
+      equipo.capacidad && volumenes.length > 0
+        ? (volumenes.reduce((s, v) => s + v, 0) / volumenes.length / equipo.capacidad) * 100
         : null;
     return {
       equipo,
       horasOcupado,
       ocupacionPct: Math.min(100, Math.round((horasOcupado / ventanaHoras) * 100)),
-      usosRegistrados: usos.length,
+      usosRegistrados: propios.length,
       capacidadPromedioPct,
     };
   });
@@ -182,8 +176,8 @@ export default async function EquiposPage() {
   // También hace falta el registro EN CURSO de cada bache (no está en
   // registrosHistoricos porque ese solo trae etapas ya cerradas).
   const enCursoPorBache = new Map<string, { stage_template_id: string; started_at: string }>();
-  for (const r of registrosEnVentana ?? []) {
-    if (!r.ended_at) enCursoPorBache.set(r.bache_id, r);
+  for (const r of activeRecords ?? []) {
+    enCursoPorBache.set(r.bache_id, r);
   }
 
   const pronosticos = (baches ?? [])
