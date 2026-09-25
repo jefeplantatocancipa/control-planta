@@ -217,7 +217,13 @@ export async function upsertStageTemplate(
   // Se reemplaza la lista completa de requerimientos de equipo (mismo
   // criterio que parameter_schema: el cliente arma la lista final y el
   // servidor la pisa entera, más simple que hacer un diff fila por fila).
-  await supabase.from("stage_equipo_requirements").delete().eq("stage_template_id", saved.id);
+  const { error: deleteReqError } = await supabase
+    .from("stage_equipo_requirements")
+    .delete()
+    .eq("stage_template_id", saved.id);
+  if (deleteReqError) {
+    return { error: "La etapa se guardó, pero no se pudo actualizar la lista de equipos." };
+  }
   if (requirementsParsed.data.length > 0) {
     const { error: reqError } = await supabase.from("stage_equipo_requirements").insert(
       requirementsParsed.data.map((r, i) => ({
