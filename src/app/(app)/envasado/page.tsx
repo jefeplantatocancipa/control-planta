@@ -322,7 +322,6 @@ export default async function EnvasadoPage() {
         {canExecute && (
           <StartEnvasadoDialog
             baches={bacheOptions}
-            operarios={operariosSeleccionables}
             envasadoOrders={envasadoOrderOptions}
             envasadoInsumos={envasadoInsumos ?? []}
             recipeByReferencia={recipeByReferencia}
@@ -369,7 +368,7 @@ export default async function EnvasadoPage() {
               <TableHead>Insumos (kg)</TableHead>
               <TableHead>Unidades</TableHead>
               <TableHead>Mermas</TableHead>
-              <TableHead>Operario</TableHead>
+              <TableHead>Registrado por</TableHead>
               <TableHead>Finalizado</TableHead>
               <TableHead />
               {canDelete && <TableHead className="sticky right-0 bg-background" />}

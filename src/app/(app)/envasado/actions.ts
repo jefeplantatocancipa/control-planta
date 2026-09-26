@@ -45,7 +45,6 @@ export async function deleteEnvasado(
 
 const StartEnvasadoSchema = z.object({
   bache_id: z.string().uuid({ message: "Elegí un bache." }),
-  operario_id: z.string().uuid({ message: "Elegí quién realiza el envasado." }),
   envasado_order_id: z.string().uuid().nullable(),
   referencia_id: z.string().uuid().nullable(),
   presentacion: z.string().trim().min(1, "La presentación es obligatoria."),
@@ -74,7 +73,6 @@ export async function startEnvasado(
   const referenciaId = formData.get("referencia_id");
   const parsed = StartEnvasadoSchema.safeParse({
     bache_id: formData.get("bache_id"),
-    operario_id: formData.get("operario_id"),
     envasado_order_id: orderId && orderId !== NO_ORDER_VALUE ? orderId : null,
     referencia_id: referenciaId && referenciaId !== NO_ORDER_VALUE ? referenciaId : null,
     presentacion: formData.get("presentacion"),
@@ -95,11 +93,15 @@ export async function startEnvasado(
   }
 
   const supabase = await createClient();
+  // "operario_id" ya no se pide al iniciar: los operarios que realmente
+  // empacan se asignan por turno (envasado_cortes), y un envasado puede
+  // tener varios turnos con operarios distintos. Este campo solo queda
+  // para saber quién registró el envasado (igual que created_by).
   const { data: created, error } = await supabase
     .from("envasados")
     .insert({
       bache_id: parsed.data.bache_id,
-      operario_id: parsed.data.operario_id,
+      operario_id: profile.id,
       envasado_order_id: parsed.data.envasado_order_id,
       referencia_id: parsed.data.referencia_id,
       presentacion: parsed.data.presentacion,

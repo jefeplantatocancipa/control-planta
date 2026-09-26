@@ -179,7 +179,7 @@ export default async function EnvasadoReportPage({
         </div>
         <div>
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
-            Operario responsable
+            Registrado por
           </p>
           <p className="font-semibold">
             {operarioNames.get(envasado.operario_id) ?? "—"}

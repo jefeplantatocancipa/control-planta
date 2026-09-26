@@ -24,7 +24,6 @@ import { startEnvasado, type ActionState } from "./actions";
 import { NO_ORDER_VALUE } from "./constants";
 import type { Database } from "@/lib/supabase/types";
 
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
 
 interface BacheOption {
@@ -126,14 +125,12 @@ function buildInsumoDrafts(list: EnvasadoInsumo[]): InsumoUsoDraft[] {
 
 function StartEnvasadoForm({
   baches,
-  operarios,
   envasadoOrders,
   envasadoInsumos,
   recipeByReferencia,
   onSuccess,
 }: {
   baches: BacheOption[];
-  operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
@@ -251,29 +248,6 @@ function StartEnvasadoForm({
         <Input id="lote" name="lote" required />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="operario_id">Operario responsable</Label>
-        <Select
-          name="operario_id"
-          required
-          items={operarios.map((operario) => ({
-            value: operario.id,
-            label: operario.full_name,
-          }))}
-        >
-          <SelectTrigger id="operario_id" className="w-full">
-            <SelectValue placeholder="Elegí un operario" />
-          </SelectTrigger>
-          <SelectContent>
-            {operarios.map((operario) => (
-              <SelectItem key={operario.id} value={operario.id}>
-                {operario.full_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {insumosFiltrados && (
         <p className="-mb-2 text-xs text-muted-foreground">
           Mostrando solo los insumos de la receta de esta referencia.
@@ -326,13 +300,11 @@ function StartEnvasadoForm({
 
 export function StartEnvasadoDialog({
   baches,
-  operarios,
   envasadoOrders,
   envasadoInsumos,
   recipeByReferencia,
 }: {
   baches: BacheOption[];
-  operarios: Profile[];
   envasadoOrders: EnvasadoOrderOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
@@ -348,7 +320,6 @@ export function StartEnvasadoDialog({
         </DialogHeader>
         <StartEnvasadoForm
           baches={baches}
-          operarios={operarios}
           envasadoOrders={envasadoOrders}
           envasadoInsumos={envasadoInsumos}
           recipeByReferencia={recipeByReferencia}

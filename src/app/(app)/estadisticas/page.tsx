@@ -78,7 +78,6 @@ export default async function EstadisticasPage() {
   const supabase = await createClient();
 
   const [
-    { data: envasadoStats },
     { data: vasosEnmangados },
     { data: profiles },
     { data: bachesCerrados },
@@ -93,10 +92,6 @@ export default async function EstadisticasPage() {
     { data: envasadoEstibas },
     { data: equipos },
   ] = await Promise.all([
-    supabase
-      .from("v_estadisticas_envasado_operario")
-      .select("*")
-      .order("total_unidades", { ascending: false }),
     supabase.from("vasos_enmangados").select("*"),
     supabase.from("profiles").select("*"),
     supabase
@@ -126,7 +121,7 @@ export default async function EstadisticasPage() {
     // le acreditan a los dos.
     supabase
       .from("envasado_cortes")
-      .select("id, operario_id, operario_2_id, started_at, ended_at"),
+      .select("id, operario_id, operario_2_id, started_at, ended_at, desperdicio"),
     supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
     supabase.from("equipos").select("id, name").eq("active", true).order("name"),
   ]);
@@ -541,17 +536,28 @@ export default async function EstadisticasPage() {
       (unidadesPorCorte.get(es.corte_id) ?? 0) + (es.unidades_por_estiba ?? 0),
     );
   }
-  const rendimientoPorOperario = new Map<string, { horas: number; unidades: number }>();
+  const rendimientoPorOperario = new Map<
+    string,
+    { horas: number; unidades: number; eventos: number; mermas: number }
+  >();
   for (const c of envasadoCortes ?? []) {
     if (!c.ended_at) continue;
     const horas = (new Date(c.ended_at).getTime() - new Date(c.started_at).getTime()) / 3_600_000;
     if (horas <= 0) continue;
     const unidades = unidadesPorCorte.get(c.id) ?? 0;
+    const mermas = c.desperdicio ?? 0;
     for (const opId of [c.operario_id, c.operario_2_id]) {
       if (!opId) continue;
-      const entry = rendimientoPorOperario.get(opId) ?? { horas: 0, unidades: 0 };
+      const entry = rendimientoPorOperario.get(opId) ?? {
+        horas: 0,
+        unidades: 0,
+        eventos: 0,
+        mermas: 0,
+      };
       entry.horas += horas;
       entry.unidades += unidades;
+      entry.eventos += 1;
+      entry.mermas += mermas;
       rendimientoPorOperario.set(opId, entry);
     }
   }
@@ -564,6 +570,24 @@ export default async function EstadisticasPage() {
       unidadesPorHora: e.horas > 0 ? e.unidades / e.horas : 0,
     }))
     .sort((a, b) => b.unidadesPorHora - a.unidadesPorHora);
+
+  // Envasado por operario: mismo origen que "unidades/hora por turno"
+  // (envasado_cortes + envasado_estibas), no el envasado completo -- cada
+  // turno acredita sus unidades y su desperdicio a los dos operarios que lo
+  // trabajaron, en vez de cargarle todo el envasado a quien lo inició.
+  const envasadoPorOperario = Array.from(rendimientoPorOperario.entries())
+    .map(([operarioId, e]) => ({
+      operarioId,
+      nombre: operarioNames.get(operarioId) ?? "—",
+      eventos: e.eventos,
+      unidades: e.unidades,
+      mermas: e.mermas,
+      tasaMermaPct:
+        e.unidades + e.mermas > 0
+          ? Math.round((e.mermas / (e.unidades + e.mermas)) * 10000) / 100
+          : 0,
+    }))
+    .sort((a, b) => b.unidades - a.unidades);
 
   // -------------------------------------------------------------------
   // Unidades por hora de planta: acá sí se mide el ciclo completo -- desde
@@ -598,9 +622,9 @@ export default async function EstadisticasPage() {
   }
   const unidadesPorHoraPlanta = horasPlanta > 0 ? unidadesPlanta / horasPlanta : null;
 
-  const envasadoChartData = (envasadoStats ?? []).map((s) => ({
-    label: s.operario_name,
-    value: s.total_unidades,
+  const envasadoChartData = envasadoPorOperario.map((s) => ({
+    label: s.nombre,
+    value: s.unidades,
   }));
   const enmangadoChartData = enmangadoStats.map((s) => ({
     label: s.operario_name,
@@ -901,35 +925,39 @@ export default async function EstadisticasPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Operario</TableHead>
-                  <TableHead>Eventos</TableHead>
+                  <TableHead>Turnos</TableHead>
                   <TableHead>Unidades</TableHead>
                   <TableHead>Mermas</TableHead>
                   <TableHead>Tasa</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(envasadoStats ?? []).map((row) => (
-                  <TableRow key={row.operario_id}>
-                    <TableCell className="font-medium">{row.operario_name}</TableCell>
-                    <TableCell>{row.eventos_envasado}</TableCell>
-                    <TableCell>{row.total_unidades}</TableCell>
-                    <TableCell>{row.total_mermas}</TableCell>
+                {envasadoPorOperario.map((row) => (
+                  <TableRow key={row.operarioId}>
+                    <TableCell className="font-medium">{row.nombre}</TableCell>
+                    <TableCell>{row.eventos}</TableCell>
+                    <TableCell>{row.unidades}</TableCell>
+                    <TableCell>{row.mermas}</TableCell>
                     <TableCell>
-                      <Badge variant={row.tasa_merma_pct > 5 ? "destructive" : "outline"}>
-                        {row.tasa_merma_pct}%
+                      <Badge variant={row.tasaMermaPct > 5 ? "destructive" : "outline"}>
+                        {row.tasaMermaPct}%
                       </Badge>
                     </TableCell>
                   </TableRow>
                 ))}
-                {(envasadoStats ?? []).length === 0 && (
+                {envasadoPorOperario.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      Sin envasados todavía.
+                      Sin turnos de envasado cerrados todavía.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            <p className="text-xs text-muted-foreground">
+              Se cuenta por turno (envasado_cortes), no por el envasado completo: cada turno
+              acredita sus unidades y su desperdicio a los dos operarios que lo trabajaron.
+            </p>
           </CardContent>
         </Card>
 
