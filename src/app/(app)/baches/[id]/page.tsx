@@ -43,7 +43,6 @@ export default async function BacheDetailPage({
     { data: insumos },
     { data: tanques },
     { data: equipos },
-    { data: stageRequirements },
     { data: firmas },
     { data: allProfiles },
   ] = await Promise.all([
@@ -66,7 +65,6 @@ export default async function BacheDetailPage({
     // viejas que todavía lo usen.
     supabase.from("tanques").select("*").eq("active", true).order("name"),
     supabase.from("equipos").select("*").eq("active", true).order("name"),
-    supabase.from("stage_equipo_requirements").select("*"),
     supabase.from("bache_stage_firmas").select("*"),
     supabase.from("profiles").select("id, full_name"),
   ]);
@@ -91,13 +89,6 @@ export default async function BacheDetailPage({
     const arr = equipoIdsByRecord.get(re.stage_record_id) ?? [];
     arr.push(re.equipo_id);
     equipoIdsByRecord.set(re.stage_record_id, arr);
-  }
-
-  const requirementsByStage = new Map<string, NonNullable<typeof stageRequirements>>();
-  for (const r of stageRequirements ?? []) {
-    const arr = requirementsByStage.get(r.stage_template_id) ?? [];
-    arr.push(r);
-    requirementsByStage.set(r.stage_template_id, arr);
   }
 
   const firmasByStageRecord = new Map((firmas ?? []).map((f) => [f.stage_record_id, f]));
@@ -217,7 +208,9 @@ export default async function BacheDetailPage({
               unlocked={unlocked}
               tanques={tanques ?? []}
               equipos={equipos ?? []}
-              requirements={requirementsByStage.get(stage.id) ?? []}
+              // Requerimientos de equipo desactivados temporalmente (ver
+              // nota en baches/actions.ts): no se piden al iniciar la etapa.
+              requirements={[]}
               recordEquipoIds={record ? equipoIdsByRecord.get(record.id) ?? [] : []}
               equiposOcupadosIds={equiposOcupadosIds}
               firma={

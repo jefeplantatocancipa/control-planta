@@ -6,7 +6,6 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
-import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import type { StageRecordParameters, StageReading } from "@/lib/supabase/types";
 
 export interface ActionState {
@@ -276,40 +275,13 @@ export async function startStage(
 
   const supabase = await createClient();
 
-  // Los equipos los resuelve el servidor, no lo que venga del formulario:
-  // los "fijos" (siempre el mismo, ej. el pasteurizador) se toman directo
-  // de la etapa; los que el operario elige (ej. tanques) tienen que venir
-  // seleccionados. En los dos casos, ningún equipo puede estar ya en uso
-  // en otro bache en este mismo instante -- una etapa puede necesitar más
-  // de un equipo a la vez.
-  const { data: requirements } = await supabase
-    .from("stage_equipo_requirements")
-    .select("id, modo, equipo_id")
-    .eq("stage_template_id", parsed.data.stage_template_id);
-
+  // Requerimientos de equipo temporalmente desactivados: un falso bloqueo
+  // (equipo marcado como ocupado sin estarlo) llevó a cancelar un bache por
+  // error. Se reactiva cuando la ocupación quede confirmada como confiable.
+  // No se borra la configuración de equipos por etapa ni el catálogo: solo
+  // se deja de exigirlos/validarlos al iniciar.
   const equiposAUsar: { requirement_id: string; equipo_id: string }[] = [];
-  for (const req of requirements ?? []) {
-    if (req.modo === "fijo") {
-      if (req.equipo_id) equiposAUsar.push({ requirement_id: req.id, equipo_id: req.equipo_id });
-      continue;
-    }
-    const elegido = seleccionPorRequirement.get(req.id);
-    if (!elegido) {
-      return { error: "Esta etapa requiere elegir todos sus equipos." };
-    }
-    equiposAUsar.push({ requirement_id: req.id, equipo_id: elegido });
-  }
-
-  if (equiposAUsar.length > 0) {
-    const usos = await usosDeEquipos(supabase);
-    const ocupados = new Set(usos.filter((u) => u.enCurso).map((u) => u.equipoId));
-    if (equiposAUsar.some((e) => ocupados.has(e.equipo_id))) {
-      return {
-        error:
-          "Algún equipo de esta etapa ya está en uso en otro bache (o todavía en lavado / esperando que termine de envasarse).",
-      };
-    }
-  }
+  void seleccionPorRequirement;
 
   const { data: created, error } = await supabase
     .from("bache_stage_records")
