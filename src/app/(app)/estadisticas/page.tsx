@@ -19,7 +19,7 @@ import { OperarioBarChart } from "./operario-bar-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
 import { EtapasPorOperario, type EtapaOperarioRow } from "./etapas-por-operario";
-import { EtapaGantt } from "./etapa-gantt";
+import { EtapaGantt, type EtapaHistorialRow } from "./etapa-gantt";
 import { fridayOfWeek } from "../programa/excel-utils";
 
 function minutesLabel(minutes: number | null) {
@@ -94,9 +94,11 @@ export default async function EstadisticasPage() {
   ] = await Promise.all([
     supabase.from("vasos_enmangados").select("*"),
     supabase.from("profiles").select("*"),
+    // batch_code hace falta para el histórico de tiempos por bache (debajo
+    // del diagrama de Gantt de duración promedio).
     supabase
       .from("baches")
-      .select("id, product_id, started_at, completed_at")
+      .select("id, batch_code, product_id, started_at, completed_at")
       .eq("status", "completado")
       .not("completed_at", "is", null),
     // Para "kg producidos" hace falta CUALQUIER bache (no solo los ya
@@ -249,6 +251,32 @@ export default async function EstadisticasPage() {
           cantidad: e.cantidad,
         })),
     );
+
+  // Histórico de tiempos por etapa y bache (para la tabla debajo del
+  // Gantt de duración promedio): mismos datos de stageRecordsAll, pero sin
+  // promediar -- un renglón por bache real, filtrable por producto ahí
+  // mismo, mostrando los últimos 10 baches de ese producto.
+  const bacheInfoById = new Map(
+    (bachesCerrados ?? []).map((b) => [b.id, { batchCode: b.batch_code, startedAt: b.started_at }]),
+  );
+  const etapaHistorial: EtapaHistorialRow[] = [];
+  for (const r of stageRecordsAll ?? []) {
+    if (!r.ended_at) continue;
+    const productId = bacheProductById.get(r.bache_id);
+    const stage = stageInfoById.get(r.stage_template_id);
+    const bacheInfo = bacheInfoById.get(r.bache_id);
+    if (!productId || !stage || !bacheInfo) continue;
+    const minutos = (new Date(r.ended_at).getTime() - new Date(r.started_at).getTime()) / 60000;
+    etapaHistorial.push({
+      productId,
+      bacheId: r.bache_id,
+      batchCode: bacheInfo.batchCode,
+      startedAt: bacheInfo.startedAt,
+      stageName: stage.name,
+      sequenceOrder: stage.sequenceOrder,
+      minutos,
+    });
+  }
 
   // -------------------------------------------------------------------
   // Kg producidos: se calcula igual que el balance de masa del reporte
@@ -783,7 +811,7 @@ export default async function EstadisticasPage() {
           <CardTitle className="text-base">Duración promedio por etapa y producto</CardTitle>
         </CardHeader>
         <CardContent>
-          <EtapaGantt rows={duracionPorEtapaYProducto} />
+          <EtapaGantt rows={duracionPorEtapaYProducto} historial={etapaHistorial} />
         </CardContent>
       </Card>
 

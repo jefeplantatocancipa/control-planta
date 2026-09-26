@@ -9,6 +9,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatDate } from "@/lib/format-date";
 
 export interface EtapaDuracionRow {
   productId: string;
@@ -17,6 +26,18 @@ export interface EtapaDuracionRow {
   promedioMin: number;
   cantidad: number;
 }
+
+export interface EtapaHistorialRow {
+  productId: string;
+  bacheId: string;
+  batchCode: string;
+  startedAt: string;
+  stageName: string;
+  sequenceOrder: number;
+  minutos: number;
+}
+
+const ULTIMOS_BACHES = 10;
 
 const PALETTE = [
   "var(--chart-5)",
@@ -35,7 +56,13 @@ function minutesLabel(minutes: number): string {
   return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
 }
 
-export function EtapaGantt({ rows }: { rows: EtapaDuracionRow[] }) {
+export function EtapaGantt({
+  rows,
+  historial,
+}: {
+  rows: EtapaDuracionRow[];
+  historial: EtapaHistorialRow[];
+}) {
   const productos = useMemo(() => {
     const seen = new Map<string, string>();
     for (const r of rows) {
@@ -56,6 +83,28 @@ export function EtapaGantt({ rows }: { rows: EtapaDuracionRow[] }) {
   }, [rows, productId]);
 
   const total = segmentos.length > 0 ? segmentos[segmentos.length - 1].end : 0;
+  const stageColumns = segmentos.map((s) => s.stageName);
+
+  const historialFiltrado = useMemo(() => {
+    const porBache = new Map<
+      string,
+      { bacheId: string; batchCode: string; startedAt: string; stages: Map<string, number> }
+    >();
+    for (const h of historial) {
+      if (h.productId !== productId) continue;
+      const entry = porBache.get(h.bacheId) ?? {
+        bacheId: h.bacheId,
+        batchCode: h.batchCode,
+        startedAt: h.startedAt,
+        stages: new Map<string, number>(),
+      };
+      entry.stages.set(h.stageName, h.minutos);
+      porBache.set(h.bacheId, entry);
+    }
+    return Array.from(porBache.values())
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .slice(0, ULTIMOS_BACHES);
+  }, [historial, productId]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -112,6 +161,45 @@ export function EtapaGantt({ rows }: { rows: EtapaDuracionRow[] }) {
       ) : (
         <p className="text-sm text-muted-foreground">Sin etapas completadas para este producto.</p>
       )}
+
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Últimos {ULTIMOS_BACHES} baches</p>
+        {historialFiltrado.length > 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Bache</TableHead>
+                  <TableHead>Iniciado</TableHead>
+                  {stageColumns.map((stageName) => (
+                    <TableHead key={stageName} className="text-right whitespace-nowrap">
+                      {stageName}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {historialFiltrado.map((b) => (
+                  <TableRow key={b.bacheId}>
+                    <TableCell className="font-medium whitespace-nowrap">{b.batchCode}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDate(b.startedAt)}</TableCell>
+                    {stageColumns.map((stageName) => {
+                      const minutos = b.stages.get(stageName);
+                      return (
+                        <TableCell key={stageName} className="text-right whitespace-nowrap">
+                          {minutos != null ? minutesLabel(minutos) : "—"}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Sin baches completados para este producto.</p>
+        )}
+      </div>
     </div>
   );
 }
