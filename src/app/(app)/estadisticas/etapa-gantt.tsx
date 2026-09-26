@@ -169,24 +169,27 @@ export function EtapaGantt({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bache</TableHead>
-                  <TableHead>Iniciado</TableHead>
-                  {stageColumns.map((stageName) => (
-                    <TableHead key={stageName} className="text-right whitespace-nowrap">
-                      {stageName}
+                  <TableHead>Etapa</TableHead>
+                  {historialFiltrado.map((b) => (
+                    <TableHead key={b.bacheId} className="text-right whitespace-nowrap">
+                      <div className="flex flex-col items-end">
+                        <span>{b.batchCode}</span>
+                        <span className="font-normal text-muted-foreground">
+                          {formatDate(b.startedAt)}
+                        </span>
+                      </div>
                     </TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {historialFiltrado.map((b) => (
-                  <TableRow key={b.bacheId}>
-                    <TableCell className="font-medium whitespace-nowrap">{b.batchCode}</TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDate(b.startedAt)}</TableCell>
-                    {stageColumns.map((stageName) => {
+                {stageColumns.map((stageName) => (
+                  <TableRow key={stageName}>
+                    <TableCell className="font-medium whitespace-nowrap">{stageName}</TableCell>
+                    {historialFiltrado.map((b) => {
                       const minutos = b.stages.get(stageName);
                       return (
-                        <TableCell key={stageName} className="text-right whitespace-nowrap">
+                        <TableCell key={b.bacheId} className="text-right whitespace-nowrap">
                           {minutos != null ? minutesLabel(minutos) : "—"}
                         </TableCell>
                       );
