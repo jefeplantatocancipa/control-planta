@@ -149,8 +149,9 @@ export async function startEnvasado(
     };
   }
 
-  // Una vez que la orden de envasado se usó, deja de estar disponible para
-  // elegir en un nuevo "Iniciar envasado".
+  // Pasa a "en_proceso" en cuanto se usa por primera vez; sigue apareciendo
+  // en el selector (con las unidades pendientes) mientras no se complete,
+  // por si un solo bache/envasado no alcanza para cubrir lo planeado.
   if (parsed.data.envasado_order_id) {
     await supabase
       .from("envasado_orders")
@@ -317,12 +318,32 @@ export async function finalizarEnvasado(
       .eq("id", envasado.bache_id);
   }
 
-  // La orden de envasado usada ya no debe volver a aparecer para elegir.
+  // La orden solo pasa a "completado" cuando lo producido -- sumando TODOS
+  // los envasados que se hayan hecho contra ella, no solo este -- alcanza
+  // o supera lo planeado. Si un bache no le alcanza, sigue "en_proceso"
+  // para poder elegirla de nuevo en otro envasado y así completarla.
   if (envasado.envasado_order_id) {
-    await supabase
-      .from("envasado_orders")
-      .update({ status: "completado" })
-      .eq("id", envasado.envasado_order_id);
+    const [{ data: order }, { data: envasadosDeOrden }] = await Promise.all([
+      supabase
+        .from("envasado_orders")
+        .select("planned_quantity")
+        .eq("id", envasado.envasado_order_id)
+        .single(),
+      supabase
+        .from("envasados")
+        .select("cantidad_unidades")
+        .eq("envasado_order_id", envasado.envasado_order_id),
+    ]);
+    const totalProducido = (envasadosDeOrden ?? []).reduce(
+      (sum, e) => sum + e.cantidad_unidades,
+      0,
+    );
+    if (order && totalProducido >= order.planned_quantity) {
+      await supabase
+        .from("envasado_orders")
+        .update({ status: "completado" })
+        .eq("id", envasado.envasado_order_id);
+    }
   }
 
   revalidatePath("/envasado");

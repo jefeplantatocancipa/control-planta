@@ -16,7 +16,10 @@ import { StartEnvasadoDialog } from "./start-envasado-dialog";
 import { EnvasadoCard, type CorteDisplay, type ParadaDisplay } from "./envasado-card";
 import { DeleteButton } from "@/components/delete-button";
 import { deleteEnvasado } from "./actions";
-import { formatDateTime } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ORDER_STATUS_CLASSES } from "../programa/order-status-styles";
 
 export default async function EnvasadoPage() {
   const profile = await requireRole(["jefe_planta", "supervisor", "calidad", "asistente_adm"]);
@@ -67,10 +70,13 @@ export default async function EnvasadoPage() {
     supabase
       .from("bache_stage_records")
       .select("bache_id, stage_template_id, parameters"),
+    // "en_proceso" se incluye porque una orden puede necesitar varios
+    // baches/envasados hasta completar sus unidades planeadas -- no debe
+    // desaparecer del selector solo porque ya se usó una vez.
     supabase
       .from("envasado_orders")
       .select("*")
-      .eq("status", "pendiente")
+      .in("status", ["pendiente", "en_proceso"])
       .order("scheduled_date"),
     supabase.from("envasado_referencias").select("*"),
     supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
@@ -254,20 +260,47 @@ export default async function EnvasadoPage() {
     paradasByEnvasado.set(parada.envasado_id, list);
   }
 
+  // Unidades ya envasadas por orden: se suma TODO envasado ligado a la
+  // orden (puede haber más de uno, si un solo bache no alcanza a cubrir lo
+  // planeado) para saber cuánto queda pendiente.
+  const unidadesProducidasPorOrden = new Map<string, number>();
+  for (const e of envasados ?? []) {
+    if (!e.envasado_order_id) continue;
+    unidadesProducidasPorOrden.set(
+      e.envasado_order_id,
+      (unidadesProducidasPorOrden.get(e.envasado_order_id) ?? 0) + e.cantidad_unidades,
+    );
+  }
+
   const referenciasById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
-  const envasadoOrderOptions = (envasadoOrders ?? []).map((order) => {
+  const ordenesConPendiente = (envasadoOrders ?? [])
+    .map((order) => ({
+      ...order,
+      producidas: unidadesProducidasPorOrden.get(order.id) ?? 0,
+      pendientes: order.planned_quantity - (unidadesProducidasPorOrden.get(order.id) ?? 0),
+    }))
+    // Salvedad: si una orden "en_proceso" ya llegó a lo planeado pero por
+    // algún motivo no se marcó "completada" (falló esa actualización, por
+    // ejemplo), no debe seguir ofreciéndose para elegir.
+    .filter((order) => order.pendientes > 0);
+
+  const envasadoOrderOptions = ordenesConPendiente.map((order) => {
     const referencia = referenciasById.get(order.referencia_id);
     const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
     const presentacion = referencia ? `${referencia.sku} — ${referencia.name}` : "—";
     // El producto (nombre) va primero para identificar qué se va a envasar;
     // línea/fecha/cantidad, que es lo que distingue órdenes de un mismo
     // producto, van antes de que se trunque; el sku (solo un código) queda
-    // al final, igual que el código de orden en "Nuevo bache".
+    // al final, igual que el código de orden en "Nuevo bache". Las
+    // unidades pendientes (no las planeadas) para saber de un vistazo
+    // cuánto falta, sobre todo en órdenes que ya tuvieron un bache.
     const label = [
       referencia?.name ?? "—",
       order.linea,
       fecha,
-      `${order.planned_quantity} und.`,
+      order.producidas > 0
+        ? `${order.pendientes} und. pendientes (de ${order.planned_quantity})`
+        : `${order.planned_quantity} und.`,
       referencia?.sku,
     ]
       .filter(Boolean)
@@ -309,6 +342,18 @@ export default async function EnvasadoPage() {
   const open = (envasados ?? []).filter((e) => !e.ended_at);
   const closed = (envasados ?? []).filter((e) => e.ended_at);
 
+  // Aviso de órdenes que ya arrancaron pero no llegaron a las unidades
+  // planeadas: la orden "pendiente" recién programada no necesita aviso, lo
+  // que hay que resaltar es la que un bache dejó incompleta y sigue
+  // necesitando otro bache/envasado para cerrarse.
+  const ordenesIncompletas = ordenesConPendiente
+    .filter((o) => o.status === "en_proceso")
+    .map((order) => ({
+      ...order,
+      referenciaNombre: referenciasById.get(order.referencia_id)?.name ?? "—",
+    }))
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
@@ -328,6 +373,50 @@ export default async function EnvasadoPage() {
           />
         )}
       </div>
+
+      {ordenesIncompletas.length > 0 && (
+        <Card className="border-amber-300 dark:border-amber-500/40">
+          <CardHeader>
+            <CardTitle className="text-base">Órdenes con unidades pendientes</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              Ya tuvieron al menos un bache/envasado pero no llegaron a la cantidad planeada.
+              Elegilas de nuevo en &quot;Iniciar envasado&quot; para completarlas.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Línea</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Planeadas</TableHead>
+                  <TableHead className="text-right">Envasadas</TableHead>
+                  <TableHead className="text-right">Pendientes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ordenesIncompletas.map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-medium">{order.referenciaNombre}</TableCell>
+                    <TableCell>{order.linea ?? "—"}</TableCell>
+                    <TableCell>{formatDate(order.scheduled_date)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {order.planned_quantity}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{order.producidas}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge className={ORDER_STATUS_CLASSES.pendiente}>
+                        {order.pendientes} und.
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">En curso</h2>
