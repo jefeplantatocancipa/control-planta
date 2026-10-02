@@ -12,19 +12,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { OptionPicker } from "@/components/option-picker";
 import { associateBacheOrder, type ActionState } from "./actions";
 import { NO_ORDER_VALUE } from "./constants";
 
 interface OrderOption {
   id: string;
-  label: string;
+  title: string;
+  meta: (string | null | undefined)[];
 }
 
 function AssociateOrderForm({
@@ -52,28 +47,16 @@ function AssociateOrderForm({
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="bache_id" value={bacheId} />
       <div className="flex flex-col gap-2">
-        <Label htmlFor="production_order_id">Orden de trabajo</Label>
-        <Select
-          name="production_order_id"
+        <Label>Orden de trabajo</Label>
+        <input type="hidden" name="production_order_id" value={orderId} />
+        <OptionPicker
           value={orderId}
-          onValueChange={(value) => setOrderId(value ?? NO_ORDER_VALUE)}
+          onChange={setOrderId}
           items={[
-            { value: NO_ORDER_VALUE, label: "Sin orden asociada" },
-            ...orders.map((o) => ({ value: o.id, label: o.label })),
+            { value: NO_ORDER_VALUE, title: "Sin orden asociada" },
+            ...orders.map((o) => ({ value: o.id, title: o.title, meta: o.meta })),
           ]}
-        >
-          <SelectTrigger id="production_order_id" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_ORDER_VALUE}>Sin orden asociada</SelectItem>
-            {orders.map((o) => (
-              <SelectItem key={o.id} value={o.id}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </div>
       {state.error && (
         <p className="text-sm text-destructive" role="alert">

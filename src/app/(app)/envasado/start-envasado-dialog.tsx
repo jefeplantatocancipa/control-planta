@@ -14,13 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { OptionPicker } from "@/components/option-picker";
 import { startEnvasado, type ActionState } from "./actions";
 import { NO_ORDER_VALUE } from "./constants";
 import type { Database } from "@/lib/supabase/types";
@@ -30,12 +24,14 @@ type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
 interface BacheOption {
   id: string;
   productId: string;
-  label: string;
+  title: string;
+  meta: string[];
 }
 
 interface EnvasadoOrderOption {
   id: string;
-  label: string;
+  title: string;
+  meta: (string | null | undefined)[];
   presentacion: string;
   referenciaId: string;
   productId: string | null;
@@ -322,31 +318,20 @@ function StartEnvasadoForm({
     <form action={action} className="flex flex-col gap-4">
       {envasadoOrders.length > 0 && (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="envasado_order_id">Orden de envasado</Label>
-          <Select
-            name="envasado_order_id"
+          <Label>Orden de envasado</Label>
+          <input type="hidden" name="envasado_order_id" value={orderId} />
+          <OptionPicker
             value={orderId}
-            onValueChange={(value) => selectOrder(value ?? NO_ORDER_VALUE)}
+            onChange={selectOrder}
             items={[
-              { value: NO_ORDER_VALUE, label: "Sin orden asociada" },
+              { value: NO_ORDER_VALUE, title: "Sin orden asociada" },
               ...visibleOrders.map((order) => ({
                 value: order.id,
-                label: order.label,
+                title: order.title,
+                meta: order.meta,
               })),
             ]}
-          >
-            <SelectTrigger id="envasado_order_id" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_ORDER_VALUE}>Sin orden asociada</SelectItem>
-              {visibleOrders.map((order) => (
-                <SelectItem key={order.id} value={order.id}>
-                  {order.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
           <p className="text-xs text-muted-foreground">
             {bacheActivo
               ? "Mostrando solo las órdenes del producto del bache elegido."
@@ -356,30 +341,18 @@ function StartEnvasadoForm({
       )}
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="bache_id">Bache</Label>
-        <Select
-          name="bache_id"
+        <Label>Bache</Label>
+        <input type="hidden" name="bache_id" value={bacheId} />
+        <OptionPicker
           value={bacheId}
-          onValueChange={(value) => selectBache(value ?? "")}
-          required
-          items={visibleBaches.map((bache) => ({ value: bache.id, label: bache.label }))}
-        >
-          <SelectTrigger id="bache_id" className="w-full">
-            <SelectValue placeholder="Elegí un bache" />
-          </SelectTrigger>
-          <SelectContent>
-            {visibleBaches.map((bache) => (
-              <SelectItem key={bache.id} value={bache.id}>
-                {bache.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {ordenActiva && visibleBaches.length === 0 && (
-          <p className="text-xs text-destructive">
-            No hay baches de este producto listos para envasar todavía.
-          </p>
-        )}
+          onChange={selectBache}
+          items={visibleBaches.map((bache) => ({
+            value: bache.id,
+            title: bache.title,
+            meta: bache.meta,
+          }))}
+          emptyLabel="No hay baches listos para envasar todavía."
+        />
       </div>
 
       {bacheActivo && (

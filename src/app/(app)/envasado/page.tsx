@@ -144,15 +144,11 @@ export default async function EnvasadoPage() {
     .map((bache) => ({
       id: bache.id,
       productId: bache.product_id,
-      label: [
-        bache.batch_code,
-        productNames.get(bache.product_id) ?? "—",
+      title: `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`,
+      meta:
         bache.volumen_restante_litros != null
-          ? `quedan ${bache.volumen_restante_litros} L`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" — "),
+          ? [`quedan ${bache.volumen_restante_litros} L`]
+          : [],
     }));
   // Candidatos para "agregar base de otro bache" al iniciar un envasado:
   // cualquier bache con algo de volumen todavía sin envasar (se filtra por
@@ -302,26 +298,20 @@ export default async function EnvasadoPage() {
     const referencia = referenciasById.get(order.referencia_id);
     const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
     const presentacion = referencia ? `${referencia.sku} — ${referencia.name}` : "—";
-    // El producto (nombre) va primero para identificar qué se va a envasar;
-    // línea/fecha/cantidad, que es lo que distingue órdenes de un mismo
-    // producto, van antes de que se trunque; el sku (solo un código) queda
-    // al final, igual que el código de orden en "Nuevo bache". Las
-    // unidades pendientes (no las planeadas) para saber de un vistazo
-    // cuánto falta, sobre todo en órdenes que ya tuvieron un bache.
-    const label = [
-      referencia?.name ?? "—",
-      order.linea,
-      fecha,
-      order.producidas > 0
-        ? `${order.pendientes} und. pendientes (de ${order.planned_quantity})`
-        : `${order.planned_quantity} und.`,
-      referencia?.sku,
-    ]
-      .filter(Boolean)
-      .join(" — ");
+    // El producto (nombre) es el dato principal de la tarjeta; línea,
+    // fecha, unidades pendientes (no las planeadas, para saber de un
+    // vistazo cuánto falta) y sku van como detalle debajo.
     return {
       id: order.id,
-      label,
+      title: referencia?.name ?? "—",
+      meta: [
+        order.linea,
+        fecha,
+        order.producidas > 0
+          ? `${order.pendientes} und. pendientes (de ${order.planned_quantity})`
+          : `${order.planned_quantity} und.`,
+        referencia?.sku,
+      ],
       presentacion,
       referenciaId: order.referencia_id,
       productId: referencia?.product_id ?? null,

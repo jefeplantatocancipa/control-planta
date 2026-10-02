@@ -82,9 +82,8 @@ export default async function BachesPage() {
         : null;
     return {
       id: order.id,
-      label: [productNames.get(order.product_id) ?? "—", fecha, cantidad, order.orden_codigo]
-        .filter(Boolean)
-        .join(" — "),
+      title: productNames.get(order.product_id) ?? "—",
+      meta: [fecha, cantidad, order.orden_codigo],
     };
   });
 
@@ -158,9 +157,10 @@ export default async function BachesPage() {
                               ...orderOptions,
                               {
                                 id: bache.production_order_id,
-                                label:
+                                title:
                                   orderById.get(bache.production_order_id)?.orden_codigo ??
                                   "Orden actual",
+                                meta: [],
                               },
                             ]
                           : orderOptions

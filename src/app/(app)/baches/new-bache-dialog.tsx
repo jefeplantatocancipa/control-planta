@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { OptionPicker, type OptionPickerItem } from "@/components/option-picker";
 import { createBache, type ActionState } from "./actions";
 import { NO_ORDER_VALUE } from "./constants";
 import { formatTime } from "@/lib/format-date";
@@ -29,22 +30,22 @@ import type { Database } from "@/lib/supabase/types";
 type Product = Database["public"]["Tables"]["products"]["Row"];
 type Order = Database["public"]["Tables"]["production_orders"]["Row"];
 
-function orderLabel(order: Order, productName: string) {
+// Cada tarjeta muestra el producto como dato principal y el resto (línea
+// de fecha/hora/cantidad, y el código de orden aparte) como detalle, en
+// vez de un solo texto largo que terminaba truncado en el <Select>.
+function orderToItem(order: Order, productName: string): OptionPickerItem {
   const cantidad = order.baches_planeados
     ? `${order.baches_planeados} baches`
     : order.planned_quantity
       ? `${order.planned_quantity} ${order.unit}`
       : null;
   const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
-  const horaInicio = order.hora_inicio_planeada
-    ? formatTime(order.hora_inicio_planeada)
-    : null;
-  // El producto va primero: quien inicia el bache necesita saber qué se va
-  // a producir antes que cualquier otro dato. El código de orden queda al
-  // final, como referencia.
-  return [productName, fecha, horaInicio, cantidad, order.orden_codigo]
-    .filter(Boolean)
-    .join(" — ");
+  const horaInicio = order.hora_inicio_planeada ? formatTime(order.hora_inicio_planeada) : null;
+  return {
+    value: order.id,
+    title: productName,
+    meta: [[fecha, horaInicio].filter(Boolean).join(" "), cantidad, order.orden_codigo],
+  };
 }
 
 function NewBacheForm({
@@ -90,34 +91,18 @@ function NewBacheForm({
     <form action={action} className="flex flex-col gap-4">
       {orders.length > 0 && (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="production_order_id">Orden de producción</Label>
-          <Select
-            name="production_order_id"
+          <Label>Orden de producción</Label>
+          <input type="hidden" name="production_order_id" value={orderId} />
+          <OptionPicker
             value={orderId}
-            onValueChange={(value) => selectOrder(value ?? NO_ORDER_VALUE)}
+            onChange={selectOrder}
             items={[
-              { value: NO_ORDER_VALUE, label: "Sin orden asociada" },
-              ...orders.map((order) => ({
-                value: order.id,
-                label: orderLabel(
-                  order,
-                  productsById.get(order.product_id)?.name ?? "—",
-                ),
-              })),
+              { value: NO_ORDER_VALUE, title: "Sin orden asociada" },
+              ...orders.map((order) =>
+                orderToItem(order, productsById.get(order.product_id)?.name ?? "—"),
+              ),
             ]}
-          >
-            <SelectTrigger id="production_order_id" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_ORDER_VALUE}>Sin orden asociada</SelectItem>
-              {orders.map((order) => (
-                <SelectItem key={order.id} value={order.id}>
-                  {orderLabel(order, productsById.get(order.product_id)?.name ?? "—")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
           <p className="text-xs text-muted-foreground">
             Al elegir una orden se completan el producto y el volumen
             sugerido (podés cambiarlos).
