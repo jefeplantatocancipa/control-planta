@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
-import { PrintButton } from "./print-button";
+import { PrintButton } from "@/components/print-button";
 import type { BacheStatus, Database, StageReading } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {

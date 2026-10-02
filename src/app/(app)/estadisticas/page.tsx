@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
-import { Clock, Package, PackageCheck, Timer } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Timer } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
@@ -7,6 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { PrintButton } from "@/components/print-button";
 import {
   Table,
   TableBody,
@@ -42,14 +45,24 @@ function daysAgoISO(days: number) {
   return format(new Date(Date.now() - days * 24 * 60 * 60 * 1000), "yyyy-MM-dd");
 }
 
-function firstDayOfMonthISO() {
+// Resuelve el mes elegido (?mes=YYYY-MM) a un rango [inicio, fin) de
+// fechas ISO, con mes anterior/siguiente ya calculados para la navegación.
+// Sin parámetro (o uno inválido), cae en el mes calendario actual.
+function monthRange(mesParam: string | undefined) {
   const now = new Date();
-  return format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
-}
-
-function currentMonthLabel() {
-  const label = format(new Date(), "MMMM yyyy", { locale: es });
-  return label.charAt(0).toUpperCase() + label.slice(1);
+  const valid = mesParam && /^\d{4}-\d{2}$/.test(mesParam);
+  const year = valid ? Number(mesParam.slice(0, 4)) : now.getFullYear();
+  const month = valid ? Number(mesParam.slice(5, 7)) - 1 : now.getMonth();
+  const start = new Date(year, month, 1);
+  const label = format(start, "MMMM yyyy", { locale: es });
+  return {
+    mes: format(start, "yyyy-MM"),
+    inicio: format(start, "yyyy-MM-dd"),
+    fin: format(new Date(year, month + 1, 1), "yyyy-MM-dd"),
+    label: label.charAt(0).toUpperCase() + label.slice(1),
+    prevMes: format(new Date(year, month - 1, 1), "yyyy-MM"),
+    nextMes: format(new Date(year, month + 1, 1), "yyyy-MM"),
+  };
 }
 
 function nowMs() {
@@ -83,8 +96,14 @@ function KpiCard({
   );
 }
 
-export default async function EstadisticasPage() {
+export default async function EstadisticasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string }>;
+}) {
   await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
+  const { mes: mesParam } = await searchParams;
+  const mesRango = monthRange(mesParam);
   const supabase = await createClient();
 
   const [
@@ -442,28 +461,30 @@ export default async function EstadisticasPage() {
   }
 
   const cutoff30d = daysAgoISO(30);
-  const cutoffMes = firstDayOfMonthISO();
 
+  // -------------------------------------------------------------------
+  // Kilos producidos/empacados y las dos donas de participación se mueven
+  // juntas con el mismo mes elegido (selector arriba, vía ?mes=YYYY-MM),
+  // no una ventana móvil de 30 días -- es contra lo que se compara la
+  // planeación mensual.
+  // -------------------------------------------------------------------
   const kgProducidosMes = kgProducidoEvents
-    .filter((e) => e.date >= cutoffMes)
+    .filter((e) => e.date >= mesRango.inicio && e.date < mesRango.fin)
     .reduce((s, e) => s + e.kg, 0);
 
-  const kgEmpacados30d = (envasados ?? [])
-    .filter((e) => e.started_at.slice(0, 10) >= cutoff30d)
+  const kgEmpacadosMes = (envasados ?? [])
+    .filter((e) => {
+      const fecha = e.started_at.slice(0, 10);
+      return fecha >= mesRango.inicio && fecha < mesRango.fin;
+    })
     .reduce((s, e) => {
       const peso = pesoUnitarioDe(e);
       return peso ? s + (e.cantidad_unidades * peso) / 1000 : s;
     }, 0);
 
-  // -------------------------------------------------------------------
-  // Participación por producto: kg producidos EN EL MES ACTUAL (no una
-  // ventana móvil de 30 días), porque es lo que se compara contra la
-  // planeación mensual. Por referencia de envasado se deja en los últimos
-  // 30 días -- no se pidió cambiarla.
-  // -------------------------------------------------------------------
   const produccionPorProductoMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
-    if (e.date < cutoffMes) continue;
+    if (e.date < mesRango.inicio || e.date >= mesRango.fin) continue;
     produccionPorProductoMap.set(e.productId, (produccionPorProductoMap.get(e.productId) ?? 0) + e.kg);
   }
   const produccionPorProducto = Array.from(produccionPorProductoMap.entries())
@@ -475,7 +496,8 @@ export default async function EstadisticasPage() {
 
   const empaquePorReferenciaMap = new Map<string, { nombre: string; total: number }>();
   for (const e of envasados ?? []) {
-    if (e.started_at.slice(0, 10) < cutoff30d) continue;
+    const fecha = e.started_at.slice(0, 10);
+    if (fecha < mesRango.inicio || fecha >= mesRango.fin) continue;
     const referencia = referenciaDe(e);
     if (!referencia) continue;
     const entry = empaquePorReferenciaMap.get(referencia.id) ?? { nombre: referencia.name, total: 0 };
@@ -679,11 +701,14 @@ export default async function EstadisticasPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Estadísticas</h1>
-        <p className="text-muted-foreground">
-          Indicadores de planta y desempeño por operario y por proceso.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Estadísticas</h1>
+          <p className="text-muted-foreground">
+            Indicadores de planta y desempeño por operario y por proceso.
+          </p>
+        </div>
+        <PrintButton />
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -703,14 +728,32 @@ export default async function EstadisticasPage() {
           icon={Package}
           label="Kilos producidos"
           value={`${kg(kgProducidosMes)} kg`}
-          sublabel={currentMonthLabel()}
+          sublabel={mesRango.label}
         />
         <KpiCard
           icon={PackageCheck}
           label="Kilos empacados"
-          value={`${kg(kgEmpacados30d)} kg`}
-          sublabel="Últimos 30 días"
+          value={`${kg(kgEmpacadosMes)} kg`}
+          sublabel={mesRango.label}
         />
+      </div>
+
+      <div className="flex items-center justify-end gap-2 print:hidden">
+        <Link
+          href={`/estadisticas?mes=${mesRango.prevMes}`}
+          className={buttonVariants({ variant: "outline", size: "icon-sm" })}
+          title="Mes anterior"
+        >
+          <ChevronLeft className="size-4" />
+        </Link>
+        <span className="min-w-36 text-center text-sm font-medium">{mesRango.label}</span>
+        <Link
+          href={`/estadisticas?mes=${mesRango.nextMes}`}
+          className={buttonVariants({ variant: "outline", size: "icon-sm" })}
+          title="Mes siguiente"
+        >
+          <ChevronRight className="size-4" />
+        </Link>
       </div>
 
       <Card>
@@ -730,7 +773,7 @@ export default async function EstadisticasPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Participación por producto ({currentMonthLabel()})
+              Participación por producto ({mesRango.label})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -746,14 +789,16 @@ export default async function EstadisticasPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Participación por referencia de envasado (30 días)</CardTitle>
+            <CardTitle className="text-base">
+              Participación por referencia de envasado ({mesRango.label})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {empaquePorReferencia.length > 0 ? (
               <ShareChart data={empaquePorReferencia} unit="kg" />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Sin envasado registrado en los últimos 30 días.
+                Sin envasado registrado este mes.
               </p>
             )}
           </CardContent>

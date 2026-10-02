@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
-import { PrintButton } from "./print-button";
+import { PrintButton } from "@/components/print-button";
 
 function durationLabel(startedAt: string, endedAt: string) {
   const minutes = Math.round(
