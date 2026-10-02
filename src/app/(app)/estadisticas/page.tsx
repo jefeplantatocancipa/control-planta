@@ -42,6 +42,16 @@ function daysAgoISO(days: number) {
   return format(new Date(Date.now() - days * 24 * 60 * 60 * 1000), "yyyy-MM-dd");
 }
 
+function firstDayOfMonthISO() {
+  const now = new Date();
+  return format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
+}
+
+function currentMonthLabel() {
+  const label = format(new Date(), "MMMM yyyy", { locale: es });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function nowMs() {
   return Date.now();
 }
@@ -432,9 +442,10 @@ export default async function EstadisticasPage() {
   }
 
   const cutoff30d = daysAgoISO(30);
+  const cutoffMes = firstDayOfMonthISO();
 
-  const kgProducidos30d = kgProducidoEvents
-    .filter((e) => e.date >= cutoff30d)
+  const kgProducidosMes = kgProducidoEvents
+    .filter((e) => e.date >= cutoffMes)
     .reduce((s, e) => s + e.kg, 0);
 
   const kgEmpacados30d = (envasados ?? [])
@@ -445,12 +456,14 @@ export default async function EstadisticasPage() {
     }, 0);
 
   // -------------------------------------------------------------------
-  // Participación por producto (kg producidos, últimos 30 días) y por
-  // referencia de envasado (kg empacados, últimos 30 días).
+  // Participación por producto: kg producidos EN EL MES ACTUAL (no una
+  // ventana móvil de 30 días), porque es lo que se compara contra la
+  // planeación mensual. Por referencia de envasado se deja en los últimos
+  // 30 días -- no se pidió cambiarla.
   // -------------------------------------------------------------------
   const produccionPorProductoMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
-    if (e.date < cutoff30d) continue;
+    if (e.date < cutoffMes) continue;
     produccionPorProductoMap.set(e.productId, (produccionPorProductoMap.get(e.productId) ?? 0) + e.kg);
   }
   const produccionPorProducto = Array.from(produccionPorProductoMap.entries())
@@ -689,8 +702,8 @@ export default async function EstadisticasPage() {
         <KpiCard
           icon={Package}
           label="Kilos producidos"
-          value={`${kg(kgProducidos30d)} kg`}
-          sublabel="Últimos 30 días"
+          value={`${kg(kgProducidosMes)} kg`}
+          sublabel={currentMonthLabel()}
         />
         <KpiCard
           icon={PackageCheck}
@@ -716,14 +729,16 @@ export default async function EstadisticasPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Participación por producto (30 días)</CardTitle>
+            <CardTitle className="text-base">
+              Participación por producto ({currentMonthLabel()})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {produccionPorProducto.length > 0 ? (
               <ShareChart data={produccionPorProducto} unit="kg" />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Sin producción registrada en los últimos 30 días.
+                Sin producción registrada este mes.
               </p>
             )}
           </CardContent>
