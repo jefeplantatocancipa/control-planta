@@ -30,6 +30,7 @@ import {
   type ActionState,
 } from "../actions";
 import { Plus, X } from "lucide-react";
+import { OptionPicker } from "@/components/option-picker";
 import { formatTime } from "@/lib/format-date";
 import type { Database, StageParameterDef, StageReading } from "@/lib/supabase/types";
 
@@ -471,20 +472,18 @@ function BaseOtroBacheEditor({
         const disponible = opcion?.volumen_restante_litros ?? null;
         const excede = disponible != null && Number(draft.cantidad) > disponible;
         return (
-          <div key={draft.key} className="flex flex-col gap-1">
+          <div key={draft.key} className="flex flex-col gap-2 rounded-lg border p-3">
+            <OptionPicker
+              value={draft.bache_id}
+              onChange={(value) => updateAt(index, { bache_id: value })}
+              items={opciones.map((o) => ({
+                value: o.id,
+                title: o.batch_code,
+                meta: [`quedan ${o.volumen_restante_litros} kg`],
+              }))}
+              className="max-h-40 border-0 p-0"
+            />
             <div className="flex items-center gap-2">
-              <select
-                value={draft.bache_id}
-                onChange={(e) => updateAt(index, { bache_id: e.target.value })}
-                className={`${SELECT_CLASSNAME} flex-1`}
-              >
-                <option value="">Elegí un bache</option>
-                {opciones.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.batch_code} (quedan {o.volumen_restante_litros} kg)
-                  </option>
-                ))}
-              </select>
               <Input
                 placeholder="Cantidad (kg)"
                 type="number"
@@ -494,7 +493,13 @@ function BaseOtroBacheEditor({
                 onChange={(e) => updateAt(index, { cantidad: e.target.value })}
                 className="w-32"
               />
-              <Button type="button" variant="ghost" size="icon-sm" onClick={() => remove(index)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => remove(index)}
+                className="ml-auto"
+              >
                 <X className="size-4" />
               </Button>
             </div>

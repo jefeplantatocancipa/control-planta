@@ -157,20 +157,18 @@ function BaseOtroBacheEditor({
         const disponible = opcion?.volumenRestante ?? null;
         const excede = disponible != null && Number(draft.cantidad) > disponible;
         return (
-          <div key={draft.key} className="flex flex-col gap-1">
+          <div key={draft.key} className="flex flex-col gap-2 rounded-lg border p-3">
+            <OptionPicker
+              value={draft.bacheId}
+              onChange={(value) => updateAt(index, { bacheId: value })}
+              items={opciones.map((o) => ({
+                value: o.id,
+                title: o.batchCode,
+                meta: [`quedan ${o.volumenRestante} L`],
+              }))}
+              className="max-h-40 border-0 p-0"
+            />
             <div className="flex items-center gap-2">
-              <select
-                value={draft.bacheId}
-                onChange={(e) => updateAt(index, { bacheId: e.target.value })}
-                className="h-8 flex-1 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              >
-                <option value="">Elegí un bache</option>
-                {opciones.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.batchCode} (quedan {o.volumenRestante} L)
-                  </option>
-                ))}
-              </select>
               <Input
                 placeholder="Cantidad (kg)"
                 type="number"
@@ -180,7 +178,13 @@ function BaseOtroBacheEditor({
                 onChange={(e) => updateAt(index, { cantidad: e.target.value })}
                 className="w-32"
               />
-              <Button type="button" variant="ghost" size="icon-sm" onClick={() => remove(index)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => remove(index)}
+                className="ml-auto"
+              >
                 <X className="size-4" />
               </Button>
             </div>
