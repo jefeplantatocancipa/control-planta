@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Beaker, ClipboardList, Factory, LineChart, Package, Tags, Warehouse } from "lucide-react";
+import { Activity, Beaker, CalendarClock, ClipboardList, Factory, LineChart, Package, Tags, Warehouse } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth/dal";
 import type { UserRole } from "@/lib/supabase/types";
@@ -17,6 +17,13 @@ const CARDS: {
     description: "Tablero en vivo de los procesos de producción, etapa por etapa.",
     icon: Activity,
     roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad", "asistente_adm"],
+  },
+  {
+    href: "/resumen-dia",
+    title: "Resumen del día",
+    description: "Programación, orden asociada y envasado por turno, con cumplido automático.",
+    icon: CalendarClock,
+    roles: ["jefe_planta", "supervisor"],
   },
   {
     href: "/baches",

@@ -6,6 +6,7 @@ import {
   Activity,
   Beaker,
   Boxes,
+  CalendarClock,
   ClipboardList,
   Factory,
   LayoutDashboard,
@@ -35,6 +36,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", icon: LayoutDashboard, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad", "asistente_adm"] },
   { href: "/proceso", label: "Proceso", icon: Activity, roles: ["jefe_planta", "supervisor", "operario", "planeacion", "calidad", "asistente_adm"] },
+  { href: "/resumen-dia", label: "Resumen del día", icon: CalendarClock, roles: ["jefe_planta", "supervisor"] },
   { href: "/baches", label: "Baches", icon: Beaker, roles: ["jefe_planta", "supervisor", "calidad", "asistente_adm"] },
   { href: "/envasado", label: "Envasado", icon: Package, roles: ["jefe_planta", "supervisor", "calidad", "asistente_adm"] },
   { href: "/encajado", label: "Encajado", icon: Boxes, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
