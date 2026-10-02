@@ -28,6 +28,7 @@ type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
 
 interface BacheOption {
   id: string;
+  productId: string;
   label: string;
 }
 
@@ -36,6 +37,7 @@ interface EnvasadoOrderOption {
   label: string;
   presentacion: string;
   referenciaId: string;
+  productId: string | null;
 }
 
 interface InsumoUsoDraft {
@@ -141,6 +143,7 @@ function StartEnvasadoForm({
     {},
   );
   const [orderId, setOrderId] = useState(NO_ORDER_VALUE);
+  const [bacheId, setBacheId] = useState("");
   const [referenciaId, setReferenciaId] = useState(NO_ORDER_VALUE);
   const [presentacion, setPresentacion] = useState("");
   const [insumos, setInsumos] = useState<InsumoUsoDraft[]>(
@@ -153,14 +156,8 @@ function StartEnvasadoForm({
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
 
-  function selectOrder(value: string) {
-    setOrderId(value);
-    const order = envasadoOrders.find((o) => o.id === value);
-    if (!order) return;
-    setPresentacion(order.presentacion);
-    setReferenciaId(order.referenciaId);
-
-    const receta = recipeByReferencia[order.referenciaId];
+  function aplicarInsumosDeReferencia(referenciaIdElegida: string) {
+    const receta = recipeByReferencia[referenciaIdElegida];
     if (receta && receta.length > 0) {
       const recetaSet = new Set(receta);
       setInsumos(buildInsumoDrafts(envasadoInsumos.filter((i) => recetaSet.has(i.id))));
@@ -170,6 +167,50 @@ function StartEnvasadoForm({
       setInsumosFiltrados(false);
     }
   }
+
+  function selectOrder(value: string) {
+    setOrderId(value);
+    const order = envasadoOrders.find((o) => o.id === value);
+    if (!order) return;
+    setPresentacion(order.presentacion);
+    setReferenciaId(order.referenciaId);
+    aplicarInsumosDeReferencia(order.referenciaId);
+
+    // Si el bache ya elegido es de otro producto, se deselecciona: evita
+    // armar una combinación cruzada orden/bache sin querer.
+    const bache = baches.find((b) => b.id === bacheId);
+    if (bache && order.productId && bache.productId !== order.productId) {
+      setBacheId("");
+    }
+  }
+
+  function selectBache(value: string) {
+    setBacheId(value);
+    const bache = baches.find((b) => b.id === value);
+    if (!bache) return;
+
+    // Misma idea en el otro sentido: si había una orden de otro producto
+    // elegida, se limpia en vez de dejar la combinación mal armada.
+    const order = envasadoOrders.find((o) => o.id === orderId);
+    if (order && order.productId && order.productId !== bache.productId) {
+      setOrderId(NO_ORDER_VALUE);
+      setPresentacion("");
+      setReferenciaId(NO_ORDER_VALUE);
+      aplicarInsumosDeReferencia("");
+    }
+  }
+
+  // El desplegable que falta por elegir se filtra por el producto del que
+  // ya se eligió, para no poder armar una orden/bache de productos
+  // distintos en primer lugar.
+  const bacheActivo = baches.find((b) => b.id === bacheId);
+  const ordenActiva = envasadoOrders.find((o) => o.id === orderId);
+  const visibleBaches = ordenActiva?.productId
+    ? baches.filter((b) => b.productId === ordenActiva.productId)
+    : baches;
+  const visibleOrders = bacheActivo
+    ? envasadoOrders.filter((o) => !o.productId || o.productId === bacheActivo.productId)
+    : envasadoOrders;
 
   const checkedInsumos = insumos.filter((i) => i.checked);
 
@@ -184,7 +225,7 @@ function StartEnvasadoForm({
             onValueChange={(value) => selectOrder(value ?? NO_ORDER_VALUE)}
             items={[
               { value: NO_ORDER_VALUE, label: "Sin orden asociada" },
-              ...envasadoOrders.map((order) => ({
+              ...visibleOrders.map((order) => ({
                 value: order.id,
                 label: order.label,
               })),
@@ -195,7 +236,7 @@ function StartEnvasadoForm({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_ORDER_VALUE}>Sin orden asociada</SelectItem>
-              {envasadoOrders.map((order) => (
+              {visibleOrders.map((order) => (
                 <SelectItem key={order.id} value={order.id}>
                   {order.label}
                 </SelectItem>
@@ -203,8 +244,9 @@ function StartEnvasadoForm({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Al elegir una orden se completa la presentación (podés
-            cambiarla).
+            {bacheActivo
+              ? "Mostrando solo las órdenes del producto del bache elegido."
+              : "Al elegir una orden se completa la presentación (podés cambiarla) y se filtra el bache al mismo producto."}
           </p>
         </div>
       )}
@@ -213,20 +255,27 @@ function StartEnvasadoForm({
         <Label htmlFor="bache_id">Bache</Label>
         <Select
           name="bache_id"
+          value={bacheId}
+          onValueChange={(value) => selectBache(value ?? "")}
           required
-          items={baches.map((bache) => ({ value: bache.id, label: bache.label }))}
+          items={visibleBaches.map((bache) => ({ value: bache.id, label: bache.label }))}
         >
           <SelectTrigger id="bache_id" className="w-full">
             <SelectValue placeholder="Elegí un bache" />
           </SelectTrigger>
           <SelectContent>
-            {baches.map((bache) => (
+            {visibleBaches.map((bache) => (
               <SelectItem key={bache.id} value={bache.id}>
                 {bache.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {ordenActiva && visibleBaches.length === 0 && (
+          <p className="text-xs text-destructive">
+            No hay baches de este producto listos para envasar todavía.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

@@ -75,6 +75,17 @@ function NewBacheForm({
     }
   }
 
+  // Si se cambia el producto a mano después de elegir una orden, esa orden
+  // ya no corresponde -- se limpia en vez de dejar armada una combinación
+  // cruzada (producto A, orden de producto B).
+  function selectProduct(value: string) {
+    setProductId(value);
+    const order = orders.find((o) => o.id === orderId);
+    if (order && order.product_id !== value) {
+      setOrderId(NO_ORDER_VALUE);
+    }
+  }
+
   return (
     <form action={action} className="flex flex-col gap-4">
       {orders.length > 0 && (
@@ -119,7 +130,7 @@ function NewBacheForm({
         <Select
           name="product_id"
           value={productId}
-          onValueChange={(value) => setProductId(value ?? "")}
+          onValueChange={(value) => selectProduct(value ?? "")}
           items={products.map((product) => ({
             value: product.id,
             label: product.name,

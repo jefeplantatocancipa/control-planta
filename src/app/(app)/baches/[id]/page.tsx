@@ -69,6 +69,16 @@ export default async function BacheDetailPage({
     supabase.from("profiles").select("id, full_name"),
   ]);
 
+  // Baches candidatos para "agregar base de otro bache": mismo producto,
+  // con algo de volumen todavía sin envasar, sin contar este mismo bache.
+  const { data: otrosBachesConBase } = await supabase
+    .from("baches")
+    .select("id, batch_code, volumen_restante_litros")
+    .eq("product_id", bache.product_id)
+    .neq("id", bache.id)
+    .neq("status", "cancelado")
+    .gt("volumen_restante_litros", 0);
+
   // Un equipo puede seguir ocupado aunque su etapa ya haya cerrado (los
   // tanques de almacenamiento siguen con producto adentro hasta que se
   // termina de envasar todo el bache) más la hora de lavado -- mismo
@@ -204,6 +214,7 @@ export default async function BacheDetailPage({
               record={record}
               operarios={operarios ?? []}
               recipeInsumos={recipeInsumosFor(stage)}
+              otrosBachesConBase={otrosBachesConBase ?? []}
               canAct={canAct}
               unlocked={unlocked}
               tanques={tanques ?? []}

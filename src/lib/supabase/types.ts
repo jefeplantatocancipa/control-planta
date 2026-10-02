@@ -41,6 +41,15 @@ export interface InsumoEntry {
   marca: string;
 }
 
+// Base incorporada de OTRO bache ya existente (ej. sobrante de un tanque
+// que se mezcla en este bache) -- suma al balance de masa de este bache y
+// se descuenta de "volumen_restante_litros" del bache de origen.
+export interface BaseOtroBacheEntry {
+  bache_id: string;
+  batch_code: string;
+  cantidad: number;
+}
+
 // Una lectura periódica (etapas con captures_readings = true): la hora
 // queda en "timestamp" (automática, no editable), el resto de las claves
 // son las del parameter_schema de la etapa (ej. pH, Temperatura).
@@ -55,7 +64,14 @@ export interface StageReading {
 export interface StageRecordParameters {
   insumos?: InsumoEntry[];
   lecturas?: StageReading[];
-  [key: string]: string | number | InsumoEntry[] | StageReading[] | undefined;
+  base_otro_bache?: BaseOtroBacheEntry[];
+  [key: string]:
+    | string
+    | number
+    | InsumoEntry[]
+    | StageReading[]
+    | BaseOtroBacheEntry[]
+    | undefined;
 }
 
 export interface Database {

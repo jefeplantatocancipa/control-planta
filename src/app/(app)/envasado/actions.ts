@@ -93,6 +93,31 @@ export async function startEnvasado(
   }
 
   const supabase = await createClient();
+
+  // El cliente ya filtra los desplegables para que no se pueda armar esta
+  // combinación, pero se valida también acá -- es la única garantía real
+  // de que la orden y el bache sean del mismo producto.
+  if (parsed.data.envasado_order_id) {
+    const [{ data: order }, { data: bache }] = await Promise.all([
+      supabase
+        .from("envasado_orders")
+        .select("referencia_id")
+        .eq("id", parsed.data.envasado_order_id)
+        .single(),
+      supabase.from("baches").select("product_id").eq("id", parsed.data.bache_id).single(),
+    ]);
+    const { data: referencia } = order
+      ? await supabase
+          .from("envasado_referencias")
+          .select("product_id")
+          .eq("id", order.referencia_id)
+          .single()
+      : { data: null };
+    if (referencia && bache && referencia.product_id !== bache.product_id) {
+      return { error: "La orden de envasado y el bache elegido son de productos distintos." };
+    }
+  }
+
   // "operario_id" ya no se pide al iniciar: los operarios que realmente
   // empacan se asignan por turno (envasado_cortes), y un envasado puede
   // tener varios turnos con operarios distintos. Este campo solo queda

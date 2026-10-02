@@ -143,6 +143,7 @@ export default async function EnvasadoPage() {
     )
     .map((bache) => ({
       id: bache.id,
+      productId: bache.product_id,
       label: [
         bache.batch_code,
         productNames.get(bache.product_id) ?? "—",
@@ -306,7 +307,13 @@ export default async function EnvasadoPage() {
     ]
       .filter(Boolean)
       .join(" — ");
-    return { id: order.id, label, presentacion, referenciaId: order.referencia_id };
+    return {
+      id: order.id,
+      label,
+      presentacion,
+      referenciaId: order.referencia_id,
+      productId: referencia?.product_id ?? null,
+    };
   });
 
   // Receta de material de empaque por referencia: filtra el checklist de

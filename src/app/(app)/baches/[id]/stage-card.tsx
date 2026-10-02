@@ -29,6 +29,7 @@ import {
   firmarEtapaBache,
   type ActionState,
 } from "../actions";
+import { Plus, X } from "lucide-react";
 import { formatTime } from "@/lib/format-date";
 import type { Database, StageParameterDef, StageReading } from "@/lib/supabase/types";
 
@@ -132,6 +133,18 @@ interface InsumoDraft {
   // anterior (encadenada): acá solo hace falta marcar el checkbox, no
   // volver a tipearlos.
   prefilled: boolean;
+}
+
+interface BacheConBaseOption {
+  id: string;
+  batch_code: string;
+  volumen_restante_litros: number | null;
+}
+
+interface BaseOtroBacheDraft {
+  key: number;
+  bache_id: string;
+  cantidad: string;
 }
 
 function formatParamValue(type: StageParameterDef["type"], value: string | number) {
@@ -357,10 +370,6 @@ function InsumosChecklist({
     onChange(drafts.map((draft, i) => (i === index ? { ...draft, ...patch } : draft)));
   }
 
-  const totalKg = drafts
-    .filter((d) => d.checked)
-    .reduce((sum, d) => sum + (Number(d.peso) || 0), 0);
-
   return (
     <div className="flex flex-col gap-3">
       <Label>Insumos (receta del producto)</Label>
@@ -425,11 +434,82 @@ function InsumosChecklist({
           Insumos.
         </p>
       )}
-      {drafts.some((d) => d.checked) && (
-        <p className="text-sm font-semibold">
-          Balance de masa (insumos): {totalKg.toFixed(2)} kg
-        </p>
-      )}
+    </div>
+  );
+}
+
+// Permite sumar al balance de masa de este bache un volumen que en
+// realidad viene de OTRO bache ya existente (ej. sobrante de un tanque que
+// se mezcla acá) -- se descuenta del "volumen_restante_litros" de ese
+// bache de origen al finalizar la etapa, para no contarlo dos veces.
+function BaseOtroBacheEditor({
+  drafts,
+  onChange,
+  opciones,
+}: {
+  drafts: BaseOtroBacheDraft[];
+  onChange: (drafts: BaseOtroBacheDraft[]) => void;
+  opciones: BacheConBaseOption[];
+}) {
+  function updateAt(index: number, patch: Partial<BaseOtroBacheDraft>) {
+    onChange(drafts.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+  }
+  function remove(index: number) {
+    onChange(drafts.filter((_, i) => i !== index));
+  }
+  function add() {
+    onChange([...drafts, { key: Date.now() + drafts.length, bache_id: "", cantidad: "" }]);
+  }
+
+  if (opciones.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>Base de otro bache (si mezclaste sobrante de otro tanque)</Label>
+      {drafts.map((draft, index) => {
+        const opcion = opciones.find((o) => o.id === draft.bache_id);
+        const disponible = opcion?.volumen_restante_litros ?? null;
+        const excede = disponible != null && Number(draft.cantidad) > disponible;
+        return (
+          <div key={draft.key} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <select
+                value={draft.bache_id}
+                onChange={(e) => updateAt(index, { bache_id: e.target.value })}
+                className={`${SELECT_CLASSNAME} flex-1`}
+              >
+                <option value="">Elegí un bache</option>
+                {opciones.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.batch_code} (quedan {o.volumen_restante_litros} kg)
+                  </option>
+                ))}
+              </select>
+              <Input
+                placeholder="Cantidad (kg)"
+                type="number"
+                step="0.01"
+                min="0"
+                value={draft.cantidad}
+                onChange={(e) => updateAt(index, { cantidad: e.target.value })}
+                className="w-32"
+              />
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => remove(index)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            {excede && (
+              <p className="text-xs text-destructive">
+                Supera lo que queda disponible en ese bache ({disponible} kg).
+              </p>
+            )}
+          </div>
+        );
+      })}
+      <Button type="button" variant="outline" size="sm" onClick={add} className="self-start">
+        <Plus className="size-4" />
+        Agregar base de otro bache
+      </Button>
     </div>
   );
 }
@@ -591,6 +671,8 @@ function ConfirmFinishForm({
   values,
   insumos,
   capturesInsumos,
+  baseOtroBache,
+  opciones,
   onSuccess,
 }: {
   recordId: string;
@@ -600,6 +682,8 @@ function ConfirmFinishForm({
   values: Record<string, string>;
   insumos: InsumoDraft[];
   capturesInsumos: boolean;
+  baseOtroBache: BaseOtroBacheDraft[];
+  opciones: BacheConBaseOption[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -637,6 +721,21 @@ function ConfirmFinishForm({
           )}
         />
       )}
+      {capturesInsumos && baseOtroBache.length > 0 && (
+        <input
+          type="hidden"
+          name="base_otro_bache"
+          value={JSON.stringify(
+            baseOtroBache
+              .filter((b) => b.bache_id && Number(b.cantidad) > 0)
+              .map((b) => ({
+                bache_id: b.bache_id,
+                batch_code: opciones.find((o) => o.id === b.bache_id)?.batch_code ?? "—",
+                cantidad: Number(b.cantidad),
+              })),
+          )}
+        />
+      )}
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
@@ -657,12 +756,14 @@ function FinishStageForm({
   record,
   recipeInsumos,
   tanques,
+  otrosBachesConBase,
 }: {
   bacheId: string;
   stage: StageTemplate;
   record: StageRecord;
   recipeInsumos: RecipeInsumo[];
   tanques: Tanque[];
+  otrosBachesConBase: BacheConBaseOption[];
 }) {
   const capturesInsumos = stage.captures_insumos;
   const capturesReadings = stage.captures_readings;
@@ -678,10 +779,22 @@ function FinishStageForm({
       prefilled: r.lote !== undefined,
     })),
   );
+  const [baseOtroBache, setBaseOtroBache] = useState<BaseOtroBacheDraft[]>([]);
   const [notes, setNotes] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const checkedInsumos = insumos.filter((i) => i.checked);
+  const baseOtroBacheValida = baseOtroBache.filter(
+    (b) => b.bache_id && Number(b.cantidad) > 0,
+  );
+  const baseOtroBacheExcede = baseOtroBacheValida.some((b) => {
+    const disponible = otrosBachesConBase.find((o) => o.id === b.bache_id)
+      ?.volumen_restante_litros;
+    return disponible != null && Number(b.cantidad) > disponible;
+  });
+  const totalBalanceMasa =
+    checkedInsumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+    baseOtroBacheValida.reduce((sum, b) => sum + Number(b.cantidad), 0);
   const readings = Array.isArray(record.parameters.lecturas)
     ? record.parameters.lecturas
     : [];
@@ -690,7 +803,7 @@ function FinishStageForm({
       checkedInsumos.every((i) => i.lote.trim() && i.peso.trim() && i.marca.trim())
     : true;
   const readingsOk = capturesReadings ? readings.length > 0 : true;
-  const canSubmit = insumosOk && readingsOk;
+  const canSubmit = insumosOk && readingsOk && !baseOtroBacheExcede;
 
   return (
     <div className="flex flex-col gap-3">
@@ -720,7 +833,19 @@ function FinishStageForm({
       )}
 
       {capturesInsumos && (
-        <InsumosChecklist drafts={insumos} onChange={setInsumos} />
+        <>
+          <InsumosChecklist drafts={insumos} onChange={setInsumos} />
+          <BaseOtroBacheEditor
+            drafts={baseOtroBache}
+            onChange={setBaseOtroBache}
+            opciones={otrosBachesConBase}
+          />
+          {(checkedInsumos.length > 0 || baseOtroBacheValida.length > 0) && (
+            <p className="text-sm font-semibold">
+              Balance de masa: {totalBalanceMasa.toFixed(2)} kg
+            </p>
+          )}
+        </>
       )}
 
       <div className="flex flex-col gap-2">
@@ -775,13 +900,16 @@ function FinishStageForm({
                   {i.nombre}: Lote {i.lote || "—"} · {i.peso || "0"} kg · {i.marca || "—"}
                 </p>
               ))}
-            {capturesInsumos && checkedInsumos.length > 0 && (
+            {capturesInsumos &&
+              baseOtroBacheValida.map((b) => (
+                <p key={b.key}>
+                  Base de {otrosBachesConBase.find((o) => o.id === b.bache_id)?.batch_code ?? "—"}:{" "}
+                  {b.cantidad} kg
+                </p>
+              ))}
+            {capturesInsumos && (checkedInsumos.length > 0 || baseOtroBacheValida.length > 0) && (
               <p className="font-semibold text-foreground">
-                Balance de masa (insumos):{" "}
-                {checkedInsumos
-                  .reduce((sum, i) => sum + (Number(i.peso) || 0), 0)
-                  .toFixed(2)}{" "}
-                kg
+                Balance de masa: {totalBalanceMasa.toFixed(2)} kg
               </p>
             )}
             {notes && <p>Notas: {notes}</p>}
@@ -794,6 +922,8 @@ function FinishStageForm({
             values={values}
             insumos={insumos}
             capturesInsumos={capturesInsumos}
+            baseOtroBache={baseOtroBacheValida}
+            opciones={otrosBachesConBase}
             onSuccess={() => setConfirmOpen(false)}
           />
         </DialogContent>
@@ -941,6 +1071,7 @@ export function StageCard({
   record,
   operarios,
   recipeInsumos,
+  otrosBachesConBase,
   canAct,
   unlocked,
   tanques,
@@ -956,6 +1087,7 @@ export function StageCard({
   record: StageRecord | null;
   operarios: Profile[];
   recipeInsumos: RecipeInsumo[];
+  otrosBachesConBase: BacheConBaseOption[];
   canAct: boolean;
   unlocked: boolean;
   tanques: Tanque[];
@@ -976,6 +1108,10 @@ export function StageCard({
   const insumos =
     record && stage.captures_insumos && Array.isArray(record.parameters.insumos)
       ? record.parameters.insumos
+      : null;
+  const baseOtroBache =
+    record && stage.captures_insumos && Array.isArray(record.parameters.base_otro_bache)
+      ? record.parameters.base_otro_bache
       : null;
   const readings =
     record && stage.captures_readings && Array.isArray(record.parameters.lecturas)
@@ -1038,19 +1174,27 @@ export function StageCard({
                 })}
               </ul>
             )}
-            {insumos && (
+            {(insumos || baseOtroBache) && (
               <>
                 <ul className="list-inside list-disc">
-                  {insumos.map((insumo, idx) => (
+                  {insumos?.map((insumo, idx) => (
                     <li key={idx}>
                       {insumo.nombre}: Lote {insumo.lote} · {insumo.peso} kg ·{" "}
                       {insumo.marca}
                     </li>
                   ))}
+                  {baseOtroBache?.map((b, idx) => (
+                    <li key={`base-${idx}`}>
+                      Base de {b.batch_code}: {b.cantidad} kg
+                    </li>
+                  ))}
                 </ul>
                 <p className="font-semibold text-foreground">
-                  Balance de masa (insumos):{" "}
-                  {insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0).toFixed(2)}{" "}
+                  Balance de masa:{" "}
+                  {(
+                    (insumos ?? []).reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+                    (baseOtroBache ?? []).reduce((sum, b) => sum + (Number(b.cantidad) || 0), 0)
+                  ).toFixed(2)}{" "}
                   kg
                 </p>
               </>
@@ -1083,6 +1227,7 @@ export function StageCard({
                 record={record!}
                 recipeInsumos={recipeInsumos}
                 tanques={tanques}
+                otrosBachesConBase={otrosBachesConBase}
               />
             ) : (
               <p className="text-sm text-muted-foreground">

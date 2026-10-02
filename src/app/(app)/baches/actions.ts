@@ -46,6 +46,21 @@ export async function createBache(
   }
 
   const supabase = await createClient();
+
+  // El cliente ya limpia la orden si se cambia el producto a mano, pero se
+  // valida también acá -- es la única garantía real de que no quede un
+  // bache con una orden de un producto distinto.
+  if (parsed.data.production_order_id) {
+    const { data: order } = await supabase
+      .from("production_orders")
+      .select("product_id")
+      .eq("id", parsed.data.production_order_id)
+      .single();
+    if (order && order.product_id !== parsed.data.product_id) {
+      return { error: "La orden de producción elegida es de otro producto." };
+    }
+  }
+
   const { data, error } = await supabase
     .from("baches")
     .insert({
@@ -336,6 +351,14 @@ const InsumosSchema = z
   )
   .min(1, "Marcá al menos un insumo.");
 
+const BaseOtroBacheSchema = z.array(
+  z.object({
+    bache_id: z.string().uuid(),
+    batch_code: z.string(),
+    cantidad: z.coerce.number().positive(),
+  }),
+);
+
 export async function finishStage(
   _prevState: ActionState,
   formData: FormData,
@@ -395,6 +418,40 @@ export async function finishStage(
     parameters.insumos = insumosParsed.data;
   }
 
+  // "Base de otro bache": suma al balance de masa de este bache un volumen
+  // que en realidad es sobrante de OTRO bache ya existente (ej. se mezcló
+  // la base de un tanque). Se valida contra el volumen_restante_litros real
+  // de cada bache de origen (no lo que haya mandado el cliente) antes de
+  // guardar nada, para no dejar descontar más de lo que de verdad queda.
+  const baseOtroBacheRaw = String(formData.get("base_otro_bache") || "[]");
+  const baseOtroBacheParsed = BaseOtroBacheSchema.safeParse(JSON.parse(baseOtroBacheRaw));
+  if (!baseOtroBacheParsed.success) {
+    return { error: "Base de otro bache inválida." };
+  }
+  const restanteById = new Map<string, number | null>();
+  if (baseOtroBacheParsed.data.length > 0) {
+    if (baseOtroBacheParsed.data.some((b) => b.bache_id === parsed.data.bache_id)) {
+      return { error: "Un bache no puede tomar base de sí mismo." };
+    }
+    const { data: origenes } = await supabase
+      .from("baches")
+      .select("id, volumen_restante_litros")
+      .in(
+        "id",
+        baseOtroBacheParsed.data.map((b) => b.bache_id),
+      );
+    for (const o of origenes ?? []) restanteById.set(o.id, o.volumen_restante_litros);
+    for (const b of baseOtroBacheParsed.data) {
+      const disponible = restanteById.get(b.bache_id);
+      if (disponible == null || b.cantidad > disponible) {
+        return {
+          error: `El bache ${b.batch_code} ya no tiene ${b.cantidad} kg disponibles para tomar.`,
+        };
+      }
+    }
+    parameters.base_otro_bache = baseOtroBacheParsed.data;
+  }
+
   const { error } = await supabase
     .from("bache_stage_records")
     .update({
@@ -407,6 +464,23 @@ export async function finishStage(
 
   if (error) {
     return { error: "No se pudo finalizar la etapa." };
+  }
+
+  // Se descuenta del bache de origen lo que se tomó (contra el valor ya
+  // verificado arriba), para que no quede contado dos veces -- una vez en
+  // su propio balance y otra en el de este bache -- y para que el
+  // envasado deje de ofrecerlo si ya se agotó. Nunca bloquea: la etapa ya
+  // quedó guardada igual si esto falla.
+  if (parameters.base_otro_bache) {
+    await Promise.all(
+      parameters.base_otro_bache.map((b) => {
+        const disponible = restanteById.get(b.bache_id) ?? 0;
+        return supabase
+          .from("baches")
+          .update({ volumen_restante_litros: disponible - b.cantidad })
+          .eq("id", b.bache_id);
+      }),
+    );
   }
 
   // Bache y etapa recién cerrada: hacen falta para dos cosas -- el consumo
