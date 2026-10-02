@@ -154,6 +154,18 @@ export default async function EnvasadoPage() {
         .filter(Boolean)
         .join(" — "),
     }));
+  // Candidatos para "agregar base de otro bache" al iniciar un envasado:
+  // cualquier bache con algo de volumen todavía sin envasar (se filtra por
+  // producto y se excluye el propio bache ya en el diálogo).
+  const bachesConBaseOptions = (baches ?? [])
+    .filter((bache) => bache.status !== "cancelado" && (bache.volumen_restante_litros ?? 0) > 0)
+    .map((bache) => ({
+      id: bache.id,
+      productId: bache.product_id,
+      batchCode: bache.batch_code,
+      volumenRestante: bache.volumen_restante_litros,
+    }));
+
   const bacheLabels = new Map(
     (baches ?? []).map((bache) => [
       bache.id,
@@ -340,7 +352,12 @@ export default async function EnvasadoPage() {
     const insumos = Array.isArray(record.parameters?.insumos)
       ? record.parameters.insumos
       : [];
-    const kg = insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0);
+    const baseOtroBache = Array.isArray(record.parameters?.base_otro_bache)
+      ? record.parameters.base_otro_bache
+      : [];
+    const kg =
+      insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+      baseOtroBache.reduce((sum, b) => sum + (Number(b.cantidad) || 0), 0);
     const current = massBalanceByBache.get(record.bache_id);
     if (!current || order > current.order) {
       massBalanceByBache.set(record.bache_id, { order, kg });
@@ -378,6 +395,7 @@ export default async function EnvasadoPage() {
             envasadoOrders={envasadoOrderOptions}
             envasadoInsumos={envasadoInsumos ?? []}
             recipeByReferencia={recipeByReferencia}
+            bachesConBase={bachesConBaseOptions}
           />
         )}
       </div>

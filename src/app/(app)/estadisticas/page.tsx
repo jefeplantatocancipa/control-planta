@@ -336,7 +336,12 @@ export default async function EstadisticasPage() {
       const insumosArr = record.parameters?.insumos;
       if (!Array.isArray(insumosArr)) continue;
       if (best && stage.sequence_order <= best.order) continue;
-      const kgTotal = insumosArr.reduce((s, i) => s + (Number(i.peso) || 0), 0);
+      const baseOtroBacheArr = record.parameters?.base_otro_bache;
+      const kgTotal =
+        insumosArr.reduce((s, i) => s + (Number(i.peso) || 0), 0) +
+        (Array.isArray(baseOtroBacheArr)
+          ? baseOtroBacheArr.reduce((s, b) => s + (Number(b.cantidad) || 0), 0)
+          : 0);
       best = {
         order: stage.sequence_order,
         kg: kgTotal,

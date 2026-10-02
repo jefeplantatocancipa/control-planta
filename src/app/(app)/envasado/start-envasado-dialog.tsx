@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,19 @@ interface EnvasadoOrderOption {
   presentacion: string;
   referenciaId: string;
   productId: string | null;
+}
+
+interface BacheConBaseOption {
+  id: string;
+  productId: string;
+  batchCode: string;
+  volumenRestante: number | null;
+}
+
+interface BaseOtroBacheDraft {
+  key: number;
+  bacheId: string;
+  cantidad: string;
 }
 
 interface InsumoUsoDraft {
@@ -114,6 +128,82 @@ function InsumosUsoChecklist({
   );
 }
 
+// Para cuando se mezcla el sobrante de OTRO bache (ej. de un tanque) al
+// momento de envasar: suma al balance de masa del bache que se está
+// envasando y se descuenta de "volumen_restante_litros" del bache de
+// origen, para no contarlo dos veces.
+function BaseOtroBacheEditor({
+  drafts,
+  onChange,
+  opciones,
+}: {
+  drafts: BaseOtroBacheDraft[];
+  onChange: (drafts: BaseOtroBacheDraft[]) => void;
+  opciones: BacheConBaseOption[];
+}) {
+  function updateAt(index: number, patch: Partial<BaseOtroBacheDraft>) {
+    onChange(drafts.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+  }
+  function remove(index: number) {
+    onChange(drafts.filter((_, i) => i !== index));
+  }
+  function add() {
+    onChange([...drafts, { key: Date.now() + drafts.length, bacheId: "", cantidad: "" }]);
+  }
+
+  if (opciones.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>Base de otro bache (si mezclaste sobrante de otro tanque)</Label>
+      {drafts.map((draft, index) => {
+        const opcion = opciones.find((o) => o.id === draft.bacheId);
+        const disponible = opcion?.volumenRestante ?? null;
+        const excede = disponible != null && Number(draft.cantidad) > disponible;
+        return (
+          <div key={draft.key} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <select
+                value={draft.bacheId}
+                onChange={(e) => updateAt(index, { bacheId: e.target.value })}
+                className="h-8 flex-1 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+              >
+                <option value="">Elegí un bache</option>
+                {opciones.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.batchCode} (quedan {o.volumenRestante} L)
+                  </option>
+                ))}
+              </select>
+              <Input
+                placeholder="Cantidad (kg)"
+                type="number"
+                step="0.01"
+                min="0"
+                value={draft.cantidad}
+                onChange={(e) => updateAt(index, { cantidad: e.target.value })}
+                className="w-32"
+              />
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => remove(index)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            {excede && (
+              <p className="text-xs text-destructive">
+                Supera lo que queda disponible en ese bache ({disponible} L).
+              </p>
+            )}
+          </div>
+        );
+      })}
+      <Button type="button" variant="outline" size="sm" onClick={add} className="self-start">
+        <Plus className="size-4" />
+        Agregar base de otro bache
+      </Button>
+    </div>
+  );
+}
+
 function buildInsumoDrafts(list: EnvasadoInsumo[]): InsumoUsoDraft[] {
   return list.map((i) => ({
     envasado_insumo_id: i.id,
@@ -130,12 +220,14 @@ function StartEnvasadoForm({
   envasadoOrders,
   envasadoInsumos,
   recipeByReferencia,
+  bachesConBase,
   onSuccess,
 }: {
   baches: BacheOption[];
   envasadoOrders: EnvasadoOrderOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
+  bachesConBase: BacheConBaseOption[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -151,6 +243,7 @@ function StartEnvasadoForm({
   );
   const [insumosFiltrados, setInsumosFiltrados] = useState(false);
   const [insumosObservacion, setInsumosObservacion] = useState("");
+  const [baseOtroBache, setBaseOtroBache] = useState<BaseOtroBacheDraft[]>([]);
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -211,6 +304,17 @@ function StartEnvasadoForm({
   const visibleOrders = bacheActivo
     ? envasadoOrders.filter((o) => !o.productId || o.productId === bacheActivo.productId)
     : envasadoOrders;
+
+  // Candidatos para "base de otro bache": mismo producto que el bache que
+  // se está envasando, sin contar el propio bache.
+  const bachesConBaseVisibles = bacheActivo
+    ? bachesConBase.filter((b) => b.productId === bacheActivo.productId && b.id !== bacheActivo.id)
+    : [];
+  const baseOtroBacheValida = baseOtroBache.filter((b) => b.bacheId && Number(b.cantidad) > 0);
+  const baseOtroBacheExcede = baseOtroBacheValida.some((b) => {
+    const disponible = bachesConBase.find((o) => o.id === b.bacheId)?.volumenRestante;
+    return disponible != null && Number(b.cantidad) > disponible;
+  });
 
   const checkedInsumos = insumos.filter((i) => i.checked);
 
@@ -278,6 +382,14 @@ function StartEnvasadoForm({
         )}
       </div>
 
+      {bacheActivo && (
+        <BaseOtroBacheEditor
+          drafts={baseOtroBache}
+          onChange={setBaseOtroBache}
+          opciones={bachesConBaseVisibles}
+        />
+      )}
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="presentacion">Presentación</Label>
         <Input
@@ -315,6 +427,19 @@ function StartEnvasadoForm({
           })),
         )}
       />
+      {baseOtroBacheValida.length > 0 && (
+        <input
+          type="hidden"
+          name="base_otro_bache"
+          value={JSON.stringify(
+            baseOtroBacheValida.map((b) => ({
+              bache_id: b.bacheId,
+              batch_code: bachesConBase.find((o) => o.id === b.bacheId)?.batchCode ?? "—",
+              cantidad: Number(b.cantidad),
+            })),
+          )}
+        />
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="insumos_observacion">Observación del supervisor</Label>
@@ -339,7 +464,10 @@ function StartEnvasadoForm({
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending || checkedInsumos.length === 0}>
+        <Button
+          type="submit"
+          disabled={pending || checkedInsumos.length === 0 || baseOtroBacheExcede}
+        >
           {pending ? "Iniciando..." : "Iniciar envasado"}
         </Button>
       </DialogFooter>
@@ -352,11 +480,13 @@ export function StartEnvasadoDialog({
   envasadoOrders,
   envasadoInsumos,
   recipeByReferencia,
+  bachesConBase,
 }: {
   baches: BacheOption[];
   envasadoOrders: EnvasadoOrderOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
+  bachesConBase: BacheConBaseOption[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -372,6 +502,7 @@ export function StartEnvasadoDialog({
           envasadoOrders={envasadoOrders}
           envasadoInsumos={envasadoInsumos}
           recipeByReferencia={recipeByReferencia}
+          bachesConBase={bachesConBase}
           onSuccess={() => setOpen(false)}
         />
       </DialogContent>

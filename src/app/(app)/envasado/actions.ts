@@ -63,6 +63,14 @@ const InsumosUsoArraySchema = z
   .array(InsumoUsoSchema)
   .min(1, "Marcá al menos un insumo de envasado.");
 
+const BaseOtroBacheSchema = z.array(
+  z.object({
+    bache_id: z.string().uuid(),
+    batch_code: z.string(),
+    cantidad: z.coerce.number().positive(),
+  }),
+);
+
 export async function startEnvasado(
   _prevState: ActionState,
   formData: FormData,
@@ -118,6 +126,87 @@ export async function startEnvasado(
     }
   }
 
+  // "Base de otro bache": se mezcla sobrante de OTRO bache ya existente al
+  // momento de envasar (el caso más común, según cómo se usa en planta).
+  // Se valida acá -- contra el volumen_restante_litros real de cada bache
+  // de origen, y que el bache que se está envasando tenga una etapa de
+  // insumos ya cerrada donde sumarlo -- ANTES de crear nada.
+  const baseOtroBacheRaw = String(formData.get("base_otro_bache") || "[]");
+  const baseOtroBacheParsed = BaseOtroBacheSchema.safeParse(JSON.parse(baseOtroBacheRaw));
+  if (!baseOtroBacheParsed.success) {
+    return { error: "Base de otro bache inválida." };
+  }
+  let targetStageRecordId: string | null = null;
+  const restanteById = new Map<string, number | null>();
+  if (baseOtroBacheParsed.data.length > 0) {
+    if (baseOtroBacheParsed.data.some((b) => b.bache_id === parsed.data.bache_id)) {
+      return { error: "Un bache no puede tomar base de sí mismo." };
+    }
+    const { data: origenes } = await supabase
+      .from("baches")
+      .select("id, volumen_restante_litros")
+      .in(
+        "id",
+        baseOtroBacheParsed.data.map((b) => b.bache_id),
+      );
+    for (const o of origenes ?? []) restanteById.set(o.id, o.volumen_restante_litros);
+    for (const b of baseOtroBacheParsed.data) {
+      const disponible = restanteById.get(b.bache_id);
+      if (disponible == null || b.cantidad > disponible) {
+        return {
+          error: `El bache ${b.batch_code} ya no tiene ${b.cantidad} kg disponibles para tomar.`,
+        };
+      }
+    }
+
+    // Misma lógica que "balance de masa" en /envasado y /baches: la última
+    // etapa con checklist de insumos que ya cerró, de la secuencia propia
+    // del producto (o la compartida si no tiene propia).
+    const { data: bacheProducto } = await supabase
+      .from("baches")
+      .select("product_id")
+      .eq("id", parsed.data.bache_id)
+      .single();
+    if (!bacheProducto) {
+      return { error: "No se encontró el bache." };
+    }
+    const { data: ownStages } = await supabase
+      .from("process_stage_templates")
+      .select("id, sequence_order, captures_insumos")
+      .eq("product_id", bacheProducto.product_id)
+      .eq("active", true);
+    let pool = ownStages ?? [];
+    if (pool.length === 0) {
+      const { data: defaultStages } = await supabase
+        .from("process_stage_templates")
+        .select("id, sequence_order, captures_insumos")
+        .is("product_id", null)
+        .eq("active", true);
+      pool = defaultStages ?? [];
+    }
+    const insumosStageIds = new Set(pool.filter((s) => s.captures_insumos).map((s) => s.id));
+    const { data: stageRecords } = await supabase
+      .from("bache_stage_records")
+      .select("id, stage_template_id, ended_at")
+      .eq("bache_id", parsed.data.bache_id)
+      .not("ended_at", "is", null);
+    const sequenceById = new Map(pool.map((s) => [s.id, s.sequence_order]));
+    let bestOrder = -1;
+    for (const r of stageRecords ?? []) {
+      if (!insumosStageIds.has(r.stage_template_id)) continue;
+      const order = sequenceById.get(r.stage_template_id) ?? -1;
+      if (order > bestOrder) {
+        bestOrder = order;
+        targetStageRecordId = r.id;
+      }
+    }
+    if (!targetStageRecordId) {
+      return {
+        error: "Este bache no tiene una etapa de insumos cerrada para sumarle esta base.",
+      };
+    }
+  }
+
   // "operario_id" ya no se pide al iniciar: los operarios que realmente
   // empacan se asignan por turno (envasado_cortes), y un envasado puede
   // tener varios turnos con operarios distintos. Este campo solo queda
@@ -141,6 +230,40 @@ export async function startEnvasado(
 
   if (error || !created) {
     return { error: "No se pudo iniciar el envasado." };
+  }
+
+  // Se aplica después de crear el envasado (ya validado arriba): suma la
+  // base al balance de masa de la etapa de insumos del bache y la
+  // descuenta del bache de origen, para no contarla dos veces. Nunca
+  // bloquea: el envasado ya quedó iniciado igual si esto falla.
+  if (baseOtroBacheParsed.data.length > 0 && targetStageRecordId) {
+    const { data: existingRecord } = await supabase
+      .from("bache_stage_records")
+      .select("parameters")
+      .eq("id", targetStageRecordId)
+      .single();
+    const previa = Array.isArray(existingRecord?.parameters.base_otro_bache)
+      ? existingRecord.parameters.base_otro_bache
+      : [];
+    await supabase
+      .from("bache_stage_records")
+      .update({
+        parameters: {
+          ...(existingRecord?.parameters ?? {}),
+          base_otro_bache: [...previa, ...baseOtroBacheParsed.data],
+        },
+      })
+      .eq("id", targetStageRecordId);
+
+    await Promise.all(
+      baseOtroBacheParsed.data.map((b) => {
+        const disponible = restanteById.get(b.bache_id) ?? 0;
+        return supabase
+          .from("baches")
+          .update({ volumen_restante_litros: disponible - b.cantidad })
+          .eq("id", b.bache_id);
+      }),
+    );
   }
 
   const { error: insumosError } = await supabase.from("envasado_insumos_uso").insert(

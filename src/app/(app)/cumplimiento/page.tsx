@@ -95,7 +95,12 @@ export default async function CumplimientoPage() {
       const insumos = record.parameters?.insumos;
       if (!Array.isArray(insumos)) continue;
       if (best && stage.sequence_order <= best.order) continue;
-      const kg = insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0);
+      const baseOtroBache = record.parameters?.base_otro_bache;
+      const kg =
+        insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+        (Array.isArray(baseOtroBache)
+          ? baseOtroBache.reduce((sum, b) => sum + (Number(b.cantidad) || 0), 0)
+          : 0);
       best = { order: stage.sequence_order, kg, date: record.ended_at.slice(0, 10) };
     }
     if (best) {

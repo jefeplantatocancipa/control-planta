@@ -244,10 +244,12 @@ export default async function BacheReportPage({
     if (!Array.isArray(record.parameters.insumos)) continue;
     if (stage.sequence_order <= totalInsumosOrder) continue;
     totalInsumosOrder = stage.sequence_order;
-    totalInsumosKg = record.parameters.insumos.reduce(
-      (sum, i) => sum + (Number(i.peso) || 0),
-      0,
-    );
+    const baseOtroBache = Array.isArray(record.parameters.base_otro_bache)
+      ? record.parameters.base_otro_bache
+      : [];
+    totalInsumosKg =
+      record.parameters.insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+      baseOtroBache.reduce((sum, b) => sum + (Number(b.cantidad) || 0), 0);
   }
 
   // Productos que no se envasan (ej. cremado, ver Administración →
@@ -443,6 +445,10 @@ export default async function BacheReportPage({
             record && Array.isArray(record.parameters.insumos)
               ? record.parameters.insumos
               : null;
+          const baseOtroBache =
+            record && Array.isArray(record.parameters.base_otro_bache)
+              ? record.parameters.base_otro_bache
+              : null;
           const lecturas =
             record && Array.isArray(record.parameters.lecturas)
               ? record.parameters.lecturas
@@ -507,7 +513,7 @@ export default async function BacheReportPage({
                 </table>
               )}
 
-              {insumos && insumos.length > 0 && (
+              {((insumos && insumos.length > 0) || (baseOtroBache && baseOtroBache.length > 0)) && (
                 <table className="mt-1 w-full border-collapse">
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
@@ -518,7 +524,7 @@ export default async function BacheReportPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {insumos.map((insumo, idx) => (
+                    {insumos?.map((insumo, idx) => (
                       <tr key={idx} className="border-b border-dashed">
                         <td className="py-0.5 pr-2 font-medium">{insumo.nombre}</td>
                         <td className="py-0.5 pr-2">{insumo.lote}</td>
@@ -526,12 +532,25 @@ export default async function BacheReportPage({
                         <td className="py-0.5">{insumo.peso}</td>
                       </tr>
                     ))}
+                    {baseOtroBache?.map((b, idx) => (
+                      <tr key={`base-${idx}`} className="border-b border-dashed">
+                        <td className="py-0.5 pr-2 font-medium">Base de {b.batch_code}</td>
+                        <td className="py-0.5 pr-2">—</td>
+                        <td className="py-0.5 pr-2">—</td>
+                        <td className="py-0.5">{b.cantidad}</td>
+                      </tr>
+                    ))}
                     <tr>
                       <td colSpan={3} className="py-0.5 pr-2 text-right font-semibold">
-                        Balance de masa (insumos)
+                        Balance de masa
                       </td>
                       <td className="py-0.5 font-semibold">
-                        {insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0)} kg
+                        {(insumos ?? []).reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+                          (baseOtroBache ?? []).reduce(
+                            (sum, b) => sum + (Number(b.cantidad) || 0),
+                            0,
+                          )}{" "}
+                        kg
                       </td>
                     </tr>
                   </tbody>
