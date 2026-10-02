@@ -15,6 +15,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
 import { EnvasadoCard, type CorteDisplay, type ParadaDisplay } from "./envasado-card";
 import { DeleteButton } from "@/components/delete-button";
+import { ReabrirEnvasadoButton } from "./reabrir-envasado-button";
 import { deleteEnvasado } from "./actions";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -481,13 +482,16 @@ export default async function EnvasadoPage() {
                   {envasado.ended_at && formatDateTime(envasado.ended_at)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link
-                    href={`/envasado/${envasado.id}/imprimir`}
-                    className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-                    title="Imprimir informe"
-                  >
-                    <Printer className="size-4" />
-                  </Link>
+                  <div className="flex items-center justify-end gap-1">
+                    <Link
+                      href={`/envasado/${envasado.id}/imprimir`}
+                      className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                      title="Imprimir informe"
+                    >
+                      <Printer className="size-4" />
+                    </Link>
+                    {canExecute && <ReabrirEnvasadoButton id={envasado.id} />}
+                  </div>
                 </TableCell>
                 {canDelete && (
                   <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">

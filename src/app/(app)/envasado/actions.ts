@@ -353,6 +353,61 @@ export async function finalizarEnvasado(
   return { success: true };
 }
 
+const ReabrirEnvasadoSchema = z.object({ id: z.string().uuid() });
+
+// Deshace un "Finalizar envasado" hecho por error: vuelve a dejarlo en
+// curso (sin tocar started_at, para no perder cuándo arrancó de verdad) y
+// borra los movimientos de inventario que había generado el cierre, para
+// que al volver a finalizarlo no se descuente el consumo de empaque dos
+// veces. cantidad_unidades/mermas se resetean porque finalizarEnvasado las
+// vuelve a calcular enteras (no por diferencia) a partir de las estibas.
+export async function reabrirEnvasado(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = ReabrirEnvasadoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: envasado } = await supabase
+    .from("envasados")
+    .select("ended_at")
+    .eq("id", parsed.data.id)
+    .single();
+  if (!envasado) {
+    return { error: "No se encontró el envasado." };
+  }
+  if (!envasado.ended_at) {
+    return { error: "Este envasado ya está en curso." };
+  }
+
+  const { error: movError } = await supabase
+    .from("inventario_movimientos")
+    .delete()
+    .eq("origen_tipo", "envasado")
+    .eq("origen_id", parsed.data.id);
+  if (movError) {
+    return { error: "No se pudo reabrir: falló al deshacer el consumo de inventario." };
+  }
+
+  const { error } = await supabase
+    .from("envasados")
+    .update({ ended_at: null, cantidad_unidades: 0, cantidad_mermas: 0 })
+    .eq("id", parsed.data.id);
+  if (error) {
+    return { error: "No se pudo reabrir el envasado." };
+  }
+
+  revalidatePath("/envasado");
+  revalidatePath("/inventario");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Turno: inicio y fin (como iniciar/finalizar una etapa). Mientras está
 // activo (sin ended_at) se le van agregando lecturas de calidad y ciclos
