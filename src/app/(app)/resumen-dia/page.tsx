@@ -97,9 +97,17 @@ export default async function ResumenDiaPage({
     supabase.from("envasado_referencias").select("id, sku, name"),
     supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
     supabase.from("profiles").select("id, full_name"),
-    // Actividad REAL del día (no depende de que la orden esté programada
-    // justo para esta fecha): así se ve también lo que se envasó "suelto".
-    supabase.from("envasado_cortes").select("*").eq("fecha", fecha),
+    // Actividad REAL del día, por hora de inicio en Bogotá (NO por la
+    // columna "fecha" de envasado_cortes: su default es current_date del
+    // servidor, que corre en UTC -- un corte del Turno C que arranca
+    // pasadas las 7pm Bogotá ya cae en el día siguiente en UTC, y quedaba
+    // mal fechado). Así, un corte que arranca a las 11pm de "fecha" queda
+    // en "fecha" aunque termine ya entrada la madrugada del día siguiente.
+    supabase
+      .from("envasado_cortes")
+      .select("*")
+      .gte("started_at", `${fecha}T05:00:00.000Z`)
+      .lt("started_at", `${addDaysISO(fecha, 1)}T05:00:00.000Z`),
   ]);
 
   const productionOrderIds = (productionOrders ?? []).map((o) => o.id);
