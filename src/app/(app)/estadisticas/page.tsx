@@ -604,19 +604,19 @@ export default async function EstadisticasPage({
       (unidadesPorCorte.get(es.corte_id) ?? 0) + (es.unidades_por_estiba ?? 0),
     );
   }
-  // Para saber de qué producto es cada turno: corte -> envasado -> bache -> producto.
-  const productIdByBacheId = new Map((todosBaches ?? []).map((b) => [b.id, b.product_id]));
-  const productIdByEnvasadoId = new Map(
-    (envasados ?? []).map((e) => [e.id, productIdByBacheId.get(e.bache_id) ?? null]),
-  );
+  // Para saber de qué REFERENCIA de envasado (presentación, ej. 450g vs
+  // 1000g) es cada turno: corte -> envasado -> referencia (misma
+  // resolución que el resto de la página: por referencia_id, si no por el
+  // texto de la presentación, y si no por el nombre de la referencia).
+  const referenciaByEnvasadoId = new Map((envasados ?? []).map((e) => [e.id, referenciaDe(e)]));
 
   const rendimientoPorOperario = new Map<
     string,
     { horas: number; unidades: number; eventos: number }
   >();
-  const rendimientoPorProducto = new Map<
+  const rendimientoPorReferencia = new Map<
     string,
-    { horas: number; unidades: number; eventos: number }
+    { nombre: string; horas: number; unidades: number; eventos: number }
   >();
   for (const c of envasadoCortes ?? []) {
     if (!c.ended_at) continue;
@@ -631,13 +631,18 @@ export default async function EstadisticasPage({
       entry.eventos += 1;
       rendimientoPorOperario.set(opId, entry);
     }
-    const productId = productIdByEnvasadoId.get(c.envasado_id);
-    if (productId) {
-      const entry = rendimientoPorProducto.get(productId) ?? { horas: 0, unidades: 0, eventos: 0 };
+    const referencia = referenciaByEnvasadoId.get(c.envasado_id);
+    if (referencia) {
+      const entry = rendimientoPorReferencia.get(referencia.id) ?? {
+        nombre: referencia.name,
+        horas: 0,
+        unidades: 0,
+        eventos: 0,
+      };
       entry.horas += horas;
       entry.unidades += unidades;
       entry.eventos += 1;
-      rendimientoPorProducto.set(productId, entry);
+      rendimientoPorReferencia.set(referencia.id, entry);
     }
   }
   const rendimientoTurnos = Array.from(rendimientoPorOperario.entries())
@@ -650,12 +655,13 @@ export default async function EstadisticasPage({
     }))
     .sort((a, b) => b.unidadesPorHora - a.unidadesPorHora);
 
-  // Mismo cálculo que arriba, pero por producto en vez de por operario --
-  // para comparar qué producto se envasa más rápido.
-  const rendimientoPorProductoArr = Array.from(rendimientoPorProducto.entries())
-    .map(([productId, e]) => ({
-      productId,
-      nombre: productNameById.get(productId) ?? "Producto eliminado",
+  // Mismo cálculo que arriba, pero por referencia de envasado (presentación,
+  // ej. 450g vs 1000g) en vez de por operario -- para comparar cuál rinde
+  // más rápido.
+  const rendimientoPorReferenciaArr = Array.from(rendimientoPorReferencia.entries())
+    .map(([referenciaId, e]) => ({
+      referenciaId,
+      nombre: e.nombre,
       eventos: e.eventos,
       horas: e.horas,
       unidades: e.unidades,
@@ -1019,11 +1025,11 @@ export default async function EstadisticasPage({
             </TableBody>
           </Table>
 
-          <p className="text-sm font-medium">Por producto</p>
+          <p className="text-sm font-medium">Por referencia de envasado</p>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Producto</TableHead>
+                <TableHead>Referencia</TableHead>
                 <TableHead className="text-right">Turnos</TableHead>
                 <TableHead className="text-right">Horas activas</TableHead>
                 <TableHead className="text-right">Unidades</TableHead>
@@ -1031,8 +1037,8 @@ export default async function EstadisticasPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rendimientoPorProductoArr.map((r) => (
-                <TableRow key={r.productId}>
+              {rendimientoPorReferenciaArr.map((r) => (
+                <TableRow key={r.referenciaId}>
                   <TableCell className="font-medium">{r.nombre}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.eventos}</TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -1046,7 +1052,7 @@ export default async function EstadisticasPage({
                   </TableCell>
                 </TableRow>
               ))}
-              {rendimientoPorProductoArr.length === 0 && (
+              {rendimientoPorReferenciaArr.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
                     Sin turnos de envasado cerrados todavía.
@@ -1058,7 +1064,7 @@ export default async function EstadisticasPage({
           <p className="text-xs text-muted-foreground">
             Las unidades/hora se calculan por turno (no por el envasado completo, que puede tener
             huecos entre turnos); por operario se acreditan a los dos que lo trabajaron, y por
-            producto, al producto del bache que se estaba envasando en ese turno.
+            referencia, a la presentación que se estaba envasando en ese turno.
           </p>
         </CardContent>
       </Card>
