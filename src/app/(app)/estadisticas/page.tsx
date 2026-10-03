@@ -606,26 +606,19 @@ export default async function EstadisticasPage({
   }
   const rendimientoPorOperario = new Map<
     string,
-    { horas: number; unidades: number; eventos: number; mermas: number }
+    { horas: number; unidades: number; eventos: number }
   >();
   for (const c of envasadoCortes ?? []) {
     if (!c.ended_at) continue;
     const horas = (new Date(c.ended_at).getTime() - new Date(c.started_at).getTime()) / 3_600_000;
     if (horas <= 0) continue;
     const unidades = unidadesPorCorte.get(c.id) ?? 0;
-    const mermas = c.desperdicio ?? 0;
     for (const opId of [c.operario_id, c.operario_2_id]) {
       if (!opId) continue;
-      const entry = rendimientoPorOperario.get(opId) ?? {
-        horas: 0,
-        unidades: 0,
-        eventos: 0,
-        mermas: 0,
-      };
+      const entry = rendimientoPorOperario.get(opId) ?? { horas: 0, unidades: 0, eventos: 0 };
       entry.horas += horas;
       entry.unidades += unidades;
       entry.eventos += 1;
-      entry.mermas += mermas;
       rendimientoPorOperario.set(opId, entry);
     }
   }
@@ -641,19 +634,14 @@ export default async function EstadisticasPage({
 
   // Envasado por operario: mismo origen que "unidades/hora por turno"
   // (envasado_cortes + envasado_estibas), no el envasado completo -- cada
-  // turno acredita sus unidades y su desperdicio a los dos operarios que lo
-  // trabajaron, en vez de cargarle todo el envasado a quien lo inició.
+  // turno acredita sus unidades a los dos operarios que lo trabajaron, en
+  // vez de cargarle todo el envasado a quien lo inició.
   const envasadoPorOperario = Array.from(rendimientoPorOperario.entries())
     .map(([operarioId, e]) => ({
       operarioId,
       nombre: operarioNames.get(operarioId) ?? "—",
       eventos: e.eventos,
       unidades: e.unidades,
-      mermas: e.mermas,
-      tasaMermaPct:
-        e.unidades + e.mermas > 0
-          ? Math.round((e.mermas / (e.unidades + e.mermas)) * 10000) / 100
-          : 0,
     }))
     .sort((a, b) => b.unidades - a.unidades);
 
@@ -1020,8 +1008,6 @@ export default async function EstadisticasPage({
                   <TableHead>Operario</TableHead>
                   <TableHead>Turnos</TableHead>
                   <TableHead>Unidades</TableHead>
-                  <TableHead>Mermas</TableHead>
-                  <TableHead>Tasa</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1030,17 +1016,11 @@ export default async function EstadisticasPage({
                     <TableCell className="font-medium">{row.nombre}</TableCell>
                     <TableCell>{row.eventos}</TableCell>
                     <TableCell>{row.unidades}</TableCell>
-                    <TableCell>{row.mermas}</TableCell>
-                    <TableCell>
-                      <Badge variant={row.tasaMermaPct > 5 ? "destructive" : "outline"}>
-                        {row.tasaMermaPct}%
-                      </Badge>
-                    </TableCell>
                   </TableRow>
                 ))}
                 {envasadoPorOperario.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
                       Sin turnos de envasado cerrados todavía.
                     </TableCell>
                   </TableRow>
@@ -1049,7 +1029,7 @@ export default async function EstadisticasPage({
             </Table>
             <p className="text-xs text-muted-foreground">
               Se cuenta por turno (envasado_cortes), no por el envasado completo: cada turno
-              acredita sus unidades y su desperdicio a los dos operarios que lo trabajaron.
+              acredita sus unidades a los dos operarios que lo trabajaron.
             </p>
           </CardContent>
         </Card>

@@ -555,17 +555,6 @@ function FinalizarTurnoForm({
         </p>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="desperdicio">Desperdicio</Label>
-        <Input
-          id="desperdicio"
-          name="desperdicio"
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="Opcional"
-        />
-      </div>
-      <div className="flex flex-col gap-2">
         <Label htmlFor="observaciones">Observaciones</Label>
         <Input id="observaciones" name="observaciones" placeholder="Opcional" />
       </div>
