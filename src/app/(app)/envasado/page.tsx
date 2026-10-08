@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import Link from "next/link";
 import { Printer } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
@@ -294,29 +293,11 @@ export default async function EnvasadoPage() {
     // ejemplo), no debe seguir ofreciéndose para elegir.
     .filter((order) => order.pendientes > 0);
 
-  const envasadoOrderOptions = ordenesConPendiente.map((order) => {
-    const referencia = referenciasById.get(order.referencia_id);
-    const fecha = format(new Date(`${order.scheduled_date}T00:00:00`), "dd/MM/yyyy");
-    const presentacion = referencia ? `${referencia.sku} — ${referencia.name}` : "—";
-    // El producto (nombre) es el dato principal de la tarjeta; línea,
-    // fecha, unidades pendientes (no las planeadas, para saber de un
-    // vistazo cuánto falta) y sku van como detalle debajo.
-    return {
-      id: order.id,
-      title: referencia?.name ?? "—",
-      meta: [
-        order.linea,
-        fecha,
-        order.producidas > 0
-          ? `${order.pendientes} und. pendientes (de ${order.planned_quantity})`
-          : `${order.planned_quantity} und.`,
-        referencia?.sku,
-      ],
-      presentacion,
-      referenciaId: order.referencia_id,
-      productId: referencia?.product_id ?? null,
-    };
-  });
+  // Ya no se elige una orden a mano en "Iniciar envasado": se elige la
+  // referencia y el servidor busca sola la orden pendiente que corresponda.
+  const envasadoReferenciaOptions = (envasadoReferencias ?? [])
+    .filter((r) => r.active)
+    .map((r) => ({ id: r.id, productId: r.product_id, sku: r.sku, name: r.name }));
 
   // Receta de material de empaque por referencia: filtra el checklist de
   // "Iniciar envasado" a solo los insumos que corresponden, en vez de
@@ -382,7 +363,7 @@ export default async function EnvasadoPage() {
         {canExecute && (
           <StartEnvasadoDialog
             baches={bacheOptions}
-            envasadoOrders={envasadoOrderOptions}
+            referencias={envasadoReferenciaOptions}
             envasadoInsumos={envasadoInsumos ?? []}
             recipeByReferencia={recipeByReferencia}
             bachesConBase={bachesConBaseOptions}

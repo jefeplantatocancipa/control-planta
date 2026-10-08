@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { OptionPicker } from "@/components/option-picker";
 import { startEnvasado, type ActionState } from "./actions";
-import { NO_ORDER_VALUE } from "./constants";
 import type { Database } from "@/lib/supabase/types";
 
 type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
@@ -28,13 +27,11 @@ interface BacheOption {
   meta: string[];
 }
 
-interface EnvasadoOrderOption {
+interface EnvasadoReferenciaOption {
   id: string;
-  title: string;
-  meta: (string | null | undefined)[];
-  presentacion: string;
-  referenciaId: string;
-  productId: string | null;
+  productId: string;
+  sku: string;
+  name: string;
 }
 
 interface BacheConBaseOption {
@@ -217,14 +214,14 @@ function buildInsumoDrafts(list: EnvasadoInsumo[]): InsumoUsoDraft[] {
 
 function StartEnvasadoForm({
   baches,
-  envasadoOrders,
+  referencias,
   envasadoInsumos,
   recipeByReferencia,
   bachesConBase,
   onSuccess,
 }: {
   baches: BacheOption[];
-  envasadoOrders: EnvasadoOrderOption[];
+  referencias: EnvasadoReferenciaOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
   bachesConBase: BacheConBaseOption[];
@@ -234,9 +231,8 @@ function StartEnvasadoForm({
     startEnvasado,
     {},
   );
-  const [orderId, setOrderId] = useState(NO_ORDER_VALUE);
   const [bacheId, setBacheId] = useState("");
-  const [referenciaId, setReferenciaId] = useState(NO_ORDER_VALUE);
+  const [referenciaId, setReferenciaId] = useState("");
   const [presentacion, setPresentacion] = useState("");
   const [insumos, setInsumos] = useState<InsumoUsoDraft[]>(
     buildInsumoDrafts(envasadoInsumos),
@@ -261,20 +257,20 @@ function StartEnvasadoForm({
     }
   }
 
-  function selectOrder(value: string) {
-    setOrderId(value);
-    const order = envasadoOrders.find((o) => o.id === value);
-    if (!order) return;
-    setPresentacion(order.presentacion);
-    setReferenciaId(order.referenciaId);
-    aplicarInsumosDeReferencia(order.referenciaId);
-
-    // Si el bache ya elegido es de otro producto, se deselecciona: evita
-    // armar una combinación cruzada orden/bache sin querer.
-    const bache = baches.find((b) => b.id === bacheId);
-    if (bache && order.productId && bache.productId !== order.productId) {
-      setBacheId("");
+  // No se elige una orden a mano: con la referencia alcanza, el servidor
+  // busca sola la orden pendiente de esa referencia (la de fecha más
+  // próxima) y le acredita las unidades -- así el cumplimiento del
+  // programa semanal se completa sin este paso extra.
+  function selectReferencia(value: string) {
+    setReferenciaId(value);
+    const referencia = referencias.find((r) => r.id === value);
+    if (!referencia) {
+      setPresentacion("");
+      aplicarInsumosDeReferencia("");
+      return;
     }
+    setPresentacion(`${referencia.sku} — ${referencia.name}`);
+    aplicarInsumosDeReferencia(referencia.id);
   }
 
   function selectBache(value: string) {
@@ -282,28 +278,20 @@ function StartEnvasadoForm({
     const bache = baches.find((b) => b.id === value);
     if (!bache) return;
 
-    // Misma idea en el otro sentido: si había una orden de otro producto
-    // elegida, se limpia en vez de dejar la combinación mal armada.
-    const order = envasadoOrders.find((o) => o.id === orderId);
-    if (order && order.productId && order.productId !== bache.productId) {
-      setOrderId(NO_ORDER_VALUE);
+    // Si la referencia ya elegida es de otro producto, se limpia en vez
+    // de dejar armada una combinación cruzada.
+    const referencia = referencias.find((r) => r.id === referenciaId);
+    if (referencia && referencia.productId !== bache.productId) {
+      setReferenciaId("");
       setPresentacion("");
-      setReferenciaId(NO_ORDER_VALUE);
       aplicarInsumosDeReferencia("");
     }
   }
 
-  // El desplegable que falta por elegir se filtra por el producto del que
-  // ya se eligió, para no poder armar una orden/bache de productos
-  // distintos en primer lugar.
   const bacheActivo = baches.find((b) => b.id === bacheId);
-  const ordenActiva = envasadoOrders.find((o) => o.id === orderId);
-  const visibleBaches = ordenActiva?.productId
-    ? baches.filter((b) => b.productId === ordenActiva.productId)
-    : baches;
-  const visibleOrders = bacheActivo
-    ? envasadoOrders.filter((o) => !o.productId || o.productId === bacheActivo.productId)
-    : envasadoOrders;
+  const referenciasVisibles = bacheActivo
+    ? referencias.filter((r) => r.productId === bacheActivo.productId)
+    : [];
 
   // Candidatos para "base de otro bache": mismo producto que el bache que
   // se está envasando, sin contar el propio bache.
@@ -320,37 +308,13 @@ function StartEnvasadoForm({
 
   return (
     <form action={action} className="flex flex-col gap-4">
-      {envasadoOrders.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <Label>Orden de envasado</Label>
-          <input type="hidden" name="envasado_order_id" value={orderId} />
-          <OptionPicker
-            value={orderId}
-            onChange={selectOrder}
-            items={[
-              { value: NO_ORDER_VALUE, title: "Sin orden asociada" },
-              ...visibleOrders.map((order) => ({
-                value: order.id,
-                title: order.title,
-                meta: order.meta,
-              })),
-            ]}
-          />
-          <p className="text-xs text-muted-foreground">
-            {bacheActivo
-              ? "Mostrando solo las órdenes del producto del bache elegido."
-              : "Al elegir una orden se completa la presentación (podés cambiarla) y se filtra el bache al mismo producto."}
-          </p>
-        </div>
-      )}
-
       <div className="flex flex-col gap-2">
         <Label>Bache</Label>
         <input type="hidden" name="bache_id" value={bacheId} />
         <OptionPicker
           value={bacheId}
           onChange={selectBache}
-          items={visibleBaches.map((bache) => ({
+          items={baches.map((bache) => ({
             value: bache.id,
             title: bache.title,
             meta: bache.meta,
@@ -367,19 +331,45 @@ function StartEnvasadoForm({
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="presentacion">Presentación</Label>
-        <Input
-          id="presentacion"
-          name="presentacion"
-          placeholder="Ej: Sachet 1L"
-          value={presentacion}
-          onChange={(e) => setPresentacion(e.target.value)}
-          required
-        />
-      </div>
-
-      <input type="hidden" name="referencia_id" value={referenciaId} />
+      {bacheActivo && referenciasVisibles.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <Label>Referencia de envasado</Label>
+          <input type="hidden" name="referencia_id" value={referenciaId} />
+          <input type="hidden" name="presentacion" value={presentacion} />
+          <OptionPicker
+            value={referenciaId}
+            onChange={selectReferencia}
+            items={referenciasVisibles.map((r) => ({
+              value: r.id,
+              title: r.name,
+              meta: [r.sku],
+            }))}
+          />
+          <p className="text-xs text-muted-foreground">
+            Se busca sola la orden del programa semanal pendiente de esta referencia y se le
+            acreditan las unidades.
+          </p>
+        </div>
+      ) : (
+        bacheActivo && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="presentacion">Presentación</Label>
+            <Input
+              id="presentacion"
+              name="presentacion"
+              placeholder="Ej: Sachet 1L"
+              value={presentacion}
+              onChange={(e) => setPresentacion(e.target.value)}
+              required
+            />
+            <input type="hidden" name="referencia_id" value="" />
+            <p className="text-xs text-muted-foreground">
+              Este producto no tiene referencias de envasado configuradas (Administración →
+              Envasado) — escribila a mano.
+            </p>
+          </div>
+        )
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="lote">Lote de envasado</Label>
@@ -454,13 +444,13 @@ function StartEnvasadoForm({
 
 export function StartEnvasadoDialog({
   baches,
-  envasadoOrders,
+  referencias,
   envasadoInsumos,
   recipeByReferencia,
   bachesConBase,
 }: {
   baches: BacheOption[];
-  envasadoOrders: EnvasadoOrderOption[];
+  referencias: EnvasadoReferenciaOption[];
   envasadoInsumos: EnvasadoInsumo[];
   recipeByReferencia: Record<string, string[]>;
   bachesConBase: BacheConBaseOption[];
@@ -476,7 +466,7 @@ export function StartEnvasadoDialog({
         </DialogHeader>
         <StartEnvasadoForm
           baches={baches}
-          envasadoOrders={envasadoOrders}
+          referencias={referencias}
           envasadoInsumos={envasadoInsumos}
           recipeByReferencia={recipeByReferencia}
           bachesConBase={bachesConBase}

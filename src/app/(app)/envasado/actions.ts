@@ -45,7 +45,6 @@ export async function deleteEnvasado(
 
 const StartEnvasadoSchema = z.object({
   bache_id: z.string().uuid({ message: "Elegí un bache." }),
-  envasado_order_id: z.string().uuid().nullable(),
   referencia_id: z.string().uuid().nullable(),
   presentacion: z.string().trim().min(1, "La presentación es obligatoria."),
   lote: z.string().trim().min(1, "El lote es obligatorio."),
@@ -77,12 +76,10 @@ export async function startEnvasado(
 ): Promise<ActionState> {
   const profile = await requireRole(["jefe_planta", "supervisor"]);
 
-  const orderId = formData.get("envasado_order_id");
   const referenciaId = formData.get("referencia_id");
   const parsed = StartEnvasadoSchema.safeParse({
     bache_id: formData.get("bache_id"),
-    envasado_order_id: orderId && orderId !== NO_ORDER_VALUE ? orderId : null,
-    referencia_id: referenciaId && referenciaId !== NO_ORDER_VALUE ? referenciaId : null,
+    referencia_id: referenciaId ? referenciaId : null,
     presentacion: formData.get("presentacion"),
     lote: formData.get("lote"),
     insumos_observacion: formData.get("insumos_observacion") || undefined,
@@ -102,27 +99,52 @@ export async function startEnvasado(
 
   const supabase = await createClient();
 
-  // El cliente ya filtra los desplegables para que no se pueda armar esta
-  // combinación, pero se valida también acá -- es la única garantía real
-  // de que la orden y el bache sean del mismo producto.
-  if (parsed.data.envasado_order_id) {
-    const [{ data: order }, { data: bache }] = await Promise.all([
+  // El cliente ya filtra la referencia al producto del bache elegido, pero
+  // se valida también acá.
+  if (parsed.data.referencia_id) {
+    const [{ data: referencia }, { data: bache }] = await Promise.all([
       supabase
-        .from("envasado_orders")
-        .select("referencia_id")
-        .eq("id", parsed.data.envasado_order_id)
+        .from("envasado_referencias")
+        .select("product_id")
+        .eq("id", parsed.data.referencia_id)
         .single(),
       supabase.from("baches").select("product_id").eq("id", parsed.data.bache_id).single(),
     ]);
-    const { data: referencia } = order
-      ? await supabase
-          .from("envasado_referencias")
-          .select("product_id")
-          .eq("id", order.referencia_id)
-          .single()
-      : { data: null };
     if (referencia && bache && referencia.product_id !== bache.product_id) {
-      return { error: "La orden de envasado y el bache elegido son de productos distintos." };
+      return { error: "La referencia elegida es de otro producto." };
+    }
+  }
+
+  // No se elige una orden a mano: se busca sola la orden del programa
+  // pendiente de esta referencia (la de fecha más próxima que todavía
+  // tenga unidades pendientes) y se le acreditan las unidades -- así el
+  // cumplimiento semanal se completa sin este paso extra.
+  let resolvedOrderId: string | null = null;
+  if (parsed.data.referencia_id) {
+    const { data: candidatas } = await supabase
+      .from("envasado_orders")
+      .select("id, planned_quantity, scheduled_date")
+      .eq("referencia_id", parsed.data.referencia_id)
+      .in("status", ["pendiente", "en_proceso"])
+      .order("scheduled_date", { ascending: true });
+    if (candidatas && candidatas.length > 0) {
+      const ids = candidatas.map((c) => c.id);
+      const { data: envasadosDeOrdenes } = await supabase
+        .from("envasados")
+        .select("envasado_order_id, cantidad_unidades")
+        .in("envasado_order_id", ids);
+      const producidasPorOrden = new Map<string, number>();
+      for (const e of envasadosDeOrdenes ?? []) {
+        if (!e.envasado_order_id) continue;
+        producidasPorOrden.set(
+          e.envasado_order_id,
+          (producidasPorOrden.get(e.envasado_order_id) ?? 0) + e.cantidad_unidades,
+        );
+      }
+      const match = candidatas.find(
+        (c) => (producidasPorOrden.get(c.id) ?? 0) < c.planned_quantity,
+      );
+      resolvedOrderId = match?.id ?? null;
     }
   }
 
@@ -216,7 +238,7 @@ export async function startEnvasado(
     .insert({
       bache_id: parsed.data.bache_id,
       operario_id: profile.id,
-      envasado_order_id: parsed.data.envasado_order_id,
+      envasado_order_id: resolvedOrderId,
       referencia_id: parsed.data.referencia_id,
       presentacion: parsed.data.presentacion,
       lote: parsed.data.lote,
@@ -297,14 +319,14 @@ export async function startEnvasado(
     };
   }
 
-  // Pasa a "en_proceso" en cuanto se usa por primera vez; sigue apareciendo
-  // en el selector (con las unidades pendientes) mientras no se complete,
-  // por si un solo bache/envasado no alcanza para cubrir lo planeado.
-  if (parsed.data.envasado_order_id) {
+  // Pasa a "en_proceso" en cuanto se usa por primera vez; sigue disponible
+  // para que la acredite otro envasado mientras no se complete, por si un
+  // solo bache/envasado no alcanza para cubrir lo planeado.
+  if (resolvedOrderId) {
     await supabase
       .from("envasado_orders")
       .update({ status: "en_proceso" })
-      .eq("id", parsed.data.envasado_order_id);
+      .eq("id", resolvedOrderId);
   }
 
   revalidatePath("/envasado");
