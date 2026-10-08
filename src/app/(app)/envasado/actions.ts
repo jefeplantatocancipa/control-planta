@@ -100,18 +100,19 @@ export async function startEnvasado(
   const supabase = await createClient();
 
   // El cliente ya filtra la referencia al producto del bache elegido, pero
-  // se valida también acá.
+  // se valida también acá -- una referencia puede aplicar a varios
+  // productos (envasado_referencia_productos), no solo al "principal".
   if (parsed.data.referencia_id) {
-    const [{ data: referencia }, { data: bache }] = await Promise.all([
+    const [{ data: productosDeReferencia }, { data: bache }] = await Promise.all([
       supabase
-        .from("envasado_referencias")
+        .from("envasado_referencia_productos")
         .select("product_id")
-        .eq("id", parsed.data.referencia_id)
-        .single(),
+        .eq("referencia_id", parsed.data.referencia_id),
       supabase.from("baches").select("product_id").eq("id", parsed.data.bache_id).single(),
     ]);
-    if (referencia && bache && referencia.product_id !== bache.product_id) {
-      return { error: "La referencia elegida es de otro producto." };
+    const aplica = (productosDeReferencia ?? []).some((p) => p.product_id === bache?.product_id);
+    if (bache && productosDeReferencia && productosDeReferencia.length > 0 && !aplica) {
+      return { error: "La referencia elegida no aplica a este producto." };
     }
   }
 

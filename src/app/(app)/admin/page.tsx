@@ -26,6 +26,7 @@ export default async function AdminPage() {
     { data: insumos },
     { data: productInsumos },
     { data: envasadoReferencias },
+    { data: envasadoReferenciaProductos },
     { data: envasadoInsumos },
     { data: envasadoReferenciaInsumos },
     { data: turnos },
@@ -42,6 +43,7 @@ export default async function AdminPage() {
     supabase.from("insumos").select("*").order("name"),
     supabase.from("product_insumos").select("*"),
     supabase.from("envasado_referencias").select("*").order("sku"),
+    supabase.from("envasado_referencia_productos").select("*"),
     supabase.from("envasado_insumos").select("*").order("name"),
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").order("hora_inicio"),
@@ -113,6 +115,15 @@ export default async function AdminPage() {
           <EnvasadoReferenciasPanel
             referencias={envasadoReferencias ?? []}
             products={products ?? []}
+            productosByReferencia={(() => {
+              const map = new Map<string, string[]>();
+              for (const row of envasadoReferenciaProductos ?? []) {
+                const list = map.get(row.referencia_id) ?? [];
+                list.push(row.product_id);
+                map.set(row.referencia_id, list);
+              }
+              return map;
+            })()}
             canWrite={canWrite}
           />
         </TabsContent>

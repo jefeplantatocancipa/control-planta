@@ -318,6 +318,20 @@ export interface Database {
         >;
         Relationships: [];
       };
+      envasado_referencia_productos: {
+        Row: {
+          referencia_id: string;
+          product_id: string;
+        };
+        Insert: {
+          referencia_id: string;
+          product_id: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["envasado_referencia_productos"]["Insert"]
+        >;
+        Relationships: [];
+      };
       envasado_orders: {
         Row: {
           id: string;

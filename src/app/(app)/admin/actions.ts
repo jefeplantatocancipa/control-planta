@@ -747,7 +747,9 @@ export async function saveProductRecipe(
 // ---------------------------------------------------------------------------
 const EnvasadoReferenciaSchema = z.object({
   id: z.string().uuid().optional(),
-  product_id: z.string().uuid({ message: "Elegí un producto." }),
+  product_ids: z
+    .array(z.string().uuid())
+    .min(1, "Elegí al menos un producto."),
   sku: z.string().trim().min(1, "La referencia (sku) es obligatoria."),
   name: z.string().trim().min(1, "El nombre es obligatorio."),
   peso_unitario: z.coerce
@@ -759,15 +761,23 @@ const EnvasadoReferenciaSchema = z.object({
     .positive("El multiempaque debe ser mayor a 0."),
 });
 
+// Una referencia puede usarse para varios productos a la vez (ej. una
+// misma presentación que empaca tanto "Entero de la Cuesta" como "Entero
+// de la Cuesta R."). product_id en envasado_referencias se mantiene como
+// el "principal" (primero de la lista elegida) para no romper lo que ya
+// lo lee directo; la lista completa vive en envasado_referencia_productos.
 export async function upsertEnvasadoReferencia(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["jefe_planta"]);
 
+  const productIdsParsed = z
+    .array(z.string().uuid())
+    .safeParse(JSON.parse(String(formData.get("product_ids") || "[]")));
   const parsed = EnvasadoReferenciaSchema.safeParse({
     id: formData.get("id") || undefined,
-    product_id: formData.get("product_id"),
+    product_ids: productIdsParsed.success ? productIdsParsed.data : [],
     sku: formData.get("sku"),
     name: formData.get("name"),
     peso_unitario: formData.get("peso_unitario"),
@@ -777,20 +787,43 @@ export async function upsertEnvasadoReferencia(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
-  const { id, ...values } = parsed.data;
+  const { id, product_ids, ...values } = parsed.data;
   const active = formData.get("active") === "on";
   const supabase = await createClient();
 
-  const { error } = id
-    ? await supabase.from("envasado_referencias").update({ ...values, active }).eq("id", id)
-    : await supabase.from("envasado_referencias").insert({ ...values, active });
+  const { data: saved, error } = id
+    ? await supabase
+        .from("envasado_referencias")
+        .update({ ...values, product_id: product_ids[0], active })
+        .eq("id", id)
+        .select("id")
+        .single()
+    : await supabase
+        .from("envasado_referencias")
+        .insert({ ...values, product_id: product_ids[0], active })
+        .select("id")
+        .single();
 
-  if (error) {
+  if (error || !saved) {
     return {
       error: isUniqueViolation(error)
         ? "Ya existe una referencia con ese sku."
         : "No se pudo guardar la referencia.",
     };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("envasado_referencia_productos")
+    .delete()
+    .eq("referencia_id", saved.id);
+  if (deleteError) {
+    return { error: "La referencia se guardó, pero no se pudo actualizar la lista de productos." };
+  }
+  const { error: insertError } = await supabase.from("envasado_referencia_productos").insert(
+    product_ids.map((productId) => ({ referencia_id: saved.id, product_id: productId })),
+  );
+  if (insertError) {
+    return { error: "La referencia se guardó, pero no se pudo actualizar la lista de productos." };
   }
 
   revalidatePath("/admin");

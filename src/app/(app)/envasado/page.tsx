@@ -38,6 +38,7 @@ export default async function EnvasadoPage() {
     { data: stageRecords },
     { data: envasadoOrders },
     { data: envasadoReferencias },
+    { data: envasadoReferenciaProductos },
     { data: envasadoInsumos },
     { data: envasadoReferenciaInsumos },
     { data: turnos },
@@ -79,6 +80,7 @@ export default async function EnvasadoPage() {
       .in("status", ["pendiente", "en_proceso"])
       .order("scheduled_date"),
     supabase.from("envasado_referencias").select("*"),
+    supabase.from("envasado_referencia_productos").select("*"),
     supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
     supabase.from("envasado_referencia_insumos").select("*"),
     supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
@@ -295,9 +297,23 @@ export default async function EnvasadoPage() {
 
   // Ya no se elige una orden a mano en "Iniciar envasado": se elige la
   // referencia y el servidor busca sola la orden pendiente que corresponda.
+  // Una referencia puede usarse para varios productos (ej. una misma
+  // presentación que empaca "Entero de la Cuesta" y "Entero de la Cuesta
+  // R." aunque sean recetas distintas).
+  const productIdsByReferencia = new Map<string, string[]>();
+  for (const row of envasadoReferenciaProductos ?? []) {
+    const list = productIdsByReferencia.get(row.referencia_id) ?? [];
+    list.push(row.product_id);
+    productIdsByReferencia.set(row.referencia_id, list);
+  }
   const envasadoReferenciaOptions = (envasadoReferencias ?? [])
     .filter((r) => r.active)
-    .map((r) => ({ id: r.id, productId: r.product_id, sku: r.sku, name: r.name }));
+    .map((r) => ({
+      id: r.id,
+      productIds: productIdsByReferencia.get(r.id) ?? [r.product_id],
+      sku: r.sku,
+      name: r.name,
+    }));
 
   // Receta de material de empaque por referencia: filtra el checklist de
   // "Iniciar envasado" a solo los insumos que corresponden, en vez de

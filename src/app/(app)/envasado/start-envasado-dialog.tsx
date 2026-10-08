@@ -29,7 +29,7 @@ interface BacheOption {
 
 interface EnvasadoReferenciaOption {
   id: string;
-  productId: string;
+  productIds: string[];
   sku: string;
   name: string;
 }
@@ -278,10 +278,10 @@ function StartEnvasadoForm({
     const bache = baches.find((b) => b.id === value);
     if (!bache) return;
 
-    // Si la referencia ya elegida es de otro producto, se limpia en vez
-    // de dejar armada una combinación cruzada.
+    // Si la referencia ya elegida no aplica al producto de este bache, se
+    // limpia en vez de dejar armada una combinación cruzada.
     const referencia = referencias.find((r) => r.id === referenciaId);
-    if (referencia && referencia.productId !== bache.productId) {
+    if (referencia && !referencia.productIds.includes(bache.productId)) {
       setReferenciaId("");
       setPresentacion("");
       aplicarInsumosDeReferencia("");
@@ -290,7 +290,7 @@ function StartEnvasadoForm({
 
   const bacheActivo = baches.find((b) => b.id === bacheId);
   const referenciasVisibles = bacheActivo
-    ? referencias.filter((r) => r.productId === bacheActivo.productId)
+    ? referencias.filter((r) => r.productIds.includes(bacheActivo.productId))
     : [];
 
   // Candidatos para "base de otro bache": mismo producto que el bache que

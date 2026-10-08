@@ -21,36 +21,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { upsertEnvasadoReferencia, type ActionState } from "./actions";
 import type { Database } from "@/lib/supabase/types";
 
 type Referencia = Database["public"]["Tables"]["envasado_referencias"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
+// Una referencia puede usarse para varios productos a la vez (ej. una
+// misma presentación que empaca tanto "Entero de la Cuesta" como "Entero
+// de la Cuesta R.", aunque sean recetas/baches distintos).
 function ReferenciaForm({
   referencia,
   products,
+  productosAsociados,
   onSuccess,
 }: {
   referencia: Referencia | null;
   products: Product[];
+  productosAsociados: string[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     upsertEnvasadoReferencia,
     {},
   );
+  const [productIds, setProductIds] = useState<string[]>(productosAsociados);
 
   useEffect(() => {
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
+
+  function toggle(productId: string, checked: boolean) {
+    setProductIds((ids) =>
+      checked ? [...ids, productId] : ids.filter((id) => id !== productId),
+    );
+  }
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -64,27 +69,26 @@ function ReferenciaForm({
         <Input id="name" name="name" defaultValue={referencia?.name} required />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="product_id">Producto (bache)</Label>
-        <Select
-          name="product_id"
-          defaultValue={referencia?.product_id}
-          required
-          items={products.map((product) => ({
-            value: product.id,
-            label: product.name,
-          }))}
-        >
-          <SelectTrigger id="product_id" className="w-full">
-            <SelectValue placeholder="Elegí un producto" />
-          </SelectTrigger>
-          <SelectContent>
-            {products.map((product) => (
-              <SelectItem key={product.id} value={product.id}>
-                {product.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label>Productos (bache)</Label>
+        <input type="hidden" name="product_ids" value={JSON.stringify(productIds)} />
+        <div className="flex flex-col gap-1.5 rounded-lg border p-2">
+          {products.map((product) => (
+            <label key={product.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4"
+                checked={productIds.includes(product.id)}
+                onChange={(e) => toggle(product.id, e.target.checked)}
+              />
+              {product.name}
+            </label>
+          ))}
+        </div>
+        {productIds.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Elegí al menos un producto que use esta referencia.
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="peso_unitario">Peso unitario (g)</Label>
@@ -125,7 +129,7 @@ function ReferenciaForm({
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || productIds.length === 0}>
           {pending ? "Guardando..." : "Guardar"}
         </Button>
       </DialogFooter>
@@ -136,10 +140,12 @@ function ReferenciaForm({
 export function EnvasadoReferenciasPanel({
   referencias,
   products,
+  productosByReferencia,
   canWrite = true,
 }: {
   referencias: Referencia[];
   products: Product[];
+  productosByReferencia: Map<string, string[]>;
   canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -179,7 +185,11 @@ export function EnvasadoReferenciasPanel({
             <TableRow key={referencia.id}>
               <TableCell className="font-medium">{referencia.sku}</TableCell>
               <TableCell>{referencia.name}</TableCell>
-              <TableCell>{productNames.get(referencia.product_id) ?? "—"}</TableCell>
+              <TableCell>
+                {(productosByReferencia.get(referencia.id) ?? [referencia.product_id])
+                  .map((id) => productNames.get(id) ?? "—")
+                  .join(", ")}
+              </TableCell>
               <TableCell>{referencia.peso_unitario} g</TableCell>
               <TableCell>{referencia.multiempaque}</TableCell>
               <TableCell>
@@ -224,6 +234,11 @@ export function EnvasadoReferenciasPanel({
             key={editing?.id ?? "new"}
             referencia={editing}
             products={products}
+            productosAsociados={
+              editing
+                ? (productosByReferencia.get(editing.id) ?? [editing.product_id])
+                : []
+            }
             onSuccess={() => setOpen(false)}
           />
         </DialogContent>
