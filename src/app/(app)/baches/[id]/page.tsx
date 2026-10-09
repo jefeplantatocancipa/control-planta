@@ -124,9 +124,8 @@ export default async function BacheDetailPage({
     (records ?? []).map((record) => [record.stage_template_id, record]),
   );
 
-  const canAct =
-    bache.status === "en_proceso" &&
-    (profile.role === "jefe_planta" || profile.role === "supervisor");
+  const canManageStatus = profile.role === "jefe_planta" || profile.role === "supervisor";
+  const canAct = bache.status === "en_proceso" && canManageStatus;
   const canFirmar = profile.role === "jefe_planta" || profile.role === "calidad";
   const allStagesDone =
     stages.length > 0 &&
@@ -191,7 +190,7 @@ export default async function BacheDetailPage({
               Imprimir informe
             </Link>
           </div>
-          {canAct && <BacheStatusActions bacheId={bache.id} />}
+          {canManageStatus && <BacheStatusActions bacheId={bache.id} status={bache.status} />}
         </div>
       </div>
 

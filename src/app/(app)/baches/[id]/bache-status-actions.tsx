@@ -2,7 +2,8 @@
 
 import { useResilientActionState as useActionState } from "@/lib/use-resilient-action-state";
 import { Button } from "@/components/ui/button";
-import { updateBacheStatus, type ActionState } from "../actions";
+import { updateBacheStatus, reabrirBache, type ActionState } from "../actions";
+import type { BacheStatus } from "@/lib/supabase/types";
 
 function StatusButton({
   bacheId,
@@ -40,7 +41,38 @@ function StatusButton({
   );
 }
 
-export function BacheStatusActions({ bacheId }: { bacheId: string }) {
+function ReabrirButton({ bacheId }: { bacheId: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    reabrirBache,
+    {},
+  );
+
+  return (
+    <form action={action} className="flex flex-col items-end gap-1">
+      <input type="hidden" name="id" value={bacheId} />
+      <Button type="submit" variant="outline" size="sm" disabled={pending}>
+        {pending ? "Reabriendo..." : "Reabrir bache"}
+      </Button>
+      {state.error && (
+        <p className="text-xs text-destructive" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+export function BacheStatusActions({
+  bacheId,
+  status,
+}: {
+  bacheId: string;
+  status: BacheStatus;
+}) {
+  if (status !== "en_proceso") {
+    return <ReabrirButton bacheId={bacheId} />;
+  }
+
   return (
     <div className="flex gap-2">
       <StatusButton

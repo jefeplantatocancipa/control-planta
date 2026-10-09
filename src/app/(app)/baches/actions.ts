@@ -168,6 +168,51 @@ export async function updateBacheStatus(
   return { success: true };
 }
 
+const ReabrirBacheSchema = z.object({ id: z.string().uuid() });
+
+// Deshace un "Cancelar"/"Completar" hecho por error: vuelve el bache a
+// "en_proceso" sin tocar nada de lo ya registrado (etapas cerradas,
+// started_at) para poder seguir el proceso donde quedó.
+export async function reabrirBache(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = ReabrirBacheSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: bache } = await supabase
+    .from("baches")
+    .select("status")
+    .eq("id", parsed.data.id)
+    .single();
+  if (!bache) {
+    return { error: "No se encontró el bache." };
+  }
+  if (bache.status === "en_proceso") {
+    return { error: "Este bache ya está en proceso." };
+  }
+
+  const { error } = await supabase
+    .from("baches")
+    .update({ status: "en_proceso", completed_at: null })
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo reabrir el bache." };
+  }
+
+  revalidatePath(`/baches/${parsed.data.id}`);
+  revalidatePath("/baches");
+  revalidatePath("/programa");
+  return { success: true };
+}
+
 const AssociateOrderSchema = z.object({
   bache_id: z.string().uuid(),
   production_order_id: z.string().uuid().nullable(),
