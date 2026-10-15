@@ -28,13 +28,16 @@ function NewProgramForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="week_start_date">Semana (lunes)</Label>
+        <Label htmlFor="week_start_date">Semana (sábado)</Label>
         <Input
           id="week_start_date"
           name="week_start_date"
           type="date"
           required
         />
+        <p className="text-xs text-muted-foreground">
+          Se ajusta solo al sábado de esa semana, aunque elijas otro día.
+        </p>
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="notes">Notas</Label>

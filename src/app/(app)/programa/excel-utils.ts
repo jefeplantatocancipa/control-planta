@@ -189,12 +189,27 @@ export function excelDateTimeToBogotaISO(
 }
 
 // Lunes (UTC) de la semana ISO que contiene la fecha dada ("YYYY-MM-DD").
+// Ya no se usa para el programa semanal (que arranca sábado, ver
+// saturdayOfWeek), queda por si hace falta en otro lado.
 export function mondayOfWeek(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   const day = date.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
   date.setUTCDate(date.getUTCDate() + diff);
+  return date.toISOString().slice(0, 10);
+}
+
+// Sábado (UTC) de la semana operativa (sábado a sábado) que contiene la
+// fecha dada ("YYYY-MM-DD") -- es el inicio real del programa semanal en
+// planta. Se usa tanto al importar Excel como al crear un programa a mano
+// (para que quede bien aunque se elija cualquier día de esa semana).
+export function saturdayOfWeek(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const day = date.getUTCDay();
+  const diff = (day + 1) % 7;
+  date.setUTCDate(date.getUTCDate() - diff);
   return date.toISOString().slice(0, 10);
 }
 

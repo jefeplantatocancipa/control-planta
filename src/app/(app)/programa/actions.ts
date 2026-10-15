@@ -10,7 +10,7 @@ import {
   cellText,
   excelDateOnlyToISO,
   excelDateTimeToBogotaISO,
-  mondayOfWeek,
+  saturdayOfWeek,
 } from "./excel-utils";
 import type { Database, OrderStatus, ProgramStatus } from "@/lib/supabase/types";
 
@@ -48,9 +48,12 @@ export async function createProgram(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  // Se ajusta al sábado de esa semana aunque se haya elegido otro día del
+  // calendario, para no depender de que quien lo crea pique justo el
+  // sábado (la semana de la planta arranca sábado).
   const supabase = await createClient();
   const { error } = await supabase.from("production_programs").insert({
-    week_start_date: parsed.data.week_start_date,
+    week_start_date: saturdayOfWeek(parsed.data.week_start_date),
     notes: parsed.data.notes || null,
     created_by: profile.id,
   });
@@ -493,7 +496,7 @@ export async function importBachesProgram(
       ? excelDateTimeToBogotaISO(row.getCell(columns["hora final"]).value, scheduledYear)
       : null;
 
-    const week = mondayOfWeek(scheduledDate);
+    const week = saturdayOfWeek(scheduledDate);
     drafts.push({
       week,
       order: {
@@ -654,7 +657,7 @@ export async function importEnvasadoProgram(
 
     const linea = columns["linea"] ? cellText(row.getCell(columns["linea"])) || null : null;
 
-    const week = mondayOfWeek(scheduledDate);
+    const week = saturdayOfWeek(scheduledDate);
     drafts.push({
       week,
       order: {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
+import { saturdayOfWeek } from "../programa/excel-utils";
 import type { OrderStatus, ProgramStatus } from "@/lib/supabase/types";
 
 export interface ActionState {
@@ -204,9 +205,11 @@ export async function createEnmangadoProgram(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  // Se ajusta al sábado de esa semana aunque se haya elegido otro día del
+  // calendario (la semana de la planta arranca sábado).
   const supabase = await createClient();
   const { error } = await supabase.from("enmangado_programs").insert({
-    week_start_date: parsed.data.week_start_date,
+    week_start_date: saturdayOfWeek(parsed.data.week_start_date),
     notes: parsed.data.notes || null,
     created_by: profile.id,
   });
