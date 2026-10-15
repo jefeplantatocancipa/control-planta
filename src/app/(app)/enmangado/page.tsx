@@ -1,5 +1,7 @@
+import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { isEnmangadoEnabled } from "@/lib/feature-flags";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -17,6 +19,7 @@ import { ReferenciasPanel } from "./referencias-panel";
 import { formatDateTime } from "@/lib/format-date";
 
 export default async function EnmangadoPage() {
+  if (!isEnmangadoEnabled()) notFound();
   const profile = await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
   const supabase = await createClient();
 

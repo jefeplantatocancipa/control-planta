@@ -25,6 +25,7 @@ import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import type { CurrentProfile } from "@/lib/auth/dal";
 import type { UserRole } from "@/lib/supabase/types";
 import { logout } from "@/app/login/actions";
+import { isEnmangadoEnabled } from "@/lib/feature-flags";
 
 interface NavItem {
   href: string;
@@ -68,7 +69,11 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter((item) => item.roles.includes(profile.role));
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      item.roles.includes(profile.role) &&
+      (item.href !== "/enmangado" || isEnmangadoEnabled()),
+  );
   const mobileItems = items.filter((item) => MOBILE_ITEMS.includes(item.href));
 
   return (
