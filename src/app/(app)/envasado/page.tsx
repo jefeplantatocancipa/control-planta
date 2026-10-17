@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Printer } from "lucide-react";
+import { Download, Printer } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -460,7 +460,16 @@ export default async function EnvasadoPage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Finalizados</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-medium">Finalizados</h2>
+          <a
+            href="/envasado/exportar"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Download className="size-4" />
+            Exportar
+          </a>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
