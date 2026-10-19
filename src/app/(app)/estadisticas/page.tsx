@@ -23,7 +23,7 @@ import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
 import { EtapasPorOperario, type EtapaOperarioRow } from "./etapas-por-operario";
 import { EtapaGantt, type EtapaHistorialRow } from "./etapa-gantt";
-import { fridayOfWeek } from "../programa/excel-utils";
+import { saturdayOfWeek } from "../programa/excel-utils";
 
 function minutesLabel(minutes: number | null) {
   if (minutes == null) return "—";
@@ -525,10 +525,10 @@ export default async function EstadisticasPage({
     .slice(0, 5);
 
   // -------------------------------------------------------------------
-  // Tendencia semanal (últimas 8 semanas, viernes a jueves): kg producidos
+  // Tendencia semanal (últimas 8 semanas, sábado a viernes): kg producidos
   // vs. kg empacados.
   // -------------------------------------------------------------------
-  const currentWeek = fridayOfWeek(todayISO());
+  const currentWeek = saturdayOfWeek(todayISO());
   const weekStarts: string[] = [];
   for (let i = 7; i >= 0; i--) {
     const d = new Date(`${currentWeek}T00:00:00`);
@@ -537,10 +537,10 @@ export default async function EstadisticasPage({
   }
   const trendData: TrendDatum[] = weekStarts.map((weekStart) => {
     const producido = kgProducidoEvents
-      .filter((e) => fridayOfWeek(e.date) === weekStart)
+      .filter((e) => saturdayOfWeek(e.date) === weekStart)
       .reduce((s, e) => s + e.kg, 0);
     const empacado = (envasados ?? [])
-      .filter((e) => fridayOfWeek(e.started_at.slice(0, 10)) === weekStart)
+      .filter((e) => saturdayOfWeek(e.started_at.slice(0, 10)) === weekStart)
       .reduce((s, e) => {
         const peso = pesoUnitarioDe(e);
         return peso ? s + (e.cantidad_unidades * peso) / 1000 : s;

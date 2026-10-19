@@ -172,8 +172,8 @@ export default async function CumplimientoPage() {
       <div>
         <h1 className="text-2xl font-semibold">Cumplimiento del programa</h1>
         <p className="text-muted-foreground">
-          Planeado vs. ejecutado por producto — diario, semanal (viernes a
-          jueves) y mensual.
+          Planeado vs. ejecutado por producto — diario, semanal (sábado a
+          viernes) y mensual.
         </p>
       </div>
 

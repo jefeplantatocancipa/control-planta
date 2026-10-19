@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fridayOfWeek } from "../programa/excel-utils";
+import { saturdayOfWeek } from "../programa/excel-utils";
 
 type Accent = "bases" | "envasado";
 
@@ -65,7 +65,7 @@ export interface CumplimientoRow {
 
 type Mode = "dia" | "semana" | "mes";
 
-const WEEKDAY_LABELS = ["Vie", "Sáb", "Dom", "Lun", "Mar", "Mié", "Jue"];
+const WEEKDAY_LABELS = ["Sáb", "Dom", "Lun", "Mar", "Mié", "Jue", "Vie"];
 
 function toISO(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -363,7 +363,7 @@ export function ConsolidadoCumplimiento({
   const periodRange = useMemo(() => {
     if (mode === "dia") return { start: anchor, end: anchor };
     if (mode === "semana") {
-      const start = fridayOfWeek(anchor);
+      const start = saturdayOfWeek(anchor);
       return { start, end: toISO(addDays(parseISO(start), 6)) };
     }
     return {
