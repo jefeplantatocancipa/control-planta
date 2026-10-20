@@ -2,14 +2,6 @@ import { requireProfile } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format-date";
 import { pronosticosTerminacion } from "@/lib/pronostico-bache";
 import { pronosticosEnvasado } from "@/lib/pronostico-envasado";
@@ -172,6 +164,7 @@ export default async function ProcesoPage() {
     registrosCerrados: registrosCerrados ?? [],
     registrosEnCurso: registrosEnCurso ?? [],
   });
+  const pronosticoByBacheId = new Map(pronosticos.map((p) => [p.bacheId, p]));
 
   const baches = proceso ?? [];
 
@@ -190,6 +183,7 @@ export default async function ProcesoPage() {
           const current = stageRank(bache.product_id, bache.stage_id);
           const inProgress = current > 0 && !bache.stage_ended_at;
           const allDone = current === totalStages && Boolean(bache.stage_ended_at);
+          const pronostico = pronosticoByBacheId.get(bache.bache_id);
 
           return (
             <Card key={bache.bache_id}>
@@ -239,6 +233,12 @@ export default async function ProcesoPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     Todavía no se inició ninguna etapa.
+                  </p>
+                )}
+                {pronostico && !allDone && (
+                  <p className="text-sm text-muted-foreground">
+                    Fin estimado: {formatDateTime(pronostico.estimadoFin)}
+                    {pronostico.faltaDato && <span className="ml-1 text-xs">(parcial)</span>}
                   </p>
                 )}
               </CardContent>
@@ -302,51 +302,6 @@ export default async function ProcesoPage() {
           )}
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Pronóstico de terminación</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Bache</TableHead>
-                <TableHead>Producto</TableHead>
-                <TableHead>Etapa actual</TableHead>
-                <TableHead className="text-right">Fin estimado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pronosticos.map((p) => (
-                <TableRow key={p.bacheId}>
-                  <TableCell className="font-medium">{p.batchCode}</TableCell>
-                  <TableCell>{p.productName}</TableCell>
-                  <TableCell>{p.etapaActual}</TableCell>
-                  <TableCell className="text-right">
-                    {formatDateTime(p.estimadoFin)}
-                    {p.faltaDato && (
-                      <span className="ml-1 text-xs text-muted-foreground">(parcial)</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {pronosticos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Sin baches en proceso.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Estimado a partir de la duración promedio histórica de cada etapa restante, para
-            ese mismo producto. &quot;(parcial)&quot; significa que alguna etapa todavía no
-            tiene datos históricos suficientes.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
