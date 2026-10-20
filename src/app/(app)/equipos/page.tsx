@@ -1,7 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
-import { pronosticosTerminacion } from "@/lib/pronostico-bache";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime, formatTime } from "@/lib/format-date";
+import { formatTime } from "@/lib/format-date";
 import { GanttChart, type GanttSegment } from "./gantt-chart";
 
 function nowMs() {
@@ -29,34 +28,13 @@ export default async function EquiposPage() {
 
   const cutoff = daysAgoISO(7);
 
-  const [
-    { data: equipos },
-    { data: activeRecords },
-    { data: registrosHistoricos },
-    { data: baches },
-    { data: stageTemplates },
-    { data: products },
-  ] = await Promise.all([
+  const [{ data: equipos }, { data: baches }, { data: stageTemplates }] = await Promise.all([
     supabase.from("equipos").select("*").eq("active", true).order("name"),
-    // Etapas activas en CUALQUIER bache, para saber la etapa actual de cada
-    // bache en proceso (pronóstico) -- la ocupación de equipos en sí viene
-    // de usosDeEquipos, más abajo.
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, started_at, ended_at")
-      .is("ended_at", null),
-    // Todas las etapas cerradas (sin filtrar por equipo) para calcular la
-    // duración promedio histórica por producto + etapa, base del pronóstico.
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, started_at, ended_at")
-      .not("ended_at", "is", null),
-    supabase.from("baches").select("id, batch_code, product_id, status, volumen_total_litros"),
+    supabase.from("baches").select("id, batch_code, product_id, volumen_total_litros"),
     supabase
       .from("process_stage_templates")
       .select("id, product_id, name, sequence_order")
       .eq("active", true),
-    supabase.from("products").select("id, name"),
   ]);
 
   // Fuente única de "qué equipo está usando cada etapa, desde cuándo hasta
@@ -121,24 +99,12 @@ export default async function EquiposPage() {
     };
   });
 
-  // -------------------------------------------------------------------
-  // Pronóstico de terminación para baches en proceso (misma lógica que usa
-  // el módulo Proceso, ver src/lib/pronostico-bache.ts).
-  // -------------------------------------------------------------------
-  const pronosticos = pronosticosTerminacion({
-    baches: baches ?? [],
-    stageTemplates: stageTemplates ?? [],
-    products: products ?? [],
-    registrosCerrados: registrosHistoricos ?? [],
-    registrosEnCurso: activeRecords ?? [],
-  });
-
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Equipos</h1>
         <p className="text-muted-foreground">
-          Ocupación en vivo, línea de tiempo y pronóstico de terminación por equipo.
+          Ocupación en vivo y línea de tiempo por equipo.
         </p>
       </div>
 
@@ -238,51 +204,6 @@ export default async function EquiposPage() {
           <p className="mt-2 text-xs text-muted-foreground">
             &quot;Capacidad aprovechada&quot; compara el volumen total del bache contra la
             capacidad cargada del equipo (solo para equipos con capacidad configurada).
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Pronóstico de terminación</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Bache</TableHead>
-                <TableHead>Producto</TableHead>
-                <TableHead>Etapa actual</TableHead>
-                <TableHead className="text-right">Fin estimado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pronosticos.map((p) => (
-                <TableRow key={p.bacheId}>
-                  <TableCell className="font-medium">{p.batchCode}</TableCell>
-                  <TableCell>{p.productName}</TableCell>
-                  <TableCell>{p.etapaActual}</TableCell>
-                  <TableCell className="text-right">
-                    {formatDateTime(p.estimadoFin)}
-                    {p.faltaDato && (
-                      <span className="ml-1 text-xs text-muted-foreground">(parcial)</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {pronosticos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Sin baches en proceso.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Estimado a partir de la duración promedio histórica de cada etapa restante, para
-            ese mismo producto. &quot;(parcial)&quot; significa que alguna etapa todavía no
-            tiene datos históricos suficientes.
           </p>
         </CardContent>
       </Card>

@@ -65,7 +65,7 @@ const CARDS: {
   {
     href: "/equipos",
     title: "Equipos",
-    description: "Ocupación en vivo, línea de tiempo y pronóstico de terminación.",
+    description: "Ocupación en vivo y línea de tiempo por equipo.",
     icon: Factory,
     roles: ["jefe_planta", "supervisor", "asistente_adm"],
   },
