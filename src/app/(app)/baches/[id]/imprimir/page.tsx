@@ -16,13 +16,17 @@ type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
 type StageRecord = Database["public"]["Tables"]["bache_stage_records"]["Row"];
 
+function minutesLabel(minutes: number) {
+  const rounded = Math.round(minutes);
+  const hours = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
+}
+
 function durationLabel(startedAt: string, endedAt: string) {
-  const minutes = Math.round(
+  return minutesLabel(
     (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000,
   );
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
 }
 
 function stageParameterEntries(stage: StageTemplate, record: StageRecord | undefined) {
@@ -194,6 +198,15 @@ export default async function BacheReportPage({
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
   ]);
 
+  const envasadoIds = (envasados ?? []).map((e) => e.id);
+  const { data: paradas } =
+    envasadoIds.length > 0
+      ? await supabase
+          .from("envasado_paradas")
+          .select("started_at, ended_at")
+          .in("envasado_id", envasadoIds)
+      : { data: [] as { started_at: string; ended_at: string | null }[] };
+
   let stages = ownTemplates.data ?? [];
   if (stages.length === 0) {
     const { data: defaultTemplates } = await supabase
@@ -232,6 +245,26 @@ export default async function BacheReportPage({
     (sum, e) => sum + e.cantidad_unidades,
     0,
   );
+
+  // Tiempo de empaque: suma la duración de cada envasado de este bache (si
+  // hubo más de uno, ej. porque no alcanzó en el primero), no el rango
+  // completo desde el primer inicio hasta el último final -- eso incluiría
+  // huecos entre envasados que no son tiempo empacando.
+  const tieneEnvasados = (envasados ?? []).length > 0;
+  const tiempoEmpaqueMin = (envasados ?? [])
+    .filter((e) => e.ended_at)
+    .reduce(
+      (sum, e) =>
+        sum + (new Date(e.ended_at!).getTime() - new Date(e.started_at).getTime()) / 60000,
+      0,
+    );
+  const tiempoParadasMin = (paradas ?? [])
+    .filter((p) => p.ended_at)
+    .reduce(
+      (sum, p) =>
+        sum + (new Date(p.ended_at!).getTime() - new Date(p.started_at).getTime()) / 60000,
+      0,
+    );
 
   // Balance de masa total del bache: se toma la última etapa con checklist
   // de insumos (ej. Mezcla), igual que en /envasado, porque ahí queda
@@ -400,8 +433,16 @@ export default async function BacheReportPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <StatTile label="Tiempo total del proceso" value={totalTimeLabel} />
+        <StatTile
+          label="Tiempo de empaque"
+          value={tieneEnvasados ? minutesLabel(tiempoEmpaqueMin) : "—"}
+        />
+        <StatTile
+          label="Tiempo de paradas"
+          value={tieneEnvasados ? minutesLabel(tiempoParadasMin) : "—"}
+        />
         <StatTile label="Unidades envasadas" value={String(totalUnidades)} />
         <StatTile
           label="Insumos (kg)"
