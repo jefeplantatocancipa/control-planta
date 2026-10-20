@@ -2,6 +2,16 @@ import { requireProfile } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatDateTime } from "@/lib/format-date";
+import { pronosticosTerminacion } from "@/lib/pronostico-bache";
 import { cn } from "@/lib/utils";
 
 function timeSince(iso: string) {
@@ -32,6 +42,8 @@ export default async function ProcesoPage() {
     { data: cortes },
     { data: estibas },
     { data: paradas },
+    { data: registrosCerrados },
+    { data: registrosEnCurso },
   ] = await Promise.all([
     supabase
       .from("v_proceso_actual")
@@ -43,11 +55,22 @@ export default async function ProcesoPage() {
       .eq("active", true)
       .order("sequence_order"),
     supabase.from("envasados").select("*").is("ended_at", null),
-    supabase.from("baches").select("id, batch_code, product_id"),
+    supabase.from("baches").select("id, batch_code, product_id, status"),
     supabase.from("products").select("id, name"),
     supabase.from("envasado_cortes").select("id, envasado_id"),
     supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
     supabase.from("envasado_paradas").select("*"),
+    // Para el pronóstico de terminación (src/lib/pronostico-bache.ts):
+    // etapas ya cerradas de cualquier bache (duración promedio histórica) y
+    // la etapa en curso de cada bache.
+    supabase
+      .from("bache_stage_records")
+      .select("bache_id, stage_template_id, started_at, ended_at")
+      .not("ended_at", "is", null),
+    supabase
+      .from("bache_stage_records")
+      .select("bache_id, stage_template_id, started_at, ended_at")
+      .is("ended_at", null),
   ]);
 
   const bachesById = new Map((allBaches ?? []).map((b) => [b.id, b]));
@@ -118,6 +141,14 @@ export default async function ProcesoPage() {
     const index = stageListFor(productId).indexOf(stageId);
     return index === -1 ? 0 : index + 1;
   }
+
+  const pronosticos = pronosticosTerminacion({
+    baches: allBaches ?? [],
+    stageTemplates: templates ?? [],
+    products: products ?? [],
+    registrosCerrados: registrosCerrados ?? [],
+    registrosEnCurso: registrosEnCurso ?? [],
+  });
 
   const baches = proceso ?? [];
 
@@ -235,6 +266,51 @@ export default async function ProcesoPage() {
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pronóstico de terminación</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Bache</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead>Etapa actual</TableHead>
+                <TableHead className="text-right">Fin estimado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pronosticos.map((p) => (
+                <TableRow key={p.bacheId}>
+                  <TableCell className="font-medium">{p.batchCode}</TableCell>
+                  <TableCell>{p.productName}</TableCell>
+                  <TableCell>{p.etapaActual}</TableCell>
+                  <TableCell className="text-right">
+                    {formatDateTime(p.estimadoFin)}
+                    {p.faltaDato && (
+                      <span className="ml-1 text-xs text-muted-foreground">(parcial)</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {pronosticos.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Sin baches en proceso.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Estimado a partir de la duración promedio histórica de cada etapa restante, para
+            ese mismo producto. &quot;(parcial)&quot; significa que alguna etapa todavía no
+            tiene datos históricos suficientes.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
