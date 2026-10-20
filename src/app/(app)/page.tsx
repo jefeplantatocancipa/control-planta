@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Activity, Beaker, CalendarClock, ClipboardList, Factory, LineChart, Package, Tags, Warehouse } from "lucide-react";
+import { Activity, Beaker, CalendarClock, ClipboardList, Factory, LineChart, Package, Tags, Truck, Warehouse } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth/dal";
 import { isEnmangadoEnabled } from "@/lib/feature-flags";
+import { puedeVerTransportes } from "@/lib/transportes-acceso";
 import type { UserRole } from "@/lib/supabase/types";
 
 const CARDS: {
@@ -89,6 +90,13 @@ const CARDS: {
     icon: Tags,
     roles: ["jefe_planta", "asistente_adm"],
   },
+  {
+    href: "/transportes",
+    title: "Transportes",
+    description: "Solicitar un traslado entre sedes por correo.",
+    icon: Truck,
+    roles: ["jefe_planta"],
+  },
 ];
 
 export default async function HomePage() {
@@ -96,7 +104,8 @@ export default async function HomePage() {
   const cards = CARDS.filter(
     (card) =>
       card.roles.includes(profile.role) &&
-      (card.href !== "/enmangado" || isEnmangadoEnabled()),
+      (card.href !== "/enmangado" || isEnmangadoEnabled()) &&
+      (card.href !== "/transportes" || puedeVerTransportes(profile.email)),
   );
 
   return (

@@ -14,6 +14,7 @@ import {
   LogOut,
   Package,
   Tags,
+  Truck,
   Warehouse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import type { CurrentProfile } from "@/lib/auth/dal";
 import type { UserRole } from "@/lib/supabase/types";
 import { logout } from "@/app/login/actions";
 import { isEnmangadoEnabled } from "@/lib/feature-flags";
+import { puedeVerTransportes } from "@/lib/transportes-acceso";
 
 interface NavItem {
   href: string;
@@ -48,6 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta", "asistente_adm"] },
+  { href: "/transportes", label: "Transportes", icon: Truck, roles: ["jefe_planta"] },
 ];
 
 const MOBILE_ITEMS = ["/", "/proceso", "/baches", "/envasado", "/encajado", "/estadisticas"];
@@ -72,7 +75,8 @@ export function AppShell({
   const items = NAV_ITEMS.filter(
     (item) =>
       item.roles.includes(profile.role) &&
-      (item.href !== "/enmangado" || isEnmangadoEnabled()),
+      (item.href !== "/enmangado" || isEnmangadoEnabled()) &&
+      (item.href !== "/transportes" || puedeVerTransportes(profile.email)),
   );
   const mobileItems = items.filter((item) => MOBILE_ITEMS.includes(item.href));
 

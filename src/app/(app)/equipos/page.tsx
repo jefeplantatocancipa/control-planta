@@ -64,26 +64,7 @@ export default async function EquiposPage() {
   // envasarse el bache, y la hora de lavado al final de cualquier uso.
   const usos = await usosDeEquipos(supabase);
 
-  const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const bacheById = new Map((baches ?? []).map((b) => [b.id, b]));
-
-  const stagesByProduct = new Map<string, { id: string; name: string; sequence_order: number }[]>();
-  const defaultStages: { id: string; name: string; sequence_order: number }[] = [];
-  for (const s of stageTemplates ?? []) {
-    if (s.product_id) {
-      const arr = stagesByProduct.get(s.product_id) ?? [];
-      arr.push(s);
-      stagesByProduct.set(s.product_id, arr);
-    } else {
-      defaultStages.push(s);
-    }
-  }
-  function stagesFor(productId: string) {
-    const own = stagesByProduct.get(productId);
-    return (own && own.length > 0 ? own : defaultStages).slice().sort(
-      (a, b) => a.sequence_order - b.sequence_order,
-    );
-  }
   const stageNameById = new Map((stageTemplates ?? []).map((s) => [s.id, s.name]));
 
   // -------------------------------------------------------------------
