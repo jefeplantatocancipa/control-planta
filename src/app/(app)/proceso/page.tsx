@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format-date";
 import { pronosticosTerminacion } from "@/lib/pronostico-bache";
+import { pronosticosEnvasado } from "@/lib/pronostico-envasado";
 import { cn } from "@/lib/utils";
 
 function timeSince(iso: string) {
@@ -44,6 +45,8 @@ export default async function ProcesoPage() {
     { data: paradas },
     { data: registrosCerrados },
     { data: registrosEnCurso },
+    { data: envasadoReferencias },
+    { data: envasadosCerrados },
   ] = await Promise.all([
     supabase
       .from("v_proceso_actual")
@@ -55,7 +58,7 @@ export default async function ProcesoPage() {
       .eq("active", true)
       .order("sequence_order"),
     supabase.from("envasados").select("*").is("ended_at", null),
-    supabase.from("baches").select("id, batch_code, product_id, status"),
+    supabase.from("baches").select("id, batch_code, product_id, status, volumen_restante_litros"),
     supabase.from("products").select("id, name"),
     supabase.from("envasado_cortes").select("id, envasado_id"),
     supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
@@ -71,6 +74,14 @@ export default async function ProcesoPage() {
       .from("bache_stage_records")
       .select("bache_id, stage_template_id, started_at, ended_at")
       .is("ended_at", null),
+    // Para el pronóstico de envasado (src/lib/pronostico-envasado.ts): las
+    // referencias (peso unitario) y los envasados ya cerrados de cualquier
+    // bache, para la velocidad promedio histórica por referencia.
+    supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
+    supabase
+      .from("envasados")
+      .select("referencia_id, presentacion, started_at, ended_at, cantidad_unidades")
+      .not("ended_at", "is", null),
   ]);
 
   const bachesById = new Map((allBaches ?? []).map((b) => [b.id, b]));
@@ -94,6 +105,15 @@ export default async function ProcesoPage() {
     paradasByEnvasado.set(parada.envasado_id, list);
   }
 
+  const pronosticosEnvasadoList = pronosticosEnvasado({
+    referencias: envasadoReferencias ?? [],
+    envasadosCerrados: envasadosCerrados ?? [],
+    envasadosAbiertos: envasadosAbiertos ?? [],
+    baches: allBaches ?? [],
+    unidadesHechasPorEnvasado: unidadesByEnvasado,
+  });
+  const pronosticoPorEnvasado = new Map(pronosticosEnvasadoList.map((p) => [p.envasadoId, p]));
+
   const envasadosEnCurso = (envasadosAbiertos ?? []).map((envasado) => {
     const bache = bachesById.get(envasado.bache_id);
     const tiempoParadasMs = (paradasByEnvasado.get(envasado.id) ?? []).reduce(
@@ -103,6 +123,7 @@ export default async function ProcesoPage() {
           new Date(p.started_at).getTime()),
       0,
     );
+    const pronostico = pronosticoPorEnvasado.get(envasado.id);
     return {
       id: envasado.id,
       bacheLabel: bache
@@ -114,6 +135,8 @@ export default async function ProcesoPage() {
       startedAt: envasado.started_at,
       tiempoParadasMs,
       hayParadaAbierta: (paradasByEnvasado.get(envasado.id) ?? []).some((p) => !p.ended_at),
+      estimadoFin: pronostico?.estimadoFin ?? null,
+      faltaDatoPronostico: pronostico?.faltaDato ?? true,
     };
   });
 
@@ -257,6 +280,19 @@ export default async function ProcesoPage() {
                   {envasado.tiempoParadasMs > 0
                     ? durationLabel(0, envasado.tiempoParadasMs)
                     : "0 min"}
+                </p>
+                <p className="text-muted-foreground">
+                  Fin estimado:{" "}
+                  {envasado.estimadoFin ? (
+                    <>
+                      {formatDateTime(envasado.estimadoFin)}
+                      {envasado.faltaDatoPronostico && (
+                        <span className="ml-1 text-xs">(parcial)</span>
+                      )}
+                    </>
+                  ) : (
+                    "Sin datos suficientes"
+                  )}
                 </p>
               </CardContent>
             </Card>
