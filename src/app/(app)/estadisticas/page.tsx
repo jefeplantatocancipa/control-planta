@@ -460,8 +460,6 @@ export default async function EstadisticasPage({
     return referenciaDe(e)?.peso_unitario ?? null;
   }
 
-  const cutoff30d = daysAgoISO(30);
-
   // -------------------------------------------------------------------
   // Kilos producidos/empacados y las dos donas de participación se mueven
   // juntas con el mismo mes elegido (selector arriba, vía ?mes=YYYY-MM),
@@ -509,12 +507,13 @@ export default async function EstadisticasPage({
     .sort((a, b) => b.value - a.value);
 
   // -------------------------------------------------------------------
-  // Top 5 insumos de materia prima más consumidos (últimos 30 días) --
-  // mismos eventos de balance de masa de arriba, desglosados por insumo.
+  // Top 5 insumos de materia prima más consumidos, del mes elegido arriba
+  // (mismo selector que Kilos producidos/empacados) -- mismos eventos de
+  // balance de masa de arriba, desglosados por insumo.
   // -------------------------------------------------------------------
   const topInsumosMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
-    if (e.date < cutoff30d) continue;
+    if (e.date < mesRango.inicio || e.date >= mesRango.fin) continue;
     for (const i of e.insumos) {
       topInsumosMap.set(i.insumo_id, (topInsumosMap.get(i.insumo_id) ?? 0) + (Number(i.peso) || 0));
     }
@@ -875,14 +874,14 @@ export default async function EstadisticasPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Materia prima más consumida</CardTitle>
+            <CardTitle className="text-base">Materia prima más consumida ({mesRango.label})</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Insumo</TableHead>
-                  <TableHead className="text-right">Consumo (30 días)</TableHead>
+                  <TableHead className="text-right">Consumo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -895,7 +894,7 @@ export default async function EstadisticasPage({
                 {topInsumos.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      Sin consumo registrado en los últimos 30 días.
+                      Sin consumo registrado este mes.
                     </TableCell>
                   </TableRow>
                 )}
