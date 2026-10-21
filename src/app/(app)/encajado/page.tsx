@@ -30,7 +30,7 @@ export default async function EncajadoPage() {
     supabase.from("encajados").select("*").order("created_at", { ascending: false }),
     supabase
       .from("envasados")
-      .select("id, presentacion, cantidad_unidades, started_at, referencia_id"),
+      .select("id, presentacion, cantidad_unidades, started_at, referencia_id, lote"),
     supabase.from("baches").select("id, batch_code, product_id"),
     supabase.from("products").select("id, name"),
     supabase.from("encajado_estibas").select("*").order("inicio_estiba"),
@@ -93,7 +93,10 @@ export default async function EncajadoPage() {
       presentacion: envasado?.presentacion ?? "—",
       unidadesEnvasadas: envasado?.cantidad_unidades ?? 0,
       fechaEnvasado: envasado?.started_at ?? null,
-      lote: encajado.lote,
+      // El lote es el del envasado (el que ya se capturó al iniciarlo), no
+      // uno nuevo a mano acá -- mostrar/pedir otro genera confusión al
+      // tener dos lotes distintos para lo mismo.
+      lote: envasado?.lote ?? null,
       startedAt: encajado.started_at,
       endedAt: encajado.ended_at,
       estibas: estibasByEncajado.get(encajado.id) ?? [],

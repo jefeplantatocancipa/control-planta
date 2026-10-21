@@ -47,12 +47,6 @@ function IniciarEncajadoForm({ encajadoId }: { encajadoId: string }) {
   return (
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="id" value={encajadoId} />
-      <div className="flex flex-col gap-1">
-        <Label htmlFor={`lote-${encajadoId}`} className="text-xs font-normal text-muted-foreground">
-          Lote
-        </Label>
-        <Input id={`lote-${encajadoId}`} name="lote" required />
-      </div>
       <Button type="submit" size="sm" disabled={pending} className="self-start">
         {pending ? "Iniciando..." : "Iniciar encajado"}
       </Button>

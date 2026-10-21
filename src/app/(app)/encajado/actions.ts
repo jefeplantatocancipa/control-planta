@@ -12,7 +12,6 @@ export interface ActionState {
 
 const IniciarEncajadoSchema = z.object({
   id: z.string().uuid(),
-  lote: z.string().trim().min(1, "El lote es obligatorio."),
 });
 
 export async function iniciarEncajado(
@@ -23,7 +22,6 @@ export async function iniciarEncajado(
 
   const parsed = IniciarEncajadoSchema.safeParse({
     id: formData.get("id"),
-    lote: formData.get("lote"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -32,10 +30,7 @@ export async function iniciarEncajado(
   const supabase = await createClient();
   const { error } = await supabase
     .from("encajados")
-    .update({
-      lote: parsed.data.lote,
-      started_at: new Date().toISOString(),
-    })
+    .update({ started_at: new Date().toISOString() })
     .eq("id", parsed.data.id);
 
   if (error) {
