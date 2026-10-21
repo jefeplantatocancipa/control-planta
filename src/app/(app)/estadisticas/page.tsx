@@ -580,10 +580,15 @@ export default async function EstadisticasPage({
 
   // -------------------------------------------------------------------
   // Tiempo promedio de empaque por bache: duración completa de cada
-  // envasado (inicio a fin), planta completa.
+  // envasado (inicio a fin), planta completa -- del mes elegido arriba
+  // (mismo selector que Kilos producidos/empacados).
   // -------------------------------------------------------------------
   const empaqueDurations = (envasados ?? [])
-    .filter((e) => e.ended_at)
+    .filter((e) => {
+      if (!e.ended_at) return false;
+      const fecha = e.started_at.slice(0, 10);
+      return fecha >= mesRango.inicio && fecha < mesRango.fin;
+    })
     .map((e) => (new Date(e.ended_at!).getTime() - new Date(e.started_at).getTime()) / 60000);
   const avgEmpaqueMinutes =
     empaqueDurations.length > 0
@@ -620,6 +625,8 @@ export default async function EstadisticasPage({
   >();
   for (const c of envasadoCortes ?? []) {
     if (!c.ended_at) continue;
+    const fechaCorte = c.started_at.slice(0, 10);
+    if (fechaCorte < mesRango.inicio || fechaCorte >= mesRango.fin) continue;
     const horas = (new Date(c.ended_at).getTime() - new Date(c.started_at).getTime()) / 3_600_000;
     if (horas <= 0) continue;
     const unidades = unidadesPorCorte.get(c.id) ?? 0;
@@ -687,7 +694,7 @@ export default async function EstadisticasPage({
   // que arranca el primer envasado del bache hasta que se cierra el último
   // marcando "no queda más base" (volumen_restante_litros en 0), incluidos
   // los huecos entre turnos, porque es el tiempo real que tarda la planta
-  // en terminar de envasar un bache.
+  // en terminar de envasar un bache. Del mes elegido arriba.
   // -------------------------------------------------------------------
   const volumenRestanteById = new Map((todosBaches ?? []).map((b) => [b.id, b.volumen_restante_litros]));
   const envasadosPorBache = new Map<
@@ -695,6 +702,8 @@ export default async function EstadisticasPage({
     { starts: string[]; ends: (string | null)[]; unidades: number }
   >();
   for (const e of envasados ?? []) {
+    const fecha = e.started_at.slice(0, 10);
+    if (fecha < mesRango.inicio || fecha >= mesRango.fin) continue;
     const entry = envasadosPorBache.get(e.bache_id) ?? { starts: [], ends: [], unidades: 0 };
     entry.starts.push(e.started_at);
     entry.ends.push(e.ended_at);
@@ -966,7 +975,7 @@ export default async function EstadisticasPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Rendimiento de envasado</CardTitle>
+          <CardTitle className="text-base">Rendimiento de envasado ({mesRango.label})</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1072,7 +1081,7 @@ export default async function EstadisticasPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Envasado por operario</CardTitle>
+            <CardTitle className="text-base">Envasado por operario ({mesRango.label})</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {envasadoChartData.length > 0 && (
