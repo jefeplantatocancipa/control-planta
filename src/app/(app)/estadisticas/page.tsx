@@ -609,13 +609,26 @@ export default async function EstadisticasPage({
   const historialMeses = mesesEntre(HISTORIAL_INICIO_MES, mesActualStr).map((mesStr) => {
     const rango = monthRange(mesStr);
     const shortLabel = format(new Date(`${rango.inicio}T00:00:00`), "MMM", { locale: es });
+    const kgProducido = kgProducidoEnRango(rango.inicio, rango.fin);
+    const kgEmpacado = kgEmpacadoEnRango(rango.inicio, rango.fin);
+    // El mes actual usa el balance completo (inventario inicial + pendiente
+    // real en vivo, ver mermaPct arriba). Los meses anteriores no tienen
+    // ese dato (no existía la métrica todavía), así que se aproxima con
+    // producido - empacado nada más -- menos preciso, pero sirve para ver
+    // la tendencia.
+    const merma =
+      mesStr === mesActualStr
+        ? mermaPct
+        : kgProducido > 0
+          ? ((kgProducido - kgEmpacado) / kgProducido) * 100
+          : null;
     return {
       mes: mesStr,
       label: shortLabel.charAt(0).toUpperCase() + shortLabel.slice(1),
       avgPrepMin: prepPromedioEnRango(rango.inicio, rango.fin),
-      kgProducido: kgProducidoEnRango(rango.inicio, rango.fin),
-      kgEmpacado: kgEmpacadoEnRango(rango.inicio, rango.fin),
-      merma: mesStr === mesActualStr ? mermaPct : null,
+      kgProducido,
+      kgEmpacado,
+      merma,
     };
   });
 
@@ -911,7 +924,7 @@ export default async function EstadisticasPage({
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
           chart={<KpiTrendChart data={mermaHistorialChart} unit="%" />}
-          chartCaption="Solo desde oct. 2026 (primer mes con inventario inicial)"
+          chartCaption="Sep. es aproximado (producido − empacado, sin inventario inicial)"
         />
         <KpiCard
           icon={Package}
