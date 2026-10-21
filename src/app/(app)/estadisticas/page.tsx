@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OperarioBarChart } from "./operario-bar-chart";
+import { KpiTrendChart } from "./kpi-trend-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
 import { EtapasPorOperario, type EtapaOperarioRow } from "./etapas-por-operario";
@@ -78,23 +79,37 @@ function KpiCard({
   label,
   value,
   sublabel,
+  chart,
+  chartCaption,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   sublabel: ReactNode;
+  chart?: ReactNode;
+  chartCaption?: string;
 }) {
   return (
     <Card>
-      <CardContent className="flex items-start gap-3">
-        <div className="rounded-lg bg-primary/10 p-2 text-primary">
-          <Icon className="size-5" />
+      <CardContent className="flex flex-col gap-2">
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-primary/10 p-2 text-primary">
+            <Icon className="size-5" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            <span className="text-xs text-muted-foreground">{sublabel}</span>
+          </div>
         </div>
-        <div className="flex flex-col">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          <span className="text-2xl font-semibold tabular-nums">{value}</span>
-          <span className="text-xs text-muted-foreground">{sublabel}</span>
-        </div>
+        {chart && (
+          <div className="flex flex-col gap-1">
+            {chart}
+            {chartCaption && (
+              <span className="text-[11px] text-muted-foreground">{chartCaption}</span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -555,6 +570,70 @@ export default async function EstadisticasPage({
   const kgMermaMes = inventarioInicialMes + kgProducidosMes - kgPendienteActual - kgEmpacadosTotalMes;
   const mermaPct = kgProducidosMes > 0 ? (kgMermaMes / kgProducidosMes) * 100 : null;
 
+  // -------------------------------------------------------------------
+  // Historial mes a mes para las 4 tarjetas de arriba -- independiente del
+  // selector de mes (como la tendencia semanal de más abajo), arranca en
+  // el primer mes completo que tenemos (septiembre 2026) y de ahí en más
+  // se extiende solo con cada mes que pasa. La merma solo se puede
+  // calcular para el mes actual: los meses ya cerrados antes de octubre
+  // 2026 no tienen un inventario inicial conocido (no existía esta
+  // métrica todavía), así que quedan fuera de esa gráfica en particular.
+  // -------------------------------------------------------------------
+  const HISTORIAL_INICIO_MES = "2026-09";
+  const mesActualStr = format(new Date(), "yyyy-MM");
+  function mesesEntre(desde: string, hasta: string) {
+    const out: string[] = [];
+    let [y, m] = desde.split("-").map(Number);
+    const [hy, hm] = hasta.split("-").map(Number);
+    while (y < hy || (y === hy && m <= hm)) {
+      out.push(`${y}-${String(m).padStart(2, "0")}`);
+      m += 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
+    }
+    return out;
+  }
+  function prepPromedioEnRango(desde: string, hasta: string) {
+    const durs = (bachesCerrados ?? [])
+      .filter((b) => b.completed_at)
+      .filter((b) => {
+        const fecha = b.completed_at!.slice(0, 10);
+        return fecha >= desde && fecha < hasta;
+      })
+      .map((b) => (new Date(b.completed_at!).getTime() - new Date(b.started_at).getTime()) / 60000);
+    return durs.length > 0 ? durs.reduce((s, v) => s + v, 0) / durs.length : null;
+  }
+
+  const historialMeses = mesesEntre(HISTORIAL_INICIO_MES, mesActualStr).map((mesStr) => {
+    const rango = monthRange(mesStr);
+    const shortLabel = format(new Date(`${rango.inicio}T00:00:00`), "MMM", { locale: es });
+    return {
+      mes: mesStr,
+      label: shortLabel.charAt(0).toUpperCase() + shortLabel.slice(1),
+      avgPrepMin: prepPromedioEnRango(rango.inicio, rango.fin),
+      kgProducido: kgProducidoEnRango(rango.inicio, rango.fin),
+      kgEmpacado: kgEmpacadoEnRango(rango.inicio, rango.fin),
+      merma: mesStr === mesActualStr ? mermaPct : null,
+    };
+  });
+
+  const prepHistorialChart = historialMeses
+    .filter((m): m is typeof m & { avgPrepMin: number } => m.avgPrepMin != null)
+    .map((m) => ({ label: m.label, value: Math.round((m.avgPrepMin / 60) * 10) / 10 }));
+  const producidoHistorialChart = historialMeses.map((m) => ({
+    label: m.label,
+    value: Math.round(m.kgProducido * 10) / 10,
+  }));
+  const empacadoHistorialChart = historialMeses.map((m) => ({
+    label: m.label,
+    value: Math.round(m.kgEmpacado * 10) / 10,
+  }));
+  const mermaHistorialChart = historialMeses
+    .filter((m): m is typeof m & { merma: number } => m.merma != null)
+    .map((m) => ({ label: m.label, value: Math.round(m.merma * 10) / 10 }));
+
   const produccionPorProductoMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
     if (e.date < mesRango.inicio || e.date >= mesRango.fin) continue;
@@ -824,12 +903,20 @@ export default async function EstadisticasPage({
           label="Tiempo promedio de preparación"
           value={minutesLabel(avgPrepMinutes)}
           sublabel={`${prepDurations.length} bache${prepDurations.length === 1 ? "" : "s"} cerrados`}
+          chart={
+            <KpiTrendChart
+              data={prepHistorialChart}
+              formatValue={(v) => `${v.toLocaleString("es-CO")} h`}
+            />
+          }
         />
         <KpiCard
           icon={Percent}
           label="Merma de producción"
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
+          chart={<KpiTrendChart data={mermaHistorialChart} formatValue={(v) => `${v.toLocaleString("es-CO")}%`} />}
+          chartCaption="Solo desde oct. 2026 (primer mes con inventario inicial)"
         />
         <KpiCard
           icon={Package}
@@ -845,6 +932,12 @@ export default async function EstadisticasPage({
               mesRango.label
             )
           }
+          chart={
+            <KpiTrendChart
+              data={producidoHistorialChart}
+              formatValue={(v) => `${v.toLocaleString("es-CO")} kg`}
+            />
+          }
         />
         <KpiCard
           icon={PackageCheck}
@@ -858,6 +951,12 @@ export default async function EstadisticasPage({
             ) : (
               mesRango.label
             )
+          }
+          chart={
+            <KpiTrendChart
+              data={empacadoHistorialChart}
+              formatValue={(v) => `${v.toLocaleString("es-CO")} kg`}
+            />
           }
         />
       </div>
