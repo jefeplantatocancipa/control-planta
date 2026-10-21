@@ -137,7 +137,7 @@ export default async function EstadisticasPage({
     // Para "kg producidos" hace falta CUALQUIER bache (no solo los ya
     // completados): la última etapa con checklist de insumos puede cerrarse
     // antes de que el bache entero se marque como terminado.
-    supabase.from("baches").select("id, product_id, volumen_restante_litros"),
+    supabase.from("baches").select("id, product_id, status, volumen_restante_litros"),
     supabase.from("insumos").select("id, name"),
     supabase
       .from("envasados")
@@ -500,21 +500,59 @@ export default async function EstadisticasPage({
   const kgEmpacadosTotalMes = kgEmpacadosMes + kgCremadoMes;
   const kgProducidosNormalMes = kgProducidosMes - kgCremadoMes;
 
-  // Merma de producción: de lo producido, lo que no terminó empacado NI
-  // sigue pendiente de empacar (bache todavía con volumen_restante_litros
-  // sin confirmar) es masa perdida en el proceso (derrames, rechazos,
-  // diferencias de pesaje). Solo cuenta como "pendiente" lo de productos
-  // que sí se envasan -- el cremado ya quedó contado como terminado en
-  // kgCremadoMes, nunca como pendiente.
-  const kgPendientesPorEnvasarMes = kgProducidoEvents
-    .filter(
-      (e) =>
-        e.date >= mesRango.inicio &&
-        e.date < mesRango.fin &&
-        requiereEnvasadoById.get(e.productId) !== false,
-    )
-    .reduce((s, e) => s + Math.max(0, volumenRestanteById.get(e.bacheId) ?? 0), 0);
-  const kgMermaMes = kgProducidosMes - kgPendientesPorEnvasarMes - kgEmpacadosTotalMes;
+  // -------------------------------------------------------------------
+  // Merma de producción: balance de masa tipo inventario.
+  //   inventario inicial del mes + producido el mes - empacado el mes
+  //   = lo que debería quedar pendiente de empacar.
+  // Si lo que REALMENTE queda pendiente (volumen_restante_litros de todos
+  // los baches vivos, dato en vivo) es menos que eso, la diferencia es
+  // masa perdida en el proceso (derrames, rechazos, diferencias de
+  // pesaje). El cremado nunca cuenta como "pendiente" -- ya se cuenta
+  // como terminado en cuanto se produce (no pasa por envasado).
+  //
+  // El inventario inicial del primer mes de esta métrica (octubre 2026)
+  // se cargó a mano porque el sistema no tenía cómo saberlo antes de
+  // empezar a medir esto; de ahí en adelante se calcula solo, arrastrando
+  // producido/empacado desde esa fecha de referencia.
+  // -------------------------------------------------------------------
+  const INVENTARIO_INICIAL_REFERENCIA_KG = 6000;
+  const INVENTARIO_INICIAL_REFERENCIA_FECHA = "2026-10-01";
+
+  function kgProducidoEnRango(desde: string, hasta: string) {
+    return kgProducidoEvents
+      .filter((e) => e.date >= desde && e.date < hasta)
+      .reduce((s, e) => s + e.kg, 0);
+  }
+  function kgEmpacadoEnRango(desde: string, hasta: string) {
+    const envasado = (envasados ?? [])
+      .filter((e) => {
+        const fecha = e.started_at.slice(0, 10);
+        return fecha >= desde && fecha < hasta;
+      })
+      .reduce((s, e) => {
+        const peso = pesoUnitarioDe(e);
+        return peso ? s + (e.cantidad_unidades * peso) / 1000 : s;
+      }, 0);
+    const cremado = kgProducidoEvents
+      .filter(
+        (e) => e.date >= desde && e.date < hasta && requiereEnvasadoById.get(e.productId) === false,
+      )
+      .reduce((s, e) => s + e.kg, 0);
+    return envasado + cremado;
+  }
+
+  const inventarioInicialMes =
+    mesRango.inicio <= INVENTARIO_INICIAL_REFERENCIA_FECHA
+      ? INVENTARIO_INICIAL_REFERENCIA_KG
+      : INVENTARIO_INICIAL_REFERENCIA_KG +
+        kgProducidoEnRango(INVENTARIO_INICIAL_REFERENCIA_FECHA, mesRango.inicio) -
+        kgEmpacadoEnRango(INVENTARIO_INICIAL_REFERENCIA_FECHA, mesRango.inicio);
+
+  const kgPendienteActual = (todosBaches ?? [])
+    .filter((b) => b.status !== "cancelado" && requiereEnvasadoById.get(b.product_id) !== false)
+    .reduce((s, b) => s + Math.max(0, b.volumen_restante_litros ?? 0), 0);
+
+  const kgMermaMes = inventarioInicialMes + kgProducidosMes - kgPendienteActual - kgEmpacadosTotalMes;
   const mermaPct = kgProducidosMes > 0 ? (kgMermaMes / kgProducidosMes) * 100 : null;
 
   const produccionPorProductoMap = new Map<string, number>();
