@@ -903,19 +903,14 @@ export default async function EstadisticasPage({
           label="Tiempo promedio de preparación"
           value={minutesLabel(avgPrepMinutes)}
           sublabel={`${prepDurations.length} bache${prepDurations.length === 1 ? "" : "s"} cerrados`}
-          chart={
-            <KpiTrendChart
-              data={prepHistorialChart}
-              formatValue={(v) => `${v.toLocaleString("es-CO")} h`}
-            />
-          }
+          chart={<KpiTrendChart data={prepHistorialChart} unit="h" />}
         />
         <KpiCard
           icon={Percent}
           label="Merma de producción"
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
-          chart={<KpiTrendChart data={mermaHistorialChart} formatValue={(v) => `${v.toLocaleString("es-CO")}%`} />}
+          chart={<KpiTrendChart data={mermaHistorialChart} unit="%" />}
           chartCaption="Solo desde oct. 2026 (primer mes con inventario inicial)"
         />
         <KpiCard
@@ -932,12 +927,7 @@ export default async function EstadisticasPage({
               mesRango.label
             )
           }
-          chart={
-            <KpiTrendChart
-              data={producidoHistorialChart}
-              formatValue={(v) => `${v.toLocaleString("es-CO")} kg`}
-            />
-          }
+          chart={<KpiTrendChart data={producidoHistorialChart} unit="kg" />}
         />
         <KpiCard
           icon={PackageCheck}
@@ -952,12 +942,7 @@ export default async function EstadisticasPage({
               mesRango.label
             )
           }
-          chart={
-            <KpiTrendChart
-              data={empacadoHistorialChart}
-              formatValue={(v) => `${v.toLocaleString("es-CO")} kg`}
-            />
-          }
+          chart={<KpiTrendChart data={empacadoHistorialChart} unit="kg" />}
         />
       </div>
 

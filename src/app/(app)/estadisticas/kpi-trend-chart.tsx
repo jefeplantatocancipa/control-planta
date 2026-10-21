@@ -9,13 +9,15 @@ export interface KpiTrendDatum {
 
 // Mini gráfica mes a mes para debajo de una KpiCard -- mismo tamaño en
 // las 4 tarjetas (altura fija, sin ejes ni grilla) para que el conjunto
-// quede parejo.
+// quede parejo. "unit" es un string (no una función) porque este
+// componente corre en el cliente y recibe los datos desde un Server
+// Component -- no se pueden pasar funciones a través de ese límite.
 export function KpiTrendChart({
   data,
-  formatValue,
+  unit,
 }: {
   data: KpiTrendDatum[];
-  formatValue: (value: number) => string;
+  unit: string;
 }) {
   return (
     <ResponsiveContainer width="100%" height={72}>
@@ -36,7 +38,7 @@ export function KpiTrendChart({
             fontSize: 12,
           }}
           labelFormatter={() => ""}
-          formatter={(value) => formatValue(Number(value))}
+          formatter={(value) => `${Number(value).toLocaleString("es-CO")} ${unit}`}
         />
         <Bar dataKey="value" fill="var(--chart-4)" radius={[3, 3, 0, 0]} />
       </BarChart>
