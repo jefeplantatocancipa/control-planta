@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Timer } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Percent } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
@@ -34,6 +34,10 @@ function minutesLabel(minutes: number | null) {
 }
 
 function kg(value: number) {
+  return (Math.round(value * 10) / 10).toLocaleString("es-CO");
+}
+
+function pct(value: number) {
   return (Math.round(value * 10) / 10).toLocaleString("es-CO");
 }
 
@@ -160,6 +164,7 @@ export default async function EstadisticasPage({
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const requiereEnvasadoById = new Map((products ?? []).map((p) => [p.id, p.requiere_envasado]));
+  const volumenRestanteById = new Map((todosBaches ?? []).map((b) => [b.id, b.volumen_restante_litros]));
 
   // -------------------------------------------------------------------
   // Ocupación de equipos: promedio POR DÍA (horas ocupado/desuso de un día
@@ -242,8 +247,6 @@ export default async function EstadisticasPage({
     string,
     Map<string, { stageName: string; sequenceOrder: number; sumaMin: number; cantidad: number }>
   >();
-  let totalEtapasCompletadas = 0;
-  let sumaEtapasMin = 0;
   for (const r of stageRecordsAll ?? []) {
     if (!r.ended_at) continue;
     const productId = bacheProductById.get(r.bache_id);
@@ -261,10 +264,7 @@ export default async function EstadisticasPage({
     entry.cantidad += 1;
     porEtapa.set(r.stage_template_id, entry);
     etapaPorProductoMap.set(productId, porEtapa);
-    totalEtapasCompletadas += 1;
-    sumaEtapasMin += minutos;
   }
-  const avgEtapaMinutes = totalEtapasCompletadas > 0 ? sumaEtapasMin / totalEtapasCompletadas : null;
 
   const duracionPorEtapaYProducto = Array.from(etapaPorProductoMap.entries())
     .sort(([a], [b]) =>
@@ -345,6 +345,7 @@ export default async function EstadisticasPage({
   }
 
   const kgProducidoEvents: {
+    bacheId: string;
     productId: string;
     kg: number;
     date: string;
@@ -381,6 +382,7 @@ export default async function EstadisticasPage({
     }
     if (best) {
       kgProducidoEvents.push({
+        bacheId: bache.id,
         productId: bache.product_id,
         kg: best.kg,
         date: best.date,
@@ -496,6 +498,24 @@ export default async function EstadisticasPage({
     )
     .reduce((s, e) => s + e.kg, 0);
   const kgEmpacadosTotalMes = kgEmpacadosMes + kgCremadoMes;
+  const kgProducidosNormalMes = kgProducidosMes - kgCremadoMes;
+
+  // Merma de producción: de lo producido, lo que no terminó empacado NI
+  // sigue pendiente de empacar (bache todavía con volumen_restante_litros
+  // sin confirmar) es masa perdida en el proceso (derrames, rechazos,
+  // diferencias de pesaje). Solo cuenta como "pendiente" lo de productos
+  // que sí se envasan -- el cremado ya quedó contado como terminado en
+  // kgCremadoMes, nunca como pendiente.
+  const kgPendientesPorEnvasarMes = kgProducidoEvents
+    .filter(
+      (e) =>
+        e.date >= mesRango.inicio &&
+        e.date < mesRango.fin &&
+        requiereEnvasadoById.get(e.productId) !== false,
+    )
+    .reduce((s, e) => s + Math.max(0, volumenRestanteById.get(e.bacheId) ?? 0), 0);
+  const kgMermaMes = kgProducidosMes - kgPendientesPorEnvasarMes - kgEmpacadosTotalMes;
+  const mermaPct = kgProducidosMes > 0 ? (kgMermaMes / kgProducidosMes) * 100 : null;
 
   const produccionPorProductoMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
@@ -712,7 +732,6 @@ export default async function EstadisticasPage({
   // los huecos entre turnos, porque es el tiempo real que tarda la planta
   // en terminar de envasar un bache. Del mes elegido arriba.
   // -------------------------------------------------------------------
-  const volumenRestanteById = new Map((todosBaches ?? []).map((b) => [b.id, b.volumen_restante_litros]));
   const envasadosPorBache = new Map<
     string,
     { starts: string[]; ends: (string | null)[]; unidades: number }
@@ -769,16 +788,25 @@ export default async function EstadisticasPage({
           sublabel={`${prepDurations.length} bache${prepDurations.length === 1 ? "" : "s"} cerrados`}
         />
         <KpiCard
-          icon={Timer}
-          label="Tiempo promedio por etapa"
-          value={minutesLabel(avgEtapaMinutes)}
-          sublabel={`${totalEtapasCompletadas} etapas completadas`}
+          icon={Percent}
+          label="Merma de producción"
+          value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
+          sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
         />
         <KpiCard
           icon={Package}
           label="Kilos producidos"
           value={`${kg(kgProducidosMes)} kg`}
-          sublabel={mesRango.label}
+          sublabel={
+            kgCremadoMes > 0 ? (
+              <>
+                {mesRango.label} · Producción {kg(kgProducidosNormalMes)} kg + Cremado{" "}
+                {kg(kgCremadoMes)} kg
+              </>
+            ) : (
+              mesRango.label
+            )
+          }
         />
         <KpiCard
           icon={PackageCheck}
