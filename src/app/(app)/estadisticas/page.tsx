@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Timer } from "lucide-react";
 import { format } from "date-fns";
@@ -78,7 +78,7 @@ function KpiCard({
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
-  sublabel: string;
+  sublabel: ReactNode;
 }) {
   return (
     <Card>
@@ -139,7 +139,7 @@ export default async function EstadisticasPage({
       .from("envasados")
       .select("id, bache_id, cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
-    supabase.from("products").select("id, name"),
+    supabase.from("products").select("id, name, requiere_envasado"),
     supabase
       .from("bache_stage_records")
       .select("bache_id, stage_template_id, operario_id, started_at, ended_at, parameters"),
@@ -159,6 +159,7 @@ export default async function EstadisticasPage({
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
+  const requiereEnvasadoById = new Map((products ?? []).map((p) => [p.id, p.requiere_envasado]));
 
   // -------------------------------------------------------------------
   // Ocupación de equipos: promedio POR DÍA (horas ocupado/desuso de un día
@@ -480,6 +481,22 @@ export default async function EstadisticasPage({
       return peso ? s + (e.cantidad_unidades * peso) / 1000 : s;
     }, 0);
 
+  // Productos que no se envasan (ej. cremado, requiere_envasado = false) no
+  // generan filas en "envasados" -- para ellos, "terminado" = el kg
+  // resultante del balance de masa (mismo evento que kgProducidosMes). Se
+  // suma aparte a "Kilos empacados" (es lo más parecido a su "producto
+  // terminado") pero sin mezclarlo con el envasado real, para no perder la
+  // distinción de qué es cada cosa.
+  const kgCremadoMes = kgProducidoEvents
+    .filter(
+      (e) =>
+        e.date >= mesRango.inicio &&
+        e.date < mesRango.fin &&
+        requiereEnvasadoById.get(e.productId) === false,
+    )
+    .reduce((s, e) => s + e.kg, 0);
+  const kgEmpacadosTotalMes = kgEmpacadosMes + kgCremadoMes;
+
   const produccionPorProductoMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
     if (e.date < mesRango.inicio || e.date >= mesRango.fin) continue;
@@ -766,8 +783,16 @@ export default async function EstadisticasPage({
         <KpiCard
           icon={PackageCheck}
           label="Kilos empacados"
-          value={`${kg(kgEmpacadosMes)} kg`}
-          sublabel={mesRango.label}
+          value={`${kg(kgEmpacadosTotalMes)} kg`}
+          sublabel={
+            kgCremadoMes > 0 ? (
+              <>
+                {mesRango.label} · Envasado {kg(kgEmpacadosMes)} kg + Cremado {kg(kgCremadoMes)} kg
+              </>
+            ) : (
+              mesRango.label
+            )
+          }
         />
       </div>
 
