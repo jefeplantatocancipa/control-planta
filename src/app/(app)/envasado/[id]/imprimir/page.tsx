@@ -5,13 +5,15 @@ import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
 import { PrintButton } from "@/components/print-button";
 
-function durationLabel(startedAt: string, endedAt: string) {
-  const minutes = Math.round(
-    (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000,
-  );
+function durationLabelMs(ms: number) {
+  const minutes = Math.round(ms / 60000);
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
+}
+
+function durationLabel(startedAt: string, endedAt: string) {
+  return durationLabelMs(new Date(endedAt).getTime() - new Date(startedAt).getTime());
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -65,6 +67,12 @@ export default async function EnvasadoReportPage({
       .order("started_at"),
     supabase.from("turnos").select("*"),
   ]);
+
+  const { data: paradas } = await supabase
+    .from("envasado_paradas")
+    .select("*")
+    .eq("envasado_id", envasado.id)
+    .order("started_at");
 
   const corteIds = (cortes ?? []).map((c) => c.id);
   const [{ data: lecturas }, { data: estibas }, { data: corteFirmas }] = await Promise.all([
@@ -123,6 +131,12 @@ export default async function EnvasadoReportPage({
   const totalTimeLabel = envasado.ended_at
     ? durationLabel(envasado.started_at, envasado.ended_at)
     : "En curso";
+
+  const tiempoParadasMs = (paradas ?? []).reduce((sum, p) => {
+    const end = p.ended_at ?? new Date().toISOString();
+    return sum + (new Date(end).getTime() - new Date(p.started_at).getTime());
+  }, 0);
+  const tiempoParadasLabel = durationLabelMs(tiempoParadasMs);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3 bg-white p-4 text-xs print:p-0">
@@ -187,12 +201,48 @@ export default async function EnvasadoReportPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         <StatTile label="Tiempo total" value={totalTimeLabel} />
+        <StatTile label="Tiempo de paradas" value={tiempoParadasLabel} />
         <StatTile label="Unidades envasadas" value={String(totalUnidades)} />
         <StatTile label="Desperdicio" value={String(totalDesperdicio)} />
         <StatTile label="Tasa de mermas" value={`${tasaMermas}%`} />
       </div>
+
+      {paradas && paradas.length > 0 && (
+        <div className="text-[10px]">
+          <p className="-mx-1.5 mb-1 rounded bg-primary/10 px-1.5 py-1 text-xs font-bold tracking-wide text-primary">
+            Paradas
+          </p>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-0.5 pr-2 font-normal">Inicio</th>
+                <th className="py-0.5 pr-2 font-normal">Fin</th>
+                <th className="py-0.5 pr-2 font-normal">Duración</th>
+                <th className="py-0.5 font-normal">Motivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paradas.map((p) => (
+                <tr key={p.id} className="border-b border-dashed">
+                  <td className="py-0.5 pr-2 font-medium">{formatTime(p.started_at)}</td>
+                  <td className="py-0.5 pr-2">
+                    {p.ended_at ? formatTime(p.ended_at) : "En curso"}
+                  </td>
+                  <td className="py-0.5 pr-2">
+                    {durationLabelMs(
+                      new Date(p.ended_at ?? new Date().toISOString()).getTime() -
+                        new Date(p.started_at).getTime(),
+                    )}
+                  </td>
+                  <td className="py-0.5">{p.motivo ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {insumosUso && insumosUso.length > 0 && (
         <div className="text-[10px]">
