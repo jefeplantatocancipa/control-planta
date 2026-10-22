@@ -124,9 +124,16 @@ export default async function ResumenDiaPage({
     productionOrderIds.length > 0
       ? supabase
           .from("baches")
-          .select("id, production_order_id, status, volumen_total_litros")
+          .select("id, production_order_id, product_id, status")
           .in("production_order_id", productionOrderIds)
-      : Promise.resolve({ data: [] as { id: string; production_order_id: string | null; status: string; volumen_total_litros: number | null }[] }),
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            production_order_id: string | null;
+            product_id: string;
+            status: string;
+          }[],
+        }),
     envasadoOrderIds.length > 0
       ? supabase
           .from("envasados")
@@ -152,10 +159,82 @@ export default async function ResumenDiaPage({
       : Promise.resolve({ data: [] as { corte_id: string; unidades_por_estiba: number | null }[] }),
   ]);
 
+  const bacheIds = (baches ?? []).map((b) => b.id);
+  const [{ data: stageTemplates }, { data: stageRecords }] = await Promise.all([
+    supabase
+      .from("process_stage_templates")
+      .select("id, product_id, sequence_order, captures_insumos")
+      .eq("active", true),
+    bacheIds.length > 0
+      ? supabase
+          .from("bache_stage_records")
+          .select("bache_id, stage_template_id, ended_at, parameters")
+          .in("bache_id", bacheIds)
+      : Promise.resolve({
+          data: [] as {
+            bache_id: string;
+            stage_template_id: string;
+            ended_at: string | null;
+            parameters: import("@/lib/supabase/types").StageRecordParameters;
+          }[],
+        }),
+  ]);
+
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
   const referenciasById = new Map((envasadoReferencias ?? []).map((r) => [r.id, r]));
   const profileNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const turnosList = turnos ?? [];
+
+  // ---------------------------------------------------------------------
+  // Balance de masa por bache -- mismo criterio que "Kilos producidos" en
+  // Estadísticas/Cumplimiento: los kg de insumos de la ÚLTIMA etapa con
+  // checklist de insumos que quedó cerrada (de la secuencia propia del
+  // producto, o la compartida si no tiene propia), no el volumen nominal
+  // del bache.
+  // ---------------------------------------------------------------------
+  const stagesByProduct = new Map<string, { id: string; sequence_order: number; captures_insumos: boolean }[]>();
+  const defaultStages: { id: string; sequence_order: number; captures_insumos: boolean }[] = [];
+  for (const s of stageTemplates ?? []) {
+    if (s.product_id) {
+      const arr = stagesByProduct.get(s.product_id) ?? [];
+      arr.push(s);
+      stagesByProduct.set(s.product_id, arr);
+    } else {
+      defaultStages.push(s);
+    }
+  }
+  function stagesFor(productId: string) {
+    const own = stagesByProduct.get(productId);
+    return own && own.length > 0 ? own : defaultStages;
+  }
+  const recordsByBache = new Map<string, NonNullable<typeof stageRecords>>();
+  for (const r of stageRecords ?? []) {
+    const arr = recordsByBache.get(r.bache_id) ?? [];
+    arr.push(r);
+    recordsByBache.set(r.bache_id, arr);
+  }
+  const kgPorBache = new Map<string, number>();
+  for (const bache of baches ?? []) {
+    const records = recordsByBache.get(bache.id) ?? [];
+    const stageById = new Map(stagesFor(bache.product_id).map((s) => [s.id, s]));
+    let best: { order: number; kg: number } | null = null;
+    for (const record of records) {
+      if (!record.ended_at) continue;
+      const stage = stageById.get(record.stage_template_id);
+      if (!stage || !stage.captures_insumos) continue;
+      const insumos = record.parameters?.insumos;
+      if (!Array.isArray(insumos)) continue;
+      if (best && stage.sequence_order <= best.order) continue;
+      const baseOtroBache = record.parameters?.base_otro_bache;
+      const kg =
+        insumos.reduce((sum, i) => sum + (Number(i.peso) || 0), 0) +
+        (Array.isArray(baseOtroBache)
+          ? baseOtroBache.reduce((sum, b) => sum + (Number(b.cantidad) || 0), 0)
+          : 0);
+      best = { order: stage.sequence_order, kg };
+    }
+    if (best) kgPorBache.set(bache.id, best.kg);
+  }
 
   // ---------------------------------------------------------------------
   // Baches: el turno se asigna según la HORA PLANEADA de inicio (no la
@@ -172,17 +251,15 @@ export default async function ResumenDiaPage({
 
   const bachesPlan = (productionOrders ?? []).map((order) => {
     const realList = bachesPorOrder.get(order.id) ?? [];
-    const reales = realList.filter((b) => b.status !== "cancelado").length;
-    const volumenReal = realList
-      .filter((b) => b.status !== "cancelado")
-      .reduce((sum, b) => sum + (b.volumen_total_litros ?? 0), 0);
-    const planeados = order.baches_planeados;
+    const noCancelados = realList.filter((b) => b.status !== "cancelado");
+    // "Reales" es el balance de masa de verdad (kg pesados de insumos),
+    // no el volumen nominal con el que se creó el bache -- mismo criterio
+    // que "Kilos producidos" en Estadísticas/Cumplimiento.
+    const kgReal = noCancelados.reduce((sum, b) => sum + (kgPorBache.get(b.id) ?? 0), 0);
     const pct =
-      planeados && planeados > 0
-        ? Math.round((reales / planeados) * 100)
-        : order.planned_quantity && order.planned_quantity > 0
-          ? Math.round((volumenReal / order.planned_quantity) * 100)
-          : null;
+      order.planned_quantity && order.planned_quantity > 0
+        ? Math.round((kgReal / order.planned_quantity) * 100)
+        : null;
     const turnoId = order.hora_inicio_planeada
       ? turnoForHora(horaBogota(order.hora_inicio_planeada), turnosList)
       : null;
@@ -191,10 +268,9 @@ export default async function ResumenDiaPage({
       productName: productNames.get(order.product_id) ?? "—",
       ordenCodigo: order.orden_codigo,
       horaPlaneada: order.hora_inicio_planeada,
-      planeados,
       plannedQuantity: order.planned_quantity,
       unit: order.unit,
-      reales,
+      kgReal,
       pct,
       turnoId,
     };
@@ -361,9 +437,11 @@ export default async function ResumenDiaPage({
                           <TableCell className="font-medium">{b.productName}</TableCell>
                           <TableCell>{b.ordenCodigo ?? "—"}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {b.planeados ?? (b.plannedQuantity ? `${b.plannedQuantity} ${b.unit}` : "—")}
+                            {b.plannedQuantity ? `${b.plannedQuantity} ${b.unit}` : "—"}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">{b.reales}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {b.kgReal > 0 ? `${Math.round(b.kgReal * 10) / 10} ${b.unit}` : "—"}
+                          </TableCell>
                           <TableCell className="text-right">
                             <Badge className={pctBadgeClass(b.pct)}>
                               {b.pct != null ? `${b.pct}%` : "—"}
