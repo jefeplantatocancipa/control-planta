@@ -181,3 +181,46 @@ export async function finalizarEncajado(
   revalidatePath("/encajado");
   return { success: true };
 }
+
+// Deshace un "Finalizar encajado" hecho por error: vuelve a dejarlo en
+// curso (sin tocar started_at, para no perder cuándo arrancó de verdad).
+// A diferencia de envasado, finalizar un encajado no genera consumo de
+// inventario ni otro efecto secundario, así que reabrirlo es solo limpiar
+// ended_at.
+export async function reabrirEncajado(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = IdSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: encajado } = await supabase
+    .from("encajados")
+    .select("ended_at")
+    .eq("id", parsed.data.id)
+    .single();
+  if (!encajado) {
+    return { error: "No se encontró el encajado." };
+  }
+  if (!encajado.ended_at) {
+    return { error: "Este encajado ya está en curso." };
+  }
+
+  const { error } = await supabase
+    .from("encajados")
+    .update({ ended_at: null })
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo reabrir el encajado." };
+  }
+
+  revalidatePath("/encajado");
+  return { success: true };
+}

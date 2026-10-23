@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { EncajadoCard, type EstibaDisplay } from "./encajado-card";
 import { DeleteButton } from "@/components/delete-button";
+import { ReabrirEncajadoButton } from "./reabrir-encajado-button";
 import { deleteEncajado } from "./actions";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 
@@ -160,6 +161,7 @@ export default async function EncajadoPage() {
               <TableHead>Unidades empacadas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
+              {canExecute && <TableHead className="text-right">Reabrir</TableHead>}
               {canDelete && <TableHead className="sticky right-0 bg-background" />}
             </TableRow>
           </TableHeader>
@@ -183,6 +185,11 @@ export default async function EncajadoPage() {
                 </TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
+                {canExecute && (
+                  <TableCell className="text-right">
+                    <ReabrirEncajadoButton id={c.id} />
+                  </TableCell>
+                )}
                 {canDelete && (
                   <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
                     <DeleteButton
@@ -198,7 +205,7 @@ export default async function EncajadoPage() {
             {finalizados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canDelete ? 11 : 10}
+                  colSpan={10 + (canExecute ? 1 : 0) + (canDelete ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin encajados finalizados todavía.
