@@ -34,6 +34,8 @@ export interface EncajadoDisplay {
   endedAt: string | null;
   estibas: EstibaDisplay[];
   multiempaque: number | null;
+  unidadesSueltas: number;
+  unidadesAveriadas: number;
   canDelete?: boolean;
   canExecute?: boolean;
 }
@@ -123,6 +125,42 @@ function FinalizarEncajadoForm({ encajadoId }: { encajadoId: string }) {
   return (
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="id" value={encajadoId} />
+      <div className="flex gap-2">
+        <div className="flex flex-col gap-1">
+          <Label
+            htmlFor={`sueltas-${encajadoId}`}
+            className="text-xs font-normal text-muted-foreground"
+          >
+            Unidades sueltas
+          </Label>
+          <Input
+            id={`sueltas-${encajadoId}`}
+            name="unidades_sueltas"
+            type="number"
+            step="1"
+            min="0"
+            defaultValue={0}
+            className="w-28"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label
+            htmlFor={`averiadas-${encajadoId}`}
+            className="text-xs font-normal text-muted-foreground"
+          >
+            Unidades averiadas
+          </Label>
+          <Input
+            id={`averiadas-${encajadoId}`}
+            name="unidades_averiadas"
+            type="number"
+            step="1"
+            min="0"
+            defaultValue={0}
+            className="w-28"
+          />
+        </div>
+      </div>
       <Button type="submit" size="sm" disabled={pending} className="self-start">
         {pending ? "Finalizando..." : "Finalizar encajado"}
       </Button>

@@ -102,6 +102,8 @@ export default async function EncajadoPage() {
       endedAt: encajado.ended_at,
       estibas: estibasByEncajado.get(encajado.id) ?? [],
       multiempaque: multiempaqueDe(envasado),
+      unidadesSueltas: encajado.unidades_sueltas,
+      unidadesAveriadas: encajado.unidades_averiadas,
       canDelete,
       canExecute,
     };
@@ -159,6 +161,8 @@ export default async function EncajadoPage() {
               <TableHead>Estibas</TableHead>
               <TableHead>Cajas</TableHead>
               <TableHead>Unidades empacadas</TableHead>
+              <TableHead>Sueltas</TableHead>
+              <TableHead>Averiadas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
               {canExecute && <TableHead className="text-right">Reabrir</TableHead>}
@@ -183,6 +187,8 @@ export default async function EncajadoPage() {
                       c.multiempaque
                     : "—"}
                 </TableCell>
+                <TableCell>{c.unidadesSueltas}</TableCell>
+                <TableCell>{c.unidadesAveriadas}</TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
                 {canExecute && (
@@ -205,7 +211,7 @@ export default async function EncajadoPage() {
             {finalizados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={10 + (canExecute ? 1 : 0) + (canDelete ? 1 : 0)}
+                  colSpan={12 + (canExecute ? 1 : 0) + (canDelete ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin encajados finalizados todavía.

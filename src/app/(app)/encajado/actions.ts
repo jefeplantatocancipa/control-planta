@@ -146,15 +146,25 @@ export async function finalizarEstibaEncajado(
   return { success: true };
 }
 
+const FinalizarEncajadoSchema = z.object({
+  id: z.string().uuid(),
+  unidades_sueltas: z.coerce.number().int().min(0, "No puede ser negativo."),
+  unidades_averiadas: z.coerce.number().int().min(0, "No puede ser negativo."),
+});
+
 export async function finalizarEncajado(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["jefe_planta", "supervisor"]);
 
-  const parsed = IdSchema.safeParse({ id: formData.get("id") });
+  const parsed = FinalizarEncajadoSchema.safeParse({
+    id: formData.get("id"),
+    unidades_sueltas: formData.get("unidades_sueltas") || 0,
+    unidades_averiadas: formData.get("unidades_averiadas") || 0,
+  });
   if (!parsed.success) {
-    return { error: "Datos inválidos." };
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
   const supabase = await createClient();
@@ -171,7 +181,11 @@ export async function finalizarEncajado(
 
   const { error } = await supabase
     .from("encajados")
-    .update({ ended_at: new Date().toISOString() })
+    .update({
+      ended_at: new Date().toISOString(),
+      unidades_sueltas: parsed.data.unidades_sueltas,
+      unidades_averiadas: parsed.data.unidades_averiadas,
+    })
     .eq("id", parsed.data.id);
 
   if (error) {

@@ -792,6 +792,8 @@ export interface Database {
           lote: string | null;
           started_at: string | null;
           ended_at: string | null;
+          unidades_sueltas: number;
+          unidades_averiadas: number;
           created_by: string;
           created_at: string;
         };
@@ -801,6 +803,8 @@ export interface Database {
           lote?: string | null;
           started_at?: string | null;
           ended_at?: string | null;
+          unidades_sueltas?: number;
+          unidades_averiadas?: number;
           created_by: string;
         };
         Update: Partial<Database["public"]["Tables"]["encajados"]["Insert"]>;
