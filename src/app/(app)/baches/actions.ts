@@ -600,6 +600,147 @@ export async function finishStage(
   return { success: true };
 }
 
+const ReabrirEtapaSchema = z.object({ record_id: z.string().uuid() });
+
+// Deshace un "Finalizar etapa" hecho por error: vuelve a dejarla en curso
+// (sin tocar started_at) y revierte los efectos secundarios que haya
+// generado el cierre -- devolver el volumen tomado de otro bache
+// (base_otro_bache), el consumo de materia prima si esta fue la última
+// etapa con checklist de insumos, y el cierre automático del bache si esta
+// era la última etapa de la secuencia. Se bloquea si ya hay una etapa
+// POSTERIOR iniciada: reabrir dejaría el proceso en un estado inconsistente
+// (una etapa "sin terminar" con otra más adelante ya en curso).
+export async function reabrirEtapaBache(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = ReabrirEtapaSchema.safeParse({
+    record_id: formData.get("record_id"),
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: record } = await supabase
+    .from("bache_stage_records")
+    .select("bache_id, stage_template_id, ended_at, parameters")
+    .eq("id", parsed.data.record_id)
+    .single();
+  if (!record) {
+    return { error: "No se encontró la etapa." };
+  }
+  if (!record.ended_at) {
+    return { error: "Esta etapa ya está en curso." };
+  }
+
+  const [{ data: bache }, { data: currentStage }] = await Promise.all([
+    supabase.from("baches").select("product_id, status").eq("id", record.bache_id).single(),
+    supabase
+      .from("process_stage_templates")
+      .select("sequence_order, captures_insumos")
+      .eq("id", record.stage_template_id)
+      .single(),
+  ]);
+  if (!bache || !currentStage) {
+    return { error: "No se encontró el bache o la etapa." };
+  }
+
+  const { data: ownStages } = await supabase
+    .from("process_stage_templates")
+    .select("id, sequence_order, captures_insumos")
+    .eq("product_id", bache.product_id)
+    .eq("active", true);
+  let pool = ownStages ?? [];
+  if (pool.length === 0) {
+    const { data: defaultStages } = await supabase
+      .from("process_stage_templates")
+      .select("id, sequence_order, captures_insumos")
+      .is("product_id", null)
+      .eq("active", true);
+    pool = defaultStages ?? [];
+  }
+  const sequenceById = new Map(pool.map((s) => [s.id, s.sequence_order]));
+
+  const { data: otrosRecords } = await supabase
+    .from("bache_stage_records")
+    .select("stage_template_id")
+    .eq("bache_id", record.bache_id)
+    .neq("id", parsed.data.record_id);
+  const hayEtapaPosteriorIniciada = (otrosRecords ?? []).some((r) => {
+    const order = sequenceById.get(r.stage_template_id);
+    return order != null && order > currentStage.sequence_order;
+  });
+  if (hayEtapaPosteriorIniciada) {
+    return {
+      error:
+        "No se puede reabrir: ya hay una etapa posterior iniciada. Avisá para revisar a mano.",
+    };
+  }
+
+  // Devolver el volumen tomado de otro bache (si esta etapa usó "base de
+  // otro bache").
+  if (Array.isArray(record.parameters.base_otro_bache)) {
+    for (const b of record.parameters.base_otro_bache) {
+      const { data: origen } = await supabase
+        .from("baches")
+        .select("volumen_restante_litros")
+        .eq("id", b.bache_id)
+        .single();
+      if (origen) {
+        await supabase
+          .from("baches")
+          .update({
+            volumen_restante_litros: (origen.volumen_restante_litros ?? 0) + b.cantidad,
+          })
+          .eq("id", b.bache_id);
+      }
+    }
+  }
+
+  // Deshacer el consumo de materia prima, solo si esta fue la etapa que lo
+  // generó (la última con checklist de insumos -- mismo criterio que
+  // finishStage al decidir si registrarlo).
+  if (currentStage.captures_insumos && Array.isArray(record.parameters.insumos)) {
+    const hayEtapaPosteriorDeInsumos = pool.some(
+      (s) => s.captures_insumos && s.sequence_order > currentStage.sequence_order,
+    );
+    if (!hayEtapaPosteriorDeInsumos) {
+      await supabase
+        .from("inventario_movimientos")
+        .delete()
+        .eq("origen_tipo", "bache")
+        .eq("origen_id", record.bache_id);
+    }
+  }
+
+  // Si esta etapa había cerrado el bache solo (era la última de la
+  // secuencia), se revierte a "en_proceso".
+  const hayEtapaPosterior = pool.some((s) => s.sequence_order > currentStage.sequence_order);
+  if (!hayEtapaPosterior && bache.status === "completado") {
+    await supabase
+      .from("baches")
+      .update({ status: "en_proceso", completed_at: null })
+      .eq("id", record.bache_id);
+  }
+
+  const { error } = await supabase
+    .from("bache_stage_records")
+    .update({ ended_at: null, closed_by: null })
+    .eq("id", parsed.data.record_id);
+  if (error) {
+    return { error: "No se pudo reabrir la etapa." };
+  }
+
+  revalidatePath(`/baches/${record.bache_id}`);
+  revalidatePath("/baches");
+  revalidatePath("/programa");
+  return { success: true };
+}
+
 // ---------------------------------------------------------------------------
 // Firma de calidad (aprobación de etapa) -- se hace después de cerrada la
 // etapa, nunca la bloquea ni la condiciona.

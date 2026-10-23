@@ -32,6 +32,7 @@ import {
 import { Plus, X } from "lucide-react";
 import { OptionPicker } from "@/components/option-picker";
 import { formatTime } from "@/lib/format-date";
+import { ReabrirEtapaButton } from "./reabrir-etapa-button";
 import type { Database, StageParameterDef, StageReading } from "@/lib/supabase/types";
 
 type StageTemplate =
@@ -1135,21 +1136,26 @@ export function StageCard({
           <span>
             {stage.sequence_order}. {stage.name}
           </span>
-          <Badge
-            variant={
-              status === "done"
-                ? "secondary"
+          <div className="flex items-center gap-1">
+            <Badge
+              variant={
+                status === "done"
+                  ? "secondary"
+                  : status === "in_progress"
+                    ? "default"
+                    : "outline"
+              }
+            >
+              {status === "done"
+                ? "Completada"
                 : status === "in_progress"
-                  ? "default"
-                  : "outline"
-            }
-          >
-            {status === "done"
-              ? "Completada"
-              : status === "in_progress"
-                ? "En curso"
-                : "Pendiente"}
-          </Badge>
+                  ? "En curso"
+                  : "Pendiente"}
+            </Badge>
+            {status === "done" && record && canAct && (
+              <ReabrirEtapaButton recordId={record.id} />
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
