@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Beaker, CalendarClock, ClipboardList, Factory, LineChart, Package, Tags, Truck, Warehouse } from "lucide-react";
+import { Activity, Beaker, BookText, CalendarClock, ClipboardList, Factory, LineChart, Package, Tags, Truck, Warehouse } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth/dal";
 import { isEnmangadoEnabled } from "@/lib/feature-flags";
@@ -26,6 +26,13 @@ const CARDS: {
     description: "Programación, orden asociada y envasado por turno, con cumplido automático.",
     icon: CalendarClock,
     roles: ["jefe_planta", "supervisor"],
+  },
+  {
+    href: "/bitacora",
+    title: "Bitácora",
+    description: "Lavados y novedades del día, por turno.",
+    icon: BookText,
+    roles: ["jefe_planta", "supervisor", "calidad", "asistente_adm"],
   },
   {
     href: "/baches",

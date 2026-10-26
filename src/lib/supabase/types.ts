@@ -332,6 +332,26 @@ export interface Database {
         >;
         Relationships: [];
       };
+      bitacora_entradas: {
+        Row: {
+          id: string;
+          tipo: "lavado" | "novedad";
+          turno_id: string | null;
+          equipo_id: string | null;
+          texto: string;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          tipo: "lavado" | "novedad";
+          turno_id?: string | null;
+          equipo_id?: string | null;
+          texto: string;
+          created_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["bitacora_entradas"]["Insert"]>;
+        Relationships: [];
+      };
       envasado_orders: {
         Row: {
           id: string;
