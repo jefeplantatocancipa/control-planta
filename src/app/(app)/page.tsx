@@ -81,14 +81,14 @@ const CARDS: {
     title: "Cumplimiento",
     description: "Planeado vs. ejecutado por semana y mes.",
     icon: LineChart,
-    roles: ["jefe_planta", "supervisor", "asistente_adm"],
+    roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"],
   },
   {
     href: "/estadisticas",
     title: "Estadísticas",
     description: "Desempeño por operario y por proceso.",
     icon: LineChart,
-    roles: ["jefe_planta", "supervisor", "asistente_adm"],
+    roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"],
   },
   {
     href: "/admin",

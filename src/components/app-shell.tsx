@@ -49,8 +49,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/programa", label: "Programa", icon: ClipboardList, roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"] },
   { href: "/inventario", label: "Inventario", icon: Warehouse, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
   { href: "/equipos", label: "Equipos", icon: Factory, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
-  { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
-  { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor", "asistente_adm"] },
+  { href: "/cumplimiento", label: "Cumplimiento", icon: LineChart, roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"] },
+  { href: "/estadisticas", label: "Estadísticas", icon: LineChart, roles: ["jefe_planta", "supervisor", "planeacion", "asistente_adm"] },
   { href: "/admin", label: "Administración", icon: Tags, roles: ["jefe_planta", "asistente_adm"] },
   { href: "/transportes", label: "Transportes", icon: Truck, roles: ["jefe_planta"] },
 ];

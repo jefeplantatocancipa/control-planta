@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ConsolidadoCumplimiento, type CumplimientoRow } from "./consolidado";
 
 export default async function CumplimientoPage() {
-  await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
+  await requireRole(["jefe_planta", "supervisor", "planeacion", "asistente_adm"]);
   const supabase = await createClient();
 
   const [

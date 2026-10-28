@@ -120,7 +120,7 @@ export default async function EstadisticasPage({
 }: {
   searchParams: Promise<{ mes?: string }>;
 }) {
-  await requireRole(["jefe_planta", "supervisor", "asistente_adm"]);
+  await requireRole(["jefe_planta", "supervisor", "planeacion", "asistente_adm"]);
   const { mes: mesParam } = await searchParams;
   const mesRango = monthRange(mesParam);
   const supabase = await createClient();
