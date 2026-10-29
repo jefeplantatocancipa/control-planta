@@ -110,7 +110,11 @@ export function pronosticosEnvasado(input: PronosticoEnvasadoInput): PronosticoE
       };
     }
 
-    const unidadesMeta = volumenRestante / referencia.peso_unitario;
+    // peso_unitario está en gramos (ej. 450 para 450g); volumenRestante
+    // está en kg (litros ~ kg), por eso se pasa a gramos antes de dividir
+    // -- mismo criterio que el resto de la app (ver kgEmpacadosMes en
+    // Estadísticas, que hace la cuenta al revés con /1000).
+    const unidadesMeta = (volumenRestante * 1000) / referencia.peso_unitario;
     const unidadesFaltantes = Math.max(0, unidadesMeta - unidadesHechas);
     const horasFaltantes = unidadesFaltantes / tasa;
     const estimadoFin = new Date(Date.now() + horasFaltantes * 3_600_000).toISOString();
