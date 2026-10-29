@@ -1125,7 +1125,7 @@ export function StageCard({
       : null;
   const paramEntries = record
     ? (Object.entries(record.parameters).filter(
-        ([key]) => key !== "insumos" && key !== "lecturas",
+        ([key]) => key !== "insumos" && key !== "lecturas" && key !== "base_otro_bache",
       ) as [string, string | number][])
     : [];
 
