@@ -32,7 +32,7 @@ function durationLabel(startedAt: string, endedAt: string) {
 function stageParameterEntries(stage: StageTemplate, record: StageRecord | undefined) {
   if (!record) return [];
   return Object.entries(record.parameters)
-    .filter(([key]) => key !== "insumos" && key !== "lecturas")
+    .filter(([key]) => key !== "insumos" && key !== "lecturas" && key !== "base_otro_bache")
     .map(([key, value]) => {
       const param = stage.parameter_schema.find((p) => p.key === key);
       return [
