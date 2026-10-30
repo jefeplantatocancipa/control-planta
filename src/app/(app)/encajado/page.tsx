@@ -150,77 +150,79 @@ export default async function EncajadoPage() {
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">Finalizados</h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Bache</TableHead>
-              <TableHead>Presentación</TableHead>
-              <TableHead>Lote</TableHead>
-              <TableHead>Fecha de envasado</TableHead>
-              <TableHead>Unidades envasadas</TableHead>
-              <TableHead>Estibas</TableHead>
-              <TableHead>Cajas</TableHead>
-              <TableHead>Unidades empacadas</TableHead>
-              <TableHead>Sueltas</TableHead>
-              <TableHead>Averiadas</TableHead>
-              <TableHead>Iniciado</TableHead>
-              <TableHead>Finalizado</TableHead>
-              {(canExecute || canDelete) && (
-                <TableHead className="sticky right-0 bg-background" />
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {finalizados.map((c) => (
-              <TableRow key={c.id} className="group">
-                <TableCell className="font-medium">{c.bacheLabel}</TableCell>
-                <TableCell>{c.presentacion}</TableCell>
-                <TableCell>{c.lote ?? "—"}</TableCell>
-                <TableCell>{c.fechaEnvasado ? formatDate(c.fechaEnvasado) : "—"}</TableCell>
-                <TableCell>{c.unidadesEnvasadas}</TableCell>
-                <TableCell>{c.estibas.length}</TableCell>
-                <TableCell>
-                  {c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0)}
-                </TableCell>
-                <TableCell>
-                  {c.multiempaque !== null
-                    ? c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0) *
-                      c.multiempaque
-                    : "—"}
-                </TableCell>
-                <TableCell>{c.unidadesSueltas}</TableCell>
-                <TableCell>{c.unidadesAveriadas}</TableCell>
-                <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
-                <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
+        <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableRow>
+                <TableHead>Bache</TableHead>
+                <TableHead>Presentación</TableHead>
+                <TableHead>Lote</TableHead>
+                <TableHead>Fecha de envasado</TableHead>
+                <TableHead>Unidades envasadas</TableHead>
+                <TableHead>Estibas</TableHead>
+                <TableHead>Cajas</TableHead>
+                <TableHead>Unidades empacadas</TableHead>
+                <TableHead>Sueltas</TableHead>
+                <TableHead>Averiadas</TableHead>
+                <TableHead>Iniciado</TableHead>
+                <TableHead>Finalizado</TableHead>
                 {(canExecute || canDelete) && (
-                  <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
-                    <div className="flex items-center justify-end gap-1">
-                      {canExecute && <ReabrirEncajadoButton id={c.id} />}
-                      {canDelete && (
-                        <DeleteButton
-                          action={deleteEncajado}
-                          id={c.id}
-                          title="Eliminar encajado"
-                          description="Borra este encajado con sus estibas registradas."
-                        />
-                      )}
-                    </div>
-                  </TableCell>
+                  <TableHead className="sticky right-0 bg-background" />
                 )}
               </TableRow>
-            ))}
-            {finalizados.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={12 + (canExecute || canDelete ? 1 : 0)}
-                  className="text-center text-muted-foreground"
-                >
-                  Sin encajados finalizados todavía.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {finalizados.map((c) => (
+                <TableRow key={c.id} className="group">
+                  <TableCell className="font-medium">{c.bacheLabel}</TableCell>
+                  <TableCell>{c.presentacion}</TableCell>
+                  <TableCell>{c.lote ?? "—"}</TableCell>
+                  <TableCell>{c.fechaEnvasado ? formatDate(c.fechaEnvasado) : "—"}</TableCell>
+                  <TableCell>{c.unidadesEnvasadas}</TableCell>
+                  <TableCell>{c.estibas.length}</TableCell>
+                  <TableCell>
+                    {c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0)}
+                  </TableCell>
+                  <TableCell>
+                    {c.multiempaque !== null
+                      ? c.estibas.reduce((sum, e) => sum + (e.cajasPorEstiba ?? 0), 0) *
+                        c.multiempaque
+                      : "—"}
+                  </TableCell>
+                  <TableCell>{c.unidadesSueltas}</TableCell>
+                  <TableCell>{c.unidadesAveriadas}</TableCell>
+                  <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
+                  <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
+                  {(canExecute || canDelete) && (
+                    <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
+                      <div className="flex items-center justify-end gap-1">
+                        {canExecute && <ReabrirEncajadoButton id={c.id} />}
+                        {canDelete && (
+                          <DeleteButton
+                            action={deleteEncajado}
+                            id={c.id}
+                            title="Eliminar encajado"
+                            description="Borra este encajado con sus estibas registradas."
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+              {finalizados.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={12 + (canExecute || canDelete ? 1 : 0)}
+                    className="text-center text-muted-foreground"
+                  >
+                    Sin encajados finalizados todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

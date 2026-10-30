@@ -470,68 +470,70 @@ export default async function EnvasadoPage() {
             Exportar
           </a>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Bache</TableHead>
-              <TableHead>Presentación</TableHead>
-              <TableHead>Lote</TableHead>
-              <TableHead>Insumos (kg)</TableHead>
-              <TableHead>Unidades</TableHead>
-              <TableHead>Mermas</TableHead>
-              <TableHead>Registrado por</TableHead>
-              <TableHead>Finalizado</TableHead>
-              <TableHead className="sticky right-0 bg-background" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {closed.map((envasado) => (
-              <TableRow key={envasado.id} className="group">
-                <TableCell className="font-medium">
-                  {bacheLabels.get(envasado.bache_id) ?? "—"}
-                </TableCell>
-                <TableCell>{envasado.presentacion}</TableCell>
-                <TableCell>{envasado.lote ?? "—"}</TableCell>
-                <TableCell>
-                  {massBalanceByBache.get(envasado.bache_id)?.kg ?? "—"}
-                </TableCell>
-                <TableCell>{envasado.cantidad_unidades}</TableCell>
-                <TableCell>{envasado.cantidad_mermas}</TableCell>
-                <TableCell>{operarioNames.get(envasado.operario_id) ?? "—"}</TableCell>
-                <TableCell>
-                  {envasado.ended_at && formatDateTime(envasado.ended_at)}
-                </TableCell>
-                <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
-                  <div className="flex items-center justify-end gap-1">
-                    <Link
-                      href={`/envasado/${envasado.id}/imprimir`}
-                      className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-                      title="Imprimir informe"
-                    >
-                      <Printer className="size-4" />
-                    </Link>
-                    {canExecute && <ReabrirEnvasadoButton id={envasado.id} />}
-                    {canDelete && (
-                      <DeleteButton
-                        action={deleteEnvasado}
-                        id={envasado.id}
-                        title="Eliminar envasado"
-                        description="Borra este envasado con todos sus turnos, lecturas, estibas y su encajado."
-                      />
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {closed.length === 0 && (
+        <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground">
-                  Sin envasados finalizados todavía.
-                </TableCell>
+                <TableHead>Bache</TableHead>
+                <TableHead>Presentación</TableHead>
+                <TableHead>Lote</TableHead>
+                <TableHead>Insumos (kg)</TableHead>
+                <TableHead>Unidades</TableHead>
+                <TableHead>Mermas</TableHead>
+                <TableHead>Registrado por</TableHead>
+                <TableHead>Finalizado</TableHead>
+                <TableHead className="sticky right-0 bg-background" />
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {closed.map((envasado) => (
+                <TableRow key={envasado.id} className="group">
+                  <TableCell className="font-medium">
+                    {bacheLabels.get(envasado.bache_id) ?? "—"}
+                  </TableCell>
+                  <TableCell>{envasado.presentacion}</TableCell>
+                  <TableCell>{envasado.lote ?? "—"}</TableCell>
+                  <TableCell>
+                    {massBalanceByBache.get(envasado.bache_id)?.kg ?? "—"}
+                  </TableCell>
+                  <TableCell>{envasado.cantidad_unidades}</TableCell>
+                  <TableCell>{envasado.cantidad_mermas}</TableCell>
+                  <TableCell>{operarioNames.get(envasado.operario_id) ?? "—"}</TableCell>
+                  <TableCell>
+                    {envasado.ended_at && formatDateTime(envasado.ended_at)}
+                  </TableCell>
+                  <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
+                    <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/envasado/${envasado.id}/imprimir`}
+                        className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                        title="Imprimir informe"
+                      >
+                        <Printer className="size-4" />
+                      </Link>
+                      {canExecute && <ReabrirEnvasadoButton id={envasado.id} />}
+                      {canDelete && (
+                        <DeleteButton
+                          action={deleteEnvasado}
+                          id={envasado.id}
+                          title="Eliminar envasado"
+                          description="Borra este envasado con todos sus turnos, lecturas, estibas y su encajado."
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {closed.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                    Sin envasados finalizados todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

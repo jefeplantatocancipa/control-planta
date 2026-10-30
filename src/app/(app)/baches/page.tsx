@@ -101,8 +101,9 @@ export default async function BachesPage() {
         )}
       </div>
 
+      <div className="max-h-[60vh] overflow-y-auto rounded-md border">
       <Table>
-        <TableHeader>
+        <TableHeader className="sticky top-0 z-10 bg-background">
           <TableRow>
             <TableHead>Código</TableHead>
             <TableHead>Producto</TableHead>
@@ -205,6 +206,7 @@ export default async function BachesPage() {
           )}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }
