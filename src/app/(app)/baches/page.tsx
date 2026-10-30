@@ -110,8 +110,7 @@ export default async function BachesPage() {
             <TableHead>Orden de trabajo</TableHead>
             <TableHead>Iniciado</TableHead>
             <TableHead>Estado</TableHead>
-            <TableHead />
-            {canDelete && <TableHead className="sticky right-0 bg-background" />}
+            <TableHead className="sticky right-0 bg-background" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -177,32 +176,29 @@ export default async function BachesPage() {
                   {STATUS_LABELS[bache.status]}
                 </Badge>
               </TableCell>
-              <TableCell className="text-right">
-                <Link
-                  href={`/baches/${bache.id}`}
-                  className="text-sm font-medium text-primary hover:underline"
-                >
-                  Ver
-                </Link>
+              <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
+                <div className="flex items-center justify-end gap-3">
+                  <Link
+                    href={`/baches/${bache.id}`}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Ver
+                  </Link>
+                  {canDelete && (
+                    <DeleteButton
+                      action={deleteBache}
+                      id={bache.id}
+                      title="Eliminar bache"
+                      description={`Borra el bache ${bache.batch_code} y todas sus etapas registradas. Si ya tiene un envasado vinculado, no se va a poder eliminar hasta borrar ese envasado primero.`}
+                    />
+                  )}
+                </div>
               </TableCell>
-              {canDelete && (
-                <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
-                  <DeleteButton
-                    action={deleteBache}
-                    id={bache.id}
-                    title="Eliminar bache"
-                    description={`Borra el bache ${bache.batch_code} y todas sus etapas registradas. Si ya tiene un envasado vinculado, no se va a poder eliminar hasta borrar ese envasado primero.`}
-                  />
-                </TableCell>
-              )}
             </TableRow>
           ))}
           {(baches ?? []).length === 0 && (
             <TableRow>
-              <TableCell
-                colSpan={canDelete ? 8 : 7}
-                className="text-center text-muted-foreground"
-              >
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 Sin baches todavía.
               </TableCell>
             </TableRow>

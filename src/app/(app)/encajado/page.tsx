@@ -165,8 +165,9 @@ export default async function EncajadoPage() {
               <TableHead>Averiadas</TableHead>
               <TableHead>Iniciado</TableHead>
               <TableHead>Finalizado</TableHead>
-              {canExecute && <TableHead className="text-right">Reabrir</TableHead>}
-              {canDelete && <TableHead className="sticky right-0 bg-background" />}
+              {(canExecute || canDelete) && (
+                <TableHead className="sticky right-0 bg-background" />
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -191,19 +192,19 @@ export default async function EncajadoPage() {
                 <TableCell>{c.unidadesAveriadas}</TableCell>
                 <TableCell>{c.startedAt && formatDateTime(c.startedAt)}</TableCell>
                 <TableCell>{c.endedAt && formatDateTime(c.endedAt)}</TableCell>
-                {canExecute && (
-                  <TableCell className="text-right">
-                    <ReabrirEncajadoButton id={c.id} />
-                  </TableCell>
-                )}
-                {canDelete && (
+                {(canExecute || canDelete) && (
                   <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
-                    <DeleteButton
-                      action={deleteEncajado}
-                      id={c.id}
-                      title="Eliminar encajado"
-                      description="Borra este encajado con sus estibas registradas."
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      {canExecute && <ReabrirEncajadoButton id={c.id} />}
+                      {canDelete && (
+                        <DeleteButton
+                          action={deleteEncajado}
+                          id={c.id}
+                          title="Eliminar encajado"
+                          description="Borra este encajado con sus estibas registradas."
+                        />
+                      )}
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
@@ -211,7 +212,7 @@ export default async function EncajadoPage() {
             {finalizados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={12 + (canExecute ? 1 : 0) + (canDelete ? 1 : 0)}
+                  colSpan={12 + (canExecute || canDelete ? 1 : 0)}
                   className="text-center text-muted-foreground"
                 >
                   Sin encajados finalizados todavía.

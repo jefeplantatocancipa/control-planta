@@ -481,8 +481,7 @@ export default async function EnvasadoPage() {
               <TableHead>Mermas</TableHead>
               <TableHead>Registrado por</TableHead>
               <TableHead>Finalizado</TableHead>
-              <TableHead />
-              {canDelete && <TableHead className="sticky right-0 bg-background" />}
+              <TableHead className="sticky right-0 bg-background" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -502,7 +501,7 @@ export default async function EnvasadoPage() {
                 <TableCell>
                   {envasado.ended_at && formatDateTime(envasado.ended_at)}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
                   <div className="flex items-center justify-end gap-1">
                     <Link
                       href={`/envasado/${envasado.id}/imprimir`}
@@ -512,26 +511,21 @@ export default async function EnvasadoPage() {
                       <Printer className="size-4" />
                     </Link>
                     {canExecute && <ReabrirEnvasadoButton id={envasado.id} />}
+                    {canDelete && (
+                      <DeleteButton
+                        action={deleteEnvasado}
+                        id={envasado.id}
+                        title="Eliminar envasado"
+                        description="Borra este envasado con todos sus turnos, lecturas, estibas y su encajado."
+                      />
+                    )}
                   </div>
                 </TableCell>
-                {canDelete && (
-                  <TableCell className="sticky right-0 bg-background text-right group-hover:bg-muted/50">
-                    <DeleteButton
-                      action={deleteEnvasado}
-                      id={envasado.id}
-                      title="Eliminar envasado"
-                      description="Borra este envasado con todos sus turnos, lecturas, estibas y su encajado."
-                    />
-                  </TableCell>
-                )}
               </TableRow>
             ))}
             {closed.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={canDelete ? 10 : 9}
-                  className="text-center text-muted-foreground"
-                >
+                <TableCell colSpan={9} className="text-center text-muted-foreground">
                   Sin envasados finalizados todavía.
                 </TableCell>
               </TableRow>
