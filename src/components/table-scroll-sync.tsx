@@ -58,7 +58,12 @@ export function TableScrollSync({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div ref={wrapperRef} className="overflow-hidden rounded-md border">
+    // "overflow-hidden" acá rompería el "sticky" de la barra de abajo (un
+    // ancestro con overflow distinto de visible corta el sticky de sus
+    // hijos), así que el borde se aplica sin recortar -- las esquinas de
+    // la tabla pueden asomar un poco, es un costo cosmético menor
+    // comparado con que la barra vuelva a quedar pegada al final.
+    <div ref={wrapperRef} className="rounded-md border">
       {children}
       <div
         ref={trackRef}
