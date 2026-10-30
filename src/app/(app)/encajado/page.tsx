@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableScrollSync } from "@/components/table-scroll-sync";
 import { EncajadoCard, type EstibaDisplay } from "./encajado-card";
 import { DeleteButton } from "@/components/delete-button";
 import { ReabrirEncajadoButton } from "./reabrir-encajado-button";
@@ -150,9 +151,9 @@ export default async function EncajadoPage() {
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">Finalizados</h2>
-        <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+        <TableScrollSync>
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableHeader>
               <TableRow>
                 <TableHead>Bache</TableHead>
                 <TableHead>Presentación</TableHead>
@@ -222,7 +223,7 @@ export default async function EncajadoPage() {
               )}
             </TableBody>
           </Table>
-        </div>
+        </TableScrollSync>
       </div>
     </div>
   );

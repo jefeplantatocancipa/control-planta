@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableScrollSync } from "@/components/table-scroll-sync";
 import { NewBacheDialog } from "./new-bache-dialog";
 import { AssociateOrderDialog } from "./associate-order-dialog";
 import { DeleteButton } from "@/components/delete-button";
@@ -101,9 +102,9 @@ export default async function BachesPage() {
         )}
       </div>
 
-      <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+      <TableScrollSync>
       <Table>
-        <TableHeader className="sticky top-0 z-10 bg-background">
+        <TableHeader>
           <TableRow>
             <TableHead>Código</TableHead>
             <TableHead>Producto</TableHead>
@@ -206,7 +207,7 @@ export default async function BachesPage() {
           )}
         </TableBody>
       </Table>
-      </div>
+      </TableScrollSync>
     </div>
   );
 }

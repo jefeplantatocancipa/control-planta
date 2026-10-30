@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { buttonVariants } from "@/components/ui/button";
+import { TableScrollSync } from "@/components/table-scroll-sync";
 import { StartEnvasadoDialog } from "./start-envasado-dialog";
 import { EnvasadoCard, type CorteDisplay, type ParadaDisplay } from "./envasado-card";
 import { DeleteButton } from "@/components/delete-button";
@@ -470,9 +471,9 @@ export default async function EnvasadoPage() {
             Exportar
           </a>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+        <TableScrollSync>
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableHeader>
               <TableRow>
                 <TableHead>Bache</TableHead>
                 <TableHead>Presentación</TableHead>
@@ -533,7 +534,7 @@ export default async function EnvasadoPage() {
               )}
             </TableBody>
           </Table>
-        </div>
+        </TableScrollSync>
       </div>
     </div>
   );
