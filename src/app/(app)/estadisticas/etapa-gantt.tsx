@@ -131,27 +131,42 @@ export function EtapaGantt({
       {segmentos.length > 0 && total > 0 ? (
         <div className="flex flex-col gap-2">
           <div className="overflow-x-auto">
-            <div className="flex min-w-[560px] flex-col gap-1.5">
-              {segmentos.map((s) => (
-                <div key={s.stageName} className="flex items-center gap-2">
-                  <span className="w-40 shrink-0 truncate text-sm" title={s.stageName}>
-                    {s.stageName}
-                  </span>
-                  <div className="relative h-7 flex-1 rounded-md bg-muted/40">
-                    <div
-                      className="absolute top-0.5 bottom-0.5 flex items-center overflow-hidden rounded px-1.5 text-[11px] whitespace-nowrap text-white"
-                      style={{
-                        left: `${(s.start / total) * 100}%`,
-                        width: `${Math.max(1, ((s.end - s.start) / total) * 100)}%`,
-                        backgroundColor: s.color,
-                      }}
-                      title={`${s.stageName}: ${minutesLabel(s.promedioMin)} (${s.cantidad} completadas)`}
-                    >
-                      {minutesLabel(s.promedioMin)}
+            <div className="flex min-w-[680px] flex-col gap-1.5">
+              {segmentos.map((s) => {
+                const leftPct = (s.start / total) * 100;
+                const widthPct = Math.max(1, ((s.end - s.start) / total) * 100);
+                // La etiqueta nunca entra recortada adentro de la barra: si
+                // la barra queda angosta (la etapa duró poco frente al
+                // proceso completo), el dato se lee afuera, pegado a la
+                // punta -- a la izquierda si ya no queda aire a la derecha.
+                const labelOnLeft = leftPct + widthPct > 82;
+                return (
+                  <div key={s.stageName} className="flex items-center gap-2">
+                    <span className="w-40 shrink-0 truncate text-sm" title={s.stageName}>
+                      {s.stageName}
+                    </span>
+                    <div className="relative h-7 flex-1 rounded-md bg-muted/40">
+                      <div
+                        className="absolute top-0.5 bottom-0.5 rounded"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${widthPct}%`,
+                          backgroundColor: s.color,
+                        }}
+                        title={`${s.stageName}: ${minutesLabel(s.promedioMin)} (${s.cantidad} completadas)`}
+                      />
+                      <span
+                        className={`absolute top-1/2 -translate-y-1/2 text-[11px] whitespace-nowrap text-foreground ${
+                          labelOnLeft ? "-translate-x-full pr-1.5" : "pl-1.5"
+                        }`}
+                        style={{ left: `${labelOnLeft ? leftPct : leftPct + widthPct}%` }}
+                      >
+                        {minutesLabel(s.promedioMin)}
+                      </span>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
