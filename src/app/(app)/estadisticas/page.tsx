@@ -529,12 +529,13 @@ export default async function EstadisticasPage({
   // pesaje). El cremado nunca cuenta como "pendiente" -- ya se cuenta
   // como terminado en cuanto se produce (no pasa por envasado).
   //
-  // El inventario inicial del primer mes de esta métrica (octubre 2026)
-  // se cargó a mano porque el sistema no tenía cómo saberlo antes de
-  // empezar a medir esto; de ahí en adelante se calcula solo, arrastrando
-  // producido/empacado desde esa fecha de referencia.
+  // El inventario inicial del primer mes de esta métrica (octubre 2026) se
+  // cargó a mano -- el sistema no tenía cómo saberlo antes de empezar a
+  // medir esto -- con el inventario físico real reportado por planta al
+  // cierre de septiembre 2026 (9.200 kg). De ahí en adelante se calcula
+  // solo, arrastrando producido/empacado desde esa fecha de referencia.
   // -------------------------------------------------------------------
-  const INVENTARIO_INICIAL_REFERENCIA_KG = 6000;
+  const INVENTARIO_INICIAL_REFERENCIA_KG = 9200;
   const INVENTARIO_INICIAL_REFERENCIA_FECHA = "2026-10-01";
 
   function kgProducidoEnRango(desde: string, hasta: string) {
