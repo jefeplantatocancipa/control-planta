@@ -132,6 +132,7 @@ export default async function EstadisticasPage({
     { data: todosBaches },
     { data: insumos },
     { data: envasados },
+    { data: envasadoOrders },
     { data: envasadoReferencias },
     { data: products },
     { data: stageRecordsAll },
@@ -157,6 +158,9 @@ export default async function EstadisticasPage({
     supabase
       .from("envasados")
       .select("id, bache_id, cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
+    // Unidades programadas por semana (vs. las realmente empacadas) --
+    // scheduled_date es la fecha planeada de la orden, no de ejecución.
+    supabase.from("envasado_orders").select("scheduled_date, planned_quantity"),
     supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
     supabase.from("products").select("id, name, requiere_envasado"),
     supabase
@@ -713,8 +717,26 @@ export default async function EstadisticasPage({
       }, 0);
     return {
       label: format(new Date(`${weekStart}T00:00:00`), "d MMM", { locale: es }),
-      producido: Math.round(producido * 10) / 10,
-      empacado: Math.round(empacado * 10) / 10,
+      a: Math.round(producido * 10) / 10,
+      b: Math.round(empacado * 10) / 10,
+    };
+  });
+
+  // Unidades programadas (envasado_orders, por fecha planeada) vs.
+  // unidades realmente empacadas (envasados, por fecha de ejecución) --
+  // mismas 8 semanas que el trend de kg de arriba, para comparar
+  // cumplimiento del programa.
+  const unidadesTrendData: TrendDatum[] = weekStarts.map((weekStart) => {
+    const programado = (envasadoOrders ?? [])
+      .filter((o) => saturdayOfWeek(o.scheduled_date) === weekStart)
+      .reduce((s, o) => s + (o.planned_quantity ?? 0), 0);
+    const empacado = (envasados ?? [])
+      .filter((e) => saturdayOfWeek(e.started_at.slice(0, 10)) === weekStart)
+      .reduce((s, e) => s + e.cantidad_unidades, 0);
+    return {
+      label: format(new Date(`${weekStart}T00:00:00`), "d MMM", { locale: es }),
+      a: programado,
+      b: empacado,
     };
   });
 
@@ -982,8 +1004,26 @@ export default async function EstadisticasPage({
           <CardTitle className="text-base">Producción vs. empaque por semana</CardTitle>
         </CardHeader>
         <CardContent>
-          {trendData.some((d) => d.producido > 0 || d.empacado > 0) ? (
-            <TrendChart data={trendData} />
+          {trendData.some((d) => d.a > 0 || d.b > 0) ? (
+            <TrendChart data={trendData} nameA="Kg producidos" nameB="Kg empacados" unit="kg" />
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin datos todavía.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Unidades programadas vs. empacadas por semana</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {unidadesTrendData.some((d) => d.a > 0 || d.b > 0) ? (
+            <TrendChart
+              data={unidadesTrendData}
+              nameA="Und. programadas"
+              nameB="Und. empacadas"
+              unit="u"
+            />
           ) : (
             <p className="text-sm text-muted-foreground">Sin datos todavía.</p>
           )}
