@@ -61,6 +61,9 @@ export interface CumplimientoRow {
   planned: number;
   executed: number;
   unit: string;
+  // Solo presente en filas de bases ejecutadas (ver bachesExecutedRows en
+  // page.tsx) -- permite el desglose por bache dentro de ResumenTable.
+  batch_code?: string;
 }
 
 type Mode = "dia" | "semana" | "mes";
@@ -115,6 +118,33 @@ function aggregateByProduct(rows: CumplimientoRow[]): Aggregated[] {
   return Array.from(totals.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+interface BacheDetail {
+  batch_code: string;
+  scheduled_date: string;
+  executed: number;
+}
+
+// Desglose por bache (lote y fecha) dentro de cada producto -- solo tiene
+// sentido para "Bases (baches)", porque ahí "lote" es el batch_code del
+// bache; Envasado no trae ese dato en CumplimientoRow.
+function detailsByProduct(rows: CumplimientoRow[]): Map<string, BacheDetail[]> {
+  const byProduct = new Map<string, BacheDetail[]>();
+  for (const row of rows) {
+    if (!row.batch_code) continue;
+    const list = byProduct.get(row.id) ?? [];
+    list.push({
+      batch_code: row.batch_code,
+      scheduled_date: row.scheduled_date,
+      executed: row.executed,
+    });
+    byProduct.set(row.id, list);
+  }
+  for (const list of byProduct.values()) {
+    list.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+  }
+  return byProduct;
+}
+
 function ResumenTable({
   accent,
   rows,
@@ -125,6 +155,19 @@ function ResumenTable({
   emptyLabel: string;
 }) {
   const aggregated = useMemo(() => aggregateByProduct(rows), [rows]);
+  const details = useMemo(
+    () => (accent === "bases" ? detailsByProduct(rows) : new Map<string, BacheDetail[]>()),
+    [rows, accent],
+  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   const totalPlanned = aggregated.reduce((s, r) => s + r.planned, 0);
   const totalExecuted = aggregated.reduce((s, r) => s + r.executed, 0);
   const totalDiff = totalExecuted - totalPlanned;
@@ -150,25 +193,58 @@ function ResumenTable({
           <TableBody>
             {aggregated.map((r) => {
               const diff = round1(r.executed - r.planned);
+              const productDetails = details.get(r.id) ?? [];
+              const hasDetails = productDetails.length > 0;
+              const isExpanded = expanded.has(r.id);
               return (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.name}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {fmt(r.planned)} {r.unit}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {fmt(r.executed)} {r.unit}
-                  </TableCell>
-                  <TableCell className={`text-right tabular-nums ${diffClass(diff)}`}>
-                    {diff > 0 ? "+" : ""}
-                    {fmt(diff)} {r.unit}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={pct(r.planned, r.executed) >= 100 ? "default" : "outline"}>
-                      {pct(r.planned, r.executed)}%
-                    </Badge>
-                  </TableCell>
-                </TableRow>
+                <Fragment key={r.id}>
+                  <TableRow
+                    className={hasDetails ? "cursor-pointer" : undefined}
+                    onClick={hasDetails ? () => toggle(r.id) : undefined}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-1.5">
+                        {hasDetails && (
+                          <ChevronRight
+                            className={`size-4 shrink-0 text-muted-foreground transition-transform ${
+                              isExpanded ? "rotate-90" : ""
+                            }`}
+                          />
+                        )}
+                        {r.name}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmt(r.planned)} {r.unit}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmt(r.executed)} {r.unit}
+                    </TableCell>
+                    <TableCell className={`text-right tabular-nums ${diffClass(diff)}`}>
+                      {diff > 0 ? "+" : ""}
+                      {fmt(diff)} {r.unit}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={pct(r.planned, r.executed) >= 100 ? "default" : "outline"}>
+                        {pct(r.planned, r.executed)}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                  {isExpanded &&
+                    productDetails.map((d, i) => (
+                      <TableRow key={`${r.id}-${d.batch_code}-${i}`} className="bg-muted/20 hover:bg-muted/20">
+                        <TableCell className="pl-9 text-sm text-muted-foreground">
+                          Lote {d.batch_code} — {format(parseISO(d.scheduled_date), "d MMM yyyy", { locale: es })}
+                        </TableCell>
+                        <TableCell />
+                        <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                          {fmt(d.executed)} {r.unit}
+                        </TableCell>
+                        <TableCell />
+                        <TableCell />
+                      </TableRow>
+                    ))}
+                </Fragment>
               );
             })}
             {aggregated.length === 0 && (

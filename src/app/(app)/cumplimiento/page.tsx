@@ -18,7 +18,7 @@ export default async function CumplimientoPage() {
   ] = await Promise.all([
     supabase.from("production_orders").select("product_id, scheduled_date, baches_planeados"),
     supabase.from("products").select("id, name, volumen_por_bache"),
-    supabase.from("baches").select("id, product_id"),
+    supabase.from("baches").select("id, product_id, batch_code"),
     supabase
       .from("process_stage_templates")
       .select("id, product_id, sequence_order, captures_insumos")
@@ -111,6 +111,7 @@ export default async function CumplimientoPage() {
         planned: 0,
         executed: Math.round(best.kg * 10) / 10,
         unit: "kg",
+        batch_code: bache.batch_code,
       });
     }
   }
