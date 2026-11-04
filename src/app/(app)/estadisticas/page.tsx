@@ -572,7 +572,18 @@ export default async function EstadisticasPage({
     .filter((b) => b.status !== "cancelado" && requiereEnvasadoById.get(b.product_id) !== false)
     .reduce((s, b) => s + Math.max(0, b.volumen_restante_litros ?? 0), 0);
 
-  const kgMermaMes = inventarioInicialMes + kgProducidosMes - kgPendienteActual - kgEmpacadosTotalMes;
+  // El balance "exacto" (inventario inicial arrastrado + pendiente EN VIVO)
+  // solo tiene sentido para el mes actual -- el pendiente en vivo es "lo
+  // que hay ahora", no "lo que había al cerrar" un mes que ya pasó. Si el
+  // selector de mes apunta a un mes ya cerrado, usar el pendiente de hoy
+  // mezcla movimiento de meses posteriores con ese mes y da una merma que
+  // no corresponde. Para cualquier mes que no sea el actual se usa la
+  // misma aproximación que el histórico de abajo (producido - empacado).
+  const mesActualStr = format(new Date(), "yyyy-MM");
+  const kgMermaMes =
+    mesRango.mes === mesActualStr
+      ? inventarioInicialMes + kgProducidosMes - kgPendienteActual - kgEmpacadosTotalMes
+      : kgProducidosMes - kgEmpacadosTotalMes;
   const mermaPct = kgProducidosMes > 0 ? (kgMermaMes / kgProducidosMes) * 100 : null;
 
   // -------------------------------------------------------------------
@@ -585,7 +596,6 @@ export default async function EstadisticasPage({
   // métrica todavía), así que quedan fuera de esa gráfica en particular.
   // -------------------------------------------------------------------
   const HISTORIAL_INICIO_MES = "2026-09";
-  const mesActualStr = format(new Date(), "yyyy-MM");
   function mesesEntre(desde: string, hasta: string) {
     const out: string[] = [];
     let [y, m] = desde.split("-").map(Number);
@@ -947,7 +957,7 @@ export default async function EstadisticasPage({
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
           chart={<KpiTrendChart data={mermaHistorialChart} unit="%" />}
-          chartCaption="Sep. es aproximado (producido − empacado, sin inventario inicial)"
+          chartCaption="Meses cerrados son aproximados (producido − empacado, sin inventario)"
         />
         <KpiCard
           icon={Package}
