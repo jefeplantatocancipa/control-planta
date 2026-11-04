@@ -171,6 +171,7 @@ function ResumenTable({
   const totalPlanned = aggregated.reduce((s, r) => s + r.planned, 0);
   const totalExecuted = aggregated.reduce((s, r) => s + r.executed, 0);
   const totalDiff = totalExecuted - totalPlanned;
+  const totalBaches = Array.from(details.values()).reduce((s, list) => s + list.length, 0);
 
   return (
     <Card className="border-t-4" style={{ borderTopColor: SECTION_COLOR }}>
@@ -219,6 +220,11 @@ function ResumenTable({
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {fmt(r.executed)} {r.unit}
+                      {hasDetails && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                          ({productDetails.length} bache{productDetails.length === 1 ? "" : "s"})
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className={`text-right tabular-nums ${diffClass(diff)}`}>
                       {diff > 0 ? "+" : ""}
@@ -260,7 +266,14 @@ function ResumenTable({
               <TableRow>
                 <TableCell>Total</TableCell>
                 <TableCell className="text-right tabular-nums">{fmt(totalPlanned)}</TableCell>
-                <TableCell className="text-right tabular-nums">{fmt(totalExecuted)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmt(totalExecuted)}
+                  {totalBaches > 0 && (
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                      ({totalBaches} bache{totalBaches === 1 ? "" : "s"})
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell className={`text-right tabular-nums ${diffClass(round1(totalDiff))}`}>
                   {totalDiff > 0 ? "+" : ""}
                   {fmt(totalDiff)}
