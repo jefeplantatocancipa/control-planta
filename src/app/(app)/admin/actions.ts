@@ -96,6 +96,7 @@ const StageParameterSchema = z.object({
     "porcentaje",
     "positivo_negativo",
   ]),
+  required: z.boolean().optional(),
 });
 
 const StageTemplateSchema = z.object({

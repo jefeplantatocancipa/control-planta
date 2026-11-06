@@ -809,14 +809,19 @@ function FinishStageForm({
       checkedInsumos.every((i) => i.lote.trim() && i.peso.trim() && i.marca.trim())
     : true;
   const readingsOk = capturesReadings ? readings.length > 0 : true;
-  const canSubmit = insumosOk && readingsOk && !baseOtroBacheExcede;
+  const requiredParams = stage.parameter_schema.filter((p) => p.required);
+  const requiredParamsOk = requiredParams.every((p) => (values[p.key] ?? "").trim() !== "");
+  const canSubmit = insumosOk && readingsOk && requiredParamsOk && !baseOtroBacheExcede;
 
   return (
     <div className="flex flex-col gap-3">
       {!capturesReadings &&
         stage.parameter_schema.map((param) => (
           <div key={param.key} className="flex flex-col gap-2">
-            <Label htmlFor={`param-${record.id}-${param.key}`}>{param.label}</Label>
+            <Label htmlFor={`param-${record.id}-${param.key}`}>
+              {param.label}
+              {param.required && <span className="text-destructive"> *</span>}
+            </Label>
             <ParamValueInput
               id={`param-${record.id}-${param.key}`}
               param={param}
@@ -874,6 +879,12 @@ function FinishStageForm({
           {checkedInsumos.length === 0
             ? "Marcá al menos un insumo."
             : "Completá lote, peso y marca de cada insumo marcado."}
+        </p>
+      )}
+      {!requiredParamsOk && (
+        <p className="text-sm text-muted-foreground">
+          Completá {requiredParams.filter((p) => !(values[p.key] ?? "").trim()).map((p) => p.label).join(", ")}{" "}
+          antes de finalizar.
         </p>
       )}
       <Button

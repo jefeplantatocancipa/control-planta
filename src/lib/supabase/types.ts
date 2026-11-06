@@ -31,6 +31,7 @@ export interface StageParameterDef {
   key: string;
   label: string;
   type: StageParameterType;
+  required?: boolean;
 }
 
 export interface InsumoEntry {

@@ -445,7 +445,12 @@ export async function finishStage(
 
   for (const param of template?.parameter_schema ?? []) {
     const raw = formData.get(`param__${param.key}`);
-    if (raw === null || raw === "") continue;
+    if (raw === null || raw === "") {
+      if (param.required) {
+        return { error: `${param.label} es obligatorio para cerrar esta etapa.` };
+      }
+      continue;
+    }
     parameters[param.key] = param.type === "number" || param.type === "porcentaje"
         ? Number(raw)
         : String(raw);

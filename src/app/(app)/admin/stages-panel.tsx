@@ -194,6 +194,15 @@ function ParameterEditor({
             <option value="porcentaje">Porcentaje</option>
             <option value="positivo_negativo">Positivo/Negativo</option>
           </select>
+          <Label className="flex items-center gap-1.5 text-xs font-normal whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={param.required ?? false}
+              onChange={(e) => updateAt(index, { required: e.target.checked })}
+              className="size-4"
+            />
+            Obligatorio
+          </Label>
           <Button
             type="button"
             variant="ghost"
