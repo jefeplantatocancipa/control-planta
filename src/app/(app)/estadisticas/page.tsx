@@ -1120,7 +1120,9 @@ export default async function EstadisticasPage({
           <p className="mt-2 text-xs text-muted-foreground">
             Suma de los consumos diarios anotados en Servicios. &quot;Días
             estimados&quot; son lecturas que no se tomaron directo del
-            medidor (sin hoja de inspección, dato inconsistente, etc.).
+            medidor (sin hoja de inspección, dato inconsistente, etc.). Los
+            días con un cambio o reinicio de medidor quedan sin dato (no se
+            suman) para no distorsionar el total del mes.
           </p>
         </CardContent>
       </Card>
