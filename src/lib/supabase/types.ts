@@ -19,6 +19,21 @@ export type InventarioTablaDestino = "materia_prima" | "empaque" | "vaso_blanco"
 export type InventarioMovimientoTipo = "entrada" | "consumo" | "ajuste" | "despacho";
 export type InventarioOrigenTipo = "bache" | "envasado" | "enmangado" | "manual";
 
+export interface ConsumoServicio {
+  id: string;
+  fecha: string;
+  gas_lectura_m3: number | null;
+  gas_consumo_m3: number | null;
+  agua_edificio_lectura_m3: number | null;
+  agua_edificio_consumo_m3: number | null;
+  agua_produccion_lectura_m3: number | null;
+  agua_produccion_consumo_m3: number | null;
+  estimado: boolean;
+  observaciones: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export type StageParameterType =
   | "number"
   | "text"
@@ -946,6 +961,38 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["inventario_movimientos"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      consumos_servicios: {
+        Row: {
+          id: string;
+          fecha: string;
+          gas_lectura_m3: number | null;
+          gas_consumo_m3: number | null;
+          agua_edificio_lectura_m3: number | null;
+          agua_edificio_consumo_m3: number | null;
+          agua_produccion_lectura_m3: number | null;
+          agua_produccion_consumo_m3: number | null;
+          estimado: boolean;
+          observaciones: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          fecha: string;
+          gas_lectura_m3?: number | null;
+          gas_consumo_m3?: number | null;
+          agua_edificio_lectura_m3?: number | null;
+          agua_edificio_consumo_m3?: number | null;
+          agua_produccion_lectura_m3?: number | null;
+          agua_produccion_consumo_m3?: number | null;
+          estimado?: boolean;
+          observaciones?: string | null;
+          created_by?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["consumos_servicios"]["Insert"]
         >;
         Relationships: [];
       };

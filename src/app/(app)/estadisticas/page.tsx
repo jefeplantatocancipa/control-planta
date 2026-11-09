@@ -140,6 +140,7 @@ export default async function EstadisticasPage({
     { data: envasadoCortes },
     { data: envasadoEstibas },
     { data: equipos },
+    { data: consumosServicios },
   ] = await Promise.all([
     supabase.from("vasos_enmangados").select("*"),
     supabase.from("profiles").select("*"),
@@ -178,6 +179,9 @@ export default async function EstadisticasPage({
       .select("id, envasado_id, operario_id, operario_2_id, started_at, ended_at"),
     supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
     supabase.from("equipos").select("id, name").eq("active", true).order("name"),
+    supabase
+      .from("consumos_servicios")
+      .select("fecha, gas_consumo_m3, agua_edificio_consumo_m3, agua_produccion_consumo_m3, estimado"),
   ]);
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
@@ -751,6 +755,42 @@ export default async function EstadisticasPage({
     };
   });
 
+  // -------------------------------------------------------------------
+  // Consumo de servicios públicos (gas, agua edificio, agua producción) por
+  // mes -- independiente del selector de mes de arriba, muestra todo el
+  // histórico cargado en /servicios (lecturas diarias de medidor).
+  // -------------------------------------------------------------------
+  const serviciosPorMesMap = new Map<
+    string,
+    { gas: number; aguaEdificio: number; aguaProduccion: number; diasEstimados: number; diasTotal: number }
+  >();
+  for (const r of consumosServicios ?? []) {
+    const mes = r.fecha.slice(0, 7);
+    const entry = serviciosPorMesMap.get(mes) ?? {
+      gas: 0,
+      aguaEdificio: 0,
+      aguaProduccion: 0,
+      diasEstimados: 0,
+      diasTotal: 0,
+    };
+    entry.gas += r.gas_consumo_m3 ?? 0;
+    entry.aguaEdificio += r.agua_edificio_consumo_m3 ?? 0;
+    entry.aguaProduccion += r.agua_produccion_consumo_m3 ?? 0;
+    entry.diasTotal += 1;
+    if (r.estimado) entry.diasEstimados += 1;
+    serviciosPorMesMap.set(mes, entry);
+  }
+  const serviciosPorMes = Array.from(serviciosPorMesMap.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([mes, e]) => {
+      const label = format(new Date(`${mes}-01T00:00:00`), "MMMM yyyy", { locale: es });
+      return {
+        mes,
+        label: label.charAt(0).toUpperCase() + label.slice(1),
+        ...e,
+      };
+    });
+
   const enmangadoByOperario = new Map<
     string,
     { operario_name: string; eventos: number; total_unidades: number; total_mermas: number }
@@ -1038,6 +1078,50 @@ export default async function EstadisticasPage({
           ) : (
             <p className="text-sm text-muted-foreground">Sin datos todavía.</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Consumo de servicios públicos por mes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mes</TableHead>
+                <TableHead className="text-right">Gas (m³)</TableHead>
+                <TableHead className="text-right">Agua edificio (m³)</TableHead>
+                <TableHead className="text-right">Agua producción (m³)</TableHead>
+                <TableHead className="text-right">Días estimados</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {serviciosPorMes.map((m) => (
+                <TableRow key={m.mes}>
+                  <TableCell className="font-medium">{m.label}</TableCell>
+                  <TableCell className="text-right tabular-nums">{kg(m.gas)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{kg(m.aguaEdificio)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{kg(m.aguaProduccion)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {m.diasEstimados} / {m.diasTotal}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {serviciosPorMes.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    Sin lecturas registradas todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Suma de los consumos diarios anotados en Servicios. &quot;Días
+            estimados&quot; son lecturas que no se tomaron directo del
+            medidor (sin hoja de inspección, dato inconsistente, etc.).
+          </p>
         </CardContent>
       </Card>
 
