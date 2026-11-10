@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format-date";
 import { pronosticosTerminacion } from "@/lib/pronostico-bache";
 import { pronosticosEnvasado } from "@/lib/pronostico-envasado";
-import { cn } from "@/lib/utils";
+import { StageFlow } from "./stage-flow";
 
 function timeSince(iso: string) {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -154,11 +154,11 @@ export default async function ProcesoPage() {
   // crudo: ese campo puede tener huecos (se corre al insertar/reordenar
   // etapas en Administración y nunca se compacta), así que un bache podía
   // mostrar "Etapa 23/12" con una lista de solo 12 etapas.
-  const stagesByProductId = new Map<string, string[]>();
+  const stagesByProductId = new Map<string, { id: string; name: string }[]>();
   for (const template of templates ?? []) {
     const key = template.product_id ?? "__default__";
     const list = stagesByProductId.get(key) ?? [];
-    list.push(template.id);
+    list.push({ id: template.id, name: template.name });
     stagesByProductId.set(key, list);
   }
   function stageListFor(productId: string) {
@@ -170,7 +170,7 @@ export default async function ProcesoPage() {
   }
   function stageRank(productId: string, stageId: string | null) {
     if (!stageId) return 0;
-    const index = stageListFor(productId).indexOf(stageId);
+    const index = stageListFor(productId).findIndex((s) => s.id === stageId);
     return index === -1 ? 0 : index + 1;
   }
 
@@ -220,21 +220,11 @@ export default async function ProcesoPage() {
                 </p>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
-                <div className="flex gap-1">
-                  {Array.from({ length: totalStages }, (_, i) => i + 1).map((n) => (
-                    <div
-                      key={n}
-                      className={cn(
-                        "h-2 flex-1 rounded-full",
-                        n < current || (n === current && bache.stage_ended_at)
-                          ? "bg-primary"
-                          : n === current
-                            ? "bg-primary/40"
-                            : "bg-muted",
-                      )}
-                    />
-                  ))}
-                </div>
+                <StageFlow
+                  stageNames={stageListFor(bache.product_id).map((s) => s.name)}
+                  current={current}
+                  allDone={allDone}
+                />
                 {bache.stage_name ? (
                   <div className="text-sm">
                     <p className="font-medium">
