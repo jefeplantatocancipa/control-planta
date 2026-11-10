@@ -173,7 +173,7 @@ function FinalizarEncajadoForm({ encajadoId }: { encajadoId: string }) {
   );
 }
 
-function EstibasList({ estibas }: { estibas: EstibaDisplay[] }) {
+export function EstibasList({ estibas }: { estibas: EstibaDisplay[] }) {
   if (estibas.length === 0) {
     return <p className="text-sm text-muted-foreground">Sin estibas todavía.</p>;
   }
