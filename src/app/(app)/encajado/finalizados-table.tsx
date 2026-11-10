@@ -15,8 +15,8 @@ import { TableScrollSync } from "@/components/table-scroll-sync";
 import { DeleteButton } from "@/components/delete-button";
 import { ReabrirEncajadoButton } from "./reabrir-encajado-button";
 import { deleteEncajado } from "./actions";
-import { formatDate, formatDateTime } from "@/lib/format-date";
-import { EstibasList, type EstibaDisplay } from "./encajado-card";
+import { formatDate, formatDateTime, formatTime } from "@/lib/format-date";
+import type { EstibaDisplay } from "./encajado-card";
 
 export interface FinalizadoRow {
   id: string;
@@ -31,6 +31,57 @@ export interface FinalizadoRow {
   unidadesAveriadas: number;
   startedAt: string | null;
   endedAt: string | null;
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-md border bg-background px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function FinalizadoDetalle({
+  row,
+  totalCajas,
+  unidadesEmpacadas,
+}: {
+  row: FinalizadoRow;
+  totalCajas: number;
+  unidadesEmpacadas: number | null;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Unidades totales" value={row.unidadesEnvasadas} />
+        <Stat label="Unidades empacadas" value={unidadesEmpacadas ?? "—"} />
+        <Stat label="Averiadas" value={row.unidadesAveriadas} />
+        <Stat label="Sueltas" value={row.unidadesSueltas} />
+      </div>
+      {row.estibas.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground">
+            Estibas ({row.estibas.length}, {totalCajas} cajas)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {row.estibas.map((e, i) => (
+              <div key={e.id} className="rounded-md border bg-background px-3 py-2 text-xs">
+                <p className="font-medium">Estiba {i + 1}</p>
+                <p className="text-muted-foreground">
+                  {formatTime(e.inicioEstiba)} –{" "}
+                  {e.finalEstiba ? formatTime(e.finalEstiba) : "En curso"}
+                </p>
+                <p>{e.cajasPorEstiba ?? "—"} cajas</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Sin estibas todavía.</p>
+      )}
+    </div>
+  );
 }
 
 export function FinalizadosTable({
@@ -127,7 +178,11 @@ export function FinalizadosTable({
                 {isExpanded && (
                   <TableRow className="bg-muted/20 hover:bg-muted/20">
                     <TableCell colSpan={colSpan}>
-                      <EstibasList estibas={c.estibas} />
+                      <FinalizadoDetalle
+                        row={c}
+                        totalCajas={totalCajas}
+                        unidadesEmpacadas={c.multiempaque !== null ? totalCajas * c.multiempaque : null}
+                      />
                     </TableCell>
                   </TableRow>
                 )}
