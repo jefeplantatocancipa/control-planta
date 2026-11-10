@@ -143,6 +143,7 @@ export default async function EstadisticasPage({
       { data: envasadoEstibas },
       { data: equipos },
       { data: consumosServicios },
+      { data: produccionHistorica },
     ],
     stageRecordsAll,
   ] = await Promise.all([
@@ -184,6 +185,10 @@ export default async function EstadisticasPage({
       supabase
         .from("consumos_servicios")
         .select("fecha, gas_consumo_m3, agua_edificio_consumo_m3, agua_produccion_consumo_m3, estimado"),
+      // Producción previa a la app (mayo-agosto 2026, cargada desde el Excel
+      // que llevaba planta antes de este módulo) -- solo totales diarios, sin
+      // desglose por producto/operario, para extender el histórico de abajo.
+      supabase.from("produccion_historica").select("fecha, kilos_producidos, kilos_empacados"),
     ]),
     // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
     // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
@@ -512,19 +517,38 @@ export default async function EstadisticasPage({
   // no una ventana móvil de 30 días -- es contra lo que se compara la
   // planeación mensual.
   // -------------------------------------------------------------------
-  const kgProducidosMes = kgProducidoEvents
-    .filter((e) => e.date >= mesRango.inicio && e.date < mesRango.fin)
-    .reduce((s, e) => s + e.kg, 0);
+  // Producción previa a septiembre 2026 no tiene baches/envasados en la app
+  // (ver HISTORIAL_INICIO_MES más abajo) -- se completa con los totales
+  // diarios cargados en produccion_historica. Sin solape con datos en vivo
+  // (ese Excel llega hasta el 2026-08-29), así que sumar ambas fuentes no
+  // duplica nada.
+  function historicoEnRango(desde: string, hasta: string) {
+    let producido = 0;
+    let empacado = 0;
+    for (const r of produccionHistorica ?? []) {
+      if (r.fecha < desde || r.fecha >= hasta) continue;
+      producido += r.kilos_producidos ?? 0;
+      empacado += r.kilos_empacados ?? 0;
+    }
+    return { producido, empacado };
+  }
+  const historicoMesActual = historicoEnRango(mesRango.inicio, mesRango.fin);
 
-  const kgEmpacadosMes = (envasados ?? [])
-    .filter((e) => {
-      const fecha = e.started_at.slice(0, 10);
-      return fecha >= mesRango.inicio && fecha < mesRango.fin;
-    })
-    .reduce((s, e) => {
-      const peso = pesoUnitarioDe(e);
-      return peso ? s + (e.cantidad_unidades * peso) / 1000 : s;
-    }, 0);
+  const kgProducidosMes =
+    kgProducidoEvents
+      .filter((e) => e.date >= mesRango.inicio && e.date < mesRango.fin)
+      .reduce((s, e) => s + e.kg, 0) + historicoMesActual.producido;
+
+  const kgEmpacadosMes =
+    (envasados ?? [])
+      .filter((e) => {
+        const fecha = e.started_at.slice(0, 10);
+        return fecha >= mesRango.inicio && fecha < mesRango.fin;
+      })
+      .reduce((s, e) => {
+        const peso = pesoUnitarioDe(e);
+        return peso ? s + (e.cantidad_unidades * peso) / 1000 : s;
+      }, 0) + historicoMesActual.empacado;
 
   // Productos que no se envasan (ej. cremado, requiere_envasado = false) no
   // generan filas en "envasados" -- para ellos, "terminado" = el kg
@@ -563,9 +587,10 @@ export default async function EstadisticasPage({
   const INVENTARIO_INICIAL_REFERENCIA_FECHA = "2026-10-01";
 
   function kgProducidoEnRango(desde: string, hasta: string) {
-    return kgProducidoEvents
+    const vivo = kgProducidoEvents
       .filter((e) => e.date >= desde && e.date < hasta)
       .reduce((s, e) => s + e.kg, 0);
+    return vivo + historicoEnRango(desde, hasta).producido;
   }
   function kgEmpacadoEnRango(desde: string, hasta: string) {
     const envasado = (envasados ?? [])
@@ -582,7 +607,7 @@ export default async function EstadisticasPage({
         (e) => e.date >= desde && e.date < hasta && requiereEnvasadoById.get(e.productId) === false,
       )
       .reduce((s, e) => s + e.kg, 0);
-    return envasado + cremado;
+    return envasado + cremado + historicoEnRango(desde, hasta).empacado;
   }
 
   const inventarioInicialMes =
@@ -612,14 +637,19 @@ export default async function EstadisticasPage({
 
   // -------------------------------------------------------------------
   // Historial mes a mes para las 4 tarjetas de arriba -- independiente del
-  // selector de mes (como la tendencia semanal de más abajo), arranca en
-  // el primer mes completo que tenemos (septiembre 2026) y de ahí en más
-  // se extiende solo con cada mes que pasa. La merma solo se puede
-  // calcular para el mes actual: los meses ya cerrados antes de octubre
+  // selector de mes (como la tendencia semanal de más abajo). Arranca en
+  // mayo 2026 (primer mes con dato en produccion_historica, el Excel
+  // previo a la app) y de ahí en más se extiende solo con cada mes que
+  // pasa, mezclando el histórico de Excel con los datos en vivo desde que
+  // existen (septiembre 2026 en adelante). La merma solo se puede calcular
+  // "exacta" para el mes actual: los meses ya cerrados antes de octubre
   // 2026 no tienen un inventario inicial conocido (no existía esta
-  // métrica todavía), así que quedan fuera de esa gráfica en particular.
+  // métrica todavía), así que usan la aproximación producido − empacado
+  // más abajo. "Tiempo promedio de preparación" sigue arrancando en
+  // septiembre 2026 nada más -- esa duración no está en el Excel
+  // histórico, solo existe desde que la app registra baches.
   // -------------------------------------------------------------------
-  const HISTORIAL_INICIO_MES = "2026-09";
+  const HISTORIAL_INICIO_MES = "2026-05";
   function mesesEntre(desde: string, hasta: string) {
     const out: string[] = [];
     let [y, m] = desde.split("-").map(Number);

@@ -34,6 +34,31 @@ export interface ConsumoServicio {
   created_at: string;
 }
 
+export interface ProduccionHistoricaItem {
+  referencia: string;
+  kilos: number;
+  unidades?: number | null;
+  peso_unitario_kg?: number | null;
+  presentacion?: string;
+  documento?: string;
+  cantidad_reportada?: number;
+  unidad_reportada?: string;
+  factor_kg_por_unidad?: number;
+}
+
+export interface ProduccionHistorica {
+  id: string;
+  fecha: string;
+  lote: number | null;
+  kilos_producidos: number;
+  kilos_empacados: number;
+  produccion: ProduccionHistoricaItem[];
+  empaque: ProduccionHistoricaItem[];
+  fuente: string | null;
+  observaciones: string | null;
+  created_at: string;
+}
+
 export type StageParameterType =
   | "number"
   | "text"
@@ -993,6 +1018,34 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["consumos_servicios"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      produccion_historica: {
+        Row: {
+          id: string;
+          fecha: string;
+          lote: number | null;
+          kilos_producidos: number;
+          kilos_empacados: number;
+          produccion: ProduccionHistoricaItem[];
+          empaque: ProduccionHistoricaItem[];
+          fuente: string | null;
+          observaciones: string | null;
+          created_at: string;
+        };
+        Insert: {
+          fecha: string;
+          lote?: number | null;
+          kilos_producidos?: number;
+          kilos_empacados?: number;
+          produccion?: ProduccionHistoricaItem[];
+          empaque?: ProduccionHistoricaItem[];
+          fuente?: string | null;
+          observaciones?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["produccion_historica"]["Insert"]
         >;
         Relationships: [];
       };
