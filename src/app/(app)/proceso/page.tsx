@@ -1,5 +1,6 @@
 import { requireProfile } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format-date";
@@ -27,53 +28,69 @@ export default async function ProcesoPage() {
   const supabase = await createClient();
 
   const [
-    { data: proceso },
-    { data: templates },
-    { data: envasadosAbiertos },
-    { data: allBaches },
-    { data: products },
-    { data: cortes },
-    { data: estibas },
-    { data: paradas },
-    { data: registrosCerrados },
-    { data: registrosEnCurso },
-    { data: envasadoReferencias },
-    { data: envasadosCerrados },
+    [
+      { data: proceso },
+      { data: templates },
+      { data: envasadosAbiertos },
+      { data: allBaches },
+      { data: products },
+      { data: cortes },
+      { data: estibas },
+      { data: paradas },
+      { data: registrosEnCurso },
+      { data: envasadoReferencias },
+      { data: envasadosCerrados },
+    ],
+    registrosCerrados,
   ] = await Promise.all([
-    supabase
-      .from("v_proceso_actual")
-      .select("*")
-      .order("bache_started_at", { ascending: false }),
-    supabase
-      .from("process_stage_templates")
-      .select("*")
-      .eq("active", true)
-      .order("sequence_order"),
-    supabase.from("envasados").select("*").is("ended_at", null),
-    supabase.from("baches").select("id, batch_code, product_id, status, volumen_restante_litros"),
-    supabase.from("products").select("id, name"),
-    supabase.from("envasado_cortes").select("id, envasado_id"),
-    supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
-    supabase.from("envasado_paradas").select("*"),
+    Promise.all([
+      supabase
+        .from("v_proceso_actual")
+        .select("*")
+        .order("bache_started_at", { ascending: false }),
+      supabase
+        .from("process_stage_templates")
+        .select("*")
+        .eq("active", true)
+        .order("sequence_order"),
+      supabase.from("envasados").select("*").is("ended_at", null),
+      supabase.from("baches").select("id, batch_code, product_id, status, volumen_restante_litros"),
+      supabase.from("products").select("id, name"),
+      supabase.from("envasado_cortes").select("id, envasado_id"),
+      supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
+      supabase.from("envasado_paradas").select("*"),
+      // La etapa en curso de cada bache: acotada a los baches activos, no
+      // crece sin límite como el histórico de abajo.
+      supabase
+        .from("bache_stage_records")
+        .select("bache_id, stage_template_id, started_at, ended_at")
+        .is("ended_at", null),
+      // Para el pronóstico de envasado (src/lib/pronostico-envasado.ts): las
+      // referencias (peso unitario) y los envasados ya cerrados de cualquier
+      // bache, para la velocidad promedio histórica por referencia.
+      supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
+      supabase
+        .from("envasados")
+        .select("referencia_id, presentacion, started_at, ended_at, cantidad_unidades")
+        .not("ended_at", "is", null),
+    ]),
     // Para el pronóstico de terminación (src/lib/pronostico-bache.ts):
-    // etapas ya cerradas de cualquier bache (duración promedio histórica) y
-    // la etapa en curso de cada bache.
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, started_at, ended_at")
-      .not("ended_at", "is", null),
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, started_at, ended_at")
-      .is("ended_at", null),
-    // Para el pronóstico de envasado (src/lib/pronostico-envasado.ts): las
-    // referencias (peso unitario) y los envasados ya cerrados de cualquier
-    // bache, para la velocidad promedio histórica por referencia.
-    supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
-    supabase
-      .from("envasados")
-      .select("referencia_id, presentacion, started_at, ended_at, cantidad_unidades")
-      .not("ended_at", "is", null),
+    // etapas ya cerradas de cualquier bache (duración promedio histórica).
+    // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
+    // Supabase) -- sin paginar, se trunca solo y deja afuera los baches
+    // más recientes.
+    fetchAll<{
+      bache_id: string;
+      stage_template_id: string;
+      started_at: string;
+      ended_at: string | null;
+    }>((from, to) =>
+      supabase
+        .from("bache_stage_records")
+        .select("bache_id, stage_template_id, started_at, ended_at")
+        .not("ended_at", "is", null)
+        .range(from, to),
+    ),
   ]);
 
   const bachesById = new Map((allBaches ?? []).map((b) => [b.id, b]));

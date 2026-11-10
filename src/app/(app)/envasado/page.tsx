@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Download, Printer } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import type { StageRecordParameters } from "@/lib/supabase/types";
 import {
   Table,
   TableBody,
@@ -30,69 +32,80 @@ export default async function EnvasadoPage() {
   const supabase = await createClient();
 
   const [
-    { data: envasados },
-    { data: baches },
-    { data: products },
-    { data: operarios },
-    { data: insumosStages },
-    { data: allStages },
-    { data: stageRecords },
-    { data: envasadoOrders },
-    { data: envasadoReferencias },
-    { data: envasadoReferenciaProductos },
-    { data: envasadoInsumos },
-    { data: envasadoReferenciaInsumos },
-    { data: turnos },
-    { data: cortes },
-    { data: calidadLecturas },
-    { data: estibas },
-    { data: paradas },
-    { data: insumosUso },
-    { data: corteFirmas },
+    [
+      { data: envasados },
+      { data: baches },
+      { data: products },
+      { data: operarios },
+      { data: insumosStages },
+      { data: allStages },
+      { data: envasadoOrders },
+      { data: envasadoReferencias },
+      { data: envasadoReferenciaProductos },
+      { data: envasadoInsumos },
+      { data: envasadoReferenciaInsumos },
+      { data: turnos },
+      { data: cortes },
+      { data: calidadLecturas },
+      { data: estibas },
+      { data: paradas },
+      { data: insumosUso },
+      { data: corteFirmas },
+    ],
+    stageRecords,
   ] = await Promise.all([
-    supabase
-      .from("envasados")
-      .select("*")
-      .order("started_at", { ascending: false }),
-    supabase
-      .from("baches")
-      .select("*")
-      .neq("status", "cancelado")
-      .order("started_at", { ascending: false }),
-    supabase.from("products").select("*"),
-    supabase.from("profiles").select("*").eq("active", true).order("full_name"),
-    supabase
-      .from("process_stage_templates")
-      .select("id, sequence_order")
-      .eq("captures_insumos", true),
-    supabase
-      .from("process_stage_templates")
-      .select("id, product_id, name")
-      .eq("active", true),
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, parameters"),
-    // "en_proceso" se incluye porque una orden puede necesitar varios
-    // baches/envasados hasta completar sus unidades planeadas -- no debe
-    // desaparecer del selector solo porque ya se usó una vez.
-    supabase
-      .from("envasado_orders")
-      .select("*")
-      .in("status", ["pendiente", "en_proceso"])
-      .order("scheduled_date"),
-    supabase.from("envasado_referencias").select("*"),
-    supabase.from("envasado_referencia_productos").select("*"),
-    supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
-    supabase.from("envasado_referencia_insumos").select("*"),
-    supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
-    supabase.from("envasado_cortes").select("*").order("started_at"),
-    supabase.from("envasado_calidad_lecturas").select("*").order("created_at"),
-    supabase.from("envasado_estibas").select("*").order("inicio_estiba"),
-    supabase.from("envasado_paradas").select("*").order("started_at"),
-    supabase
-      .from("envasado_insumos_uso")
-      .select("id, envasado_id, envasado_insumo_id"),
-    supabase.from("envasado_corte_firmas").select("*"),
+    Promise.all([
+      supabase
+        .from("envasados")
+        .select("*")
+        .order("started_at", { ascending: false }),
+      supabase
+        .from("baches")
+        .select("*")
+        .neq("status", "cancelado")
+        .order("started_at", { ascending: false }),
+      supabase.from("products").select("*"),
+      supabase.from("profiles").select("*").eq("active", true).order("full_name"),
+      supabase
+        .from("process_stage_templates")
+        .select("id, sequence_order")
+        .eq("captures_insumos", true),
+      supabase
+        .from("process_stage_templates")
+        .select("id, product_id, name")
+        .eq("active", true),
+      // "en_proceso" se incluye porque una orden puede necesitar varios
+      // baches/envasados hasta completar sus unidades planeadas -- no debe
+      // desaparecer del selector solo porque ya se usó una vez.
+      supabase
+        .from("envasado_orders")
+        .select("*")
+        .in("status", ["pendiente", "en_proceso"])
+        .order("scheduled_date"),
+      supabase.from("envasado_referencias").select("*"),
+      supabase.from("envasado_referencia_productos").select("*"),
+      supabase.from("envasado_insumos").select("*").eq("active", true).order("name"),
+      supabase.from("envasado_referencia_insumos").select("*"),
+      supabase.from("turnos").select("*").eq("active", true).order("hora_inicio"),
+      supabase.from("envasado_cortes").select("*").order("started_at"),
+      supabase.from("envasado_calidad_lecturas").select("*").order("created_at"),
+      supabase.from("envasado_estibas").select("*").order("inicio_estiba"),
+      supabase.from("envasado_paradas").select("*").order("started_at"),
+      supabase
+        .from("envasado_insumos_uso")
+        .select("id, envasado_id, envasado_insumo_id"),
+      supabase.from("envasado_corte_firmas").select("*"),
+    ]),
+    // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
+    // Supabase) -- sin paginar, se trunca solo y deja afuera los baches
+    // más recientes (ej. el checklist de insumos para "base de otro bache").
+    fetchAll<{ bache_id: string; stage_template_id: string; parameters: StageRecordParameters }>(
+      (from, to) =>
+        supabase
+          .from("bache_stage_records")
+          .select("bache_id, stage_template_id, parameters")
+          .range(from, to),
+    ),
   ]);
 
   const firmasByCorte = new Map((corteFirmas ?? []).map((f) => [f.corte_id, f]));

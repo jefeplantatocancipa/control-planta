@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import type { StageRecordParameters } from "@/lib/supabase/types";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -126,62 +128,80 @@ export default async function EstadisticasPage({
   const supabase = await createClient();
 
   const [
-    { data: vasosEnmangados },
-    { data: profiles },
-    { data: bachesCerrados },
-    { data: todosBaches },
-    { data: insumos },
-    { data: envasados },
-    { data: envasadoOrders },
-    { data: envasadoReferencias },
-    { data: products },
-    { data: stageRecordsAll },
-    { data: stageTemplatesAll },
-    { data: envasadoCortes },
-    { data: envasadoEstibas },
-    { data: equipos },
-    { data: consumosServicios },
+    [
+      { data: vasosEnmangados },
+      { data: profiles },
+      { data: bachesCerrados },
+      { data: todosBaches },
+      { data: insumos },
+      { data: envasados },
+      { data: envasadoOrders },
+      { data: envasadoReferencias },
+      { data: products },
+      { data: stageTemplatesAll },
+      { data: envasadoCortes },
+      { data: envasadoEstibas },
+      { data: equipos },
+      { data: consumosServicios },
+    ],
+    stageRecordsAll,
   ] = await Promise.all([
-    supabase.from("vasos_enmangados").select("*"),
-    supabase.from("profiles").select("*"),
-    // batch_code hace falta para el histórico de tiempos por bache (debajo
-    // del diagrama de Gantt de duración promedio).
-    supabase
-      .from("baches")
-      .select("id, batch_code, product_id, started_at, completed_at")
-      .eq("status", "completado")
-      .not("completed_at", "is", null),
-    // Para "kg producidos" hace falta CUALQUIER bache (no solo los ya
-    // completados): la última etapa con checklist de insumos puede cerrarse
-    // antes de que el bache entero se marque como terminado.
-    supabase.from("baches").select("id, product_id, status, volumen_restante_litros"),
-    supabase.from("insumos").select("id, name"),
-    supabase
-      .from("envasados")
-      .select("id, bache_id, cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
-    // Unidades programadas por semana (vs. las realmente empacadas) --
-    // scheduled_date es la fecha planeada de la orden, no de ejecución.
-    supabase.from("envasado_orders").select("scheduled_date, planned_quantity"),
-    supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
-    supabase.from("products").select("id, name, requiere_envasado"),
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, operario_id, started_at, ended_at, parameters"),
-    supabase
-      .from("process_stage_templates")
-      .select("id, product_id, name, sequence_order, captures_insumos"),
-    // Rendimiento por turno: cada corte tiene su propia ventana de tiempo
-    // (no la del envasado completo, que puede tener huecos entre turnos) y
-    // hasta dos operarios -- las unidades/hora se calculan por turno y se
-    // le acreditan a los dos.
-    supabase
-      .from("envasado_cortes")
-      .select("id, envasado_id, operario_id, operario_2_id, started_at, ended_at"),
-    supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
-    supabase.from("equipos").select("id, name").eq("active", true).order("name"),
-    supabase
-      .from("consumos_servicios")
-      .select("fecha, gas_consumo_m3, agua_edificio_consumo_m3, agua_produccion_consumo_m3, estimado"),
+    Promise.all([
+      supabase.from("vasos_enmangados").select("*"),
+      supabase.from("profiles").select("*"),
+      // batch_code hace falta para el histórico de tiempos por bache (debajo
+      // del diagrama de Gantt de duración promedio).
+      supabase
+        .from("baches")
+        .select("id, batch_code, product_id, started_at, completed_at")
+        .eq("status", "completado")
+        .not("completed_at", "is", null),
+      // Para "kg producidos" hace falta CUALQUIER bache (no solo los ya
+      // completados): la última etapa con checklist de insumos puede cerrarse
+      // antes de que el bache entero se marque como terminado.
+      supabase.from("baches").select("id, product_id, status, volumen_restante_litros"),
+      supabase.from("insumos").select("id, name"),
+      supabase
+        .from("envasados")
+        .select("id, bache_id, cantidad_unidades, referencia_id, presentacion, started_at, ended_at"),
+      // Unidades programadas por semana (vs. las realmente empacadas) --
+      // scheduled_date es la fecha planeada de la orden, no de ejecución.
+      supabase.from("envasado_orders").select("scheduled_date, planned_quantity"),
+      supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
+      supabase.from("products").select("id, name, requiere_envasado"),
+      supabase
+        .from("process_stage_templates")
+        .select("id, product_id, name, sequence_order, captures_insumos"),
+      // Rendimiento por turno: cada corte tiene su propia ventana de tiempo
+      // (no la del envasado completo, que puede tener huecos entre turnos) y
+      // hasta dos operarios -- las unidades/hora se calculan por turno y se
+      // le acreditan a los dos.
+      supabase
+        .from("envasado_cortes")
+        .select("id, envasado_id, operario_id, operario_2_id, started_at, ended_at"),
+      supabase.from("envasado_estibas").select("corte_id, unidades_por_estiba"),
+      supabase.from("equipos").select("id, name").eq("active", true).order("name"),
+      supabase
+        .from("consumos_servicios")
+        .select("fecha, gas_consumo_m3, agua_edificio_consumo_m3, agua_produccion_consumo_m3, estimado"),
+    ]),
+    // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
+    // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
+    // baches más recientes de "kg producidos" y las demás estadísticas que
+    // dependen de esta tabla.
+    fetchAll<{
+      bache_id: string;
+      stage_template_id: string;
+      operario_id: string;
+      started_at: string;
+      ended_at: string | null;
+      parameters: StageRecordParameters;
+    }>((from, to) =>
+      supabase
+        .from("bache_stage_records")
+        .select("bache_id, stage_template_id, operario_id, started_at, ended_at, parameters")
+        .range(from, to),
+    ),
   ]);
 
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));

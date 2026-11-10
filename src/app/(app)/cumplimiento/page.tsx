@@ -1,5 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import type { StageRecordParameters } from "@/lib/supabase/types";
 import { ConsolidadoCumplimiento, type CumplimientoRow } from "./consolidado";
 
 export default async function CumplimientoPage() {
@@ -7,29 +9,47 @@ export default async function CumplimientoPage() {
   const supabase = await createClient();
 
   const [
-    { data: productionOrdersData },
-    { data: productsData },
-    { data: bachesData },
-    { data: stageTemplatesData },
-    { data: stageRecordsData },
-    { data: envasadoOrdersData },
-    { data: envasadoReferenciasData },
-    { data: envasadosData },
+    [
+      { data: productionOrdersData },
+      { data: productsData },
+      { data: bachesData },
+      { data: stageTemplatesData },
+      { data: envasadoOrdersData },
+      { data: envasadoReferenciasData },
+      { data: envasadosData },
+    ],
+    stageRecordsData,
   ] = await Promise.all([
-    supabase.from("production_orders").select("product_id, scheduled_date, baches_planeados"),
-    supabase.from("products").select("id, name, volumen_por_bache"),
-    supabase.from("baches").select("id, product_id, batch_code"),
-    supabase
-      .from("process_stage_templates")
-      .select("id, product_id, sequence_order, captures_insumos")
-      .eq("active", true),
-    supabase.from("bache_stage_records").select("bache_id, stage_template_id, ended_at, parameters"),
-    supabase
-      .from("envasado_orders")
-      .select("id, referencia_id, scheduled_date, planned_quantity")
-      .order("scheduled_date", { ascending: false }),
-    supabase.from("envasado_referencias").select("id, sku, name"),
-    supabase.from("envasados").select("referencia_id, presentacion, cantidad_unidades, started_at"),
+    Promise.all([
+      supabase.from("production_orders").select("product_id, scheduled_date, baches_planeados"),
+      supabase.from("products").select("id, name, volumen_por_bache"),
+      supabase.from("baches").select("id, product_id, batch_code"),
+      supabase
+        .from("process_stage_templates")
+        .select("id, product_id, sequence_order, captures_insumos")
+        .eq("active", true),
+      supabase
+        .from("envasado_orders")
+        .select("id, referencia_id, scheduled_date, planned_quantity")
+        .order("scheduled_date", { ascending: false }),
+      supabase.from("envasado_referencias").select("id, sku, name"),
+      supabase.from("envasados").select("referencia_id, presentacion, cantidad_unidades, started_at"),
+    ]),
+    // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
+    // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
+    // baches más recientes (eso fue justo lo que pasó con "Entero de la
+    // Cuesta" de octubre: 300 y 304 desaparecían del cálculo).
+    fetchAll<{
+      bache_id: string;
+      stage_template_id: string;
+      ended_at: string | null;
+      parameters: StageRecordParameters;
+    }>((from, to) =>
+      supabase
+        .from("bache_stage_records")
+        .select("bache_id, stage_template_id, ended_at, parameters")
+        .range(from, to),
+    ),
   ]);
 
   // "Bases (baches)" en kilos: la vista v_cumplimiento_programa medía lo

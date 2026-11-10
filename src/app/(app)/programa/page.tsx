@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { NewProgramDialog } from "./new-program-dialog";
 import { ImportBachesDialog } from "./import-baches-dialog";
 import { ImportEnvasadoDialog } from "./import-envasado-dialog";
@@ -48,20 +49,27 @@ export default async function ProgramaPage() {
   // respaldo la hora en que se cerró la ÚLTIMA etapa de la secuencia de ese
   // producto, solo si esa etapa puntual ya está cerrada.
   const bacheIds = (baches ?? []).map((b) => b.id);
-  const [{ data: stageRecordsForReal }, { data: stageTemplatesForReal }] =
+  const [stageRecordsForReal, { data: stageTemplatesForReal }] =
     bacheIds.length > 0
       ? await Promise.all([
-          supabase
-            .from("bache_stage_records")
-            .select("bache_id, stage_template_id, ended_at")
-            .in("bache_id", bacheIds)
-            .not("ended_at", "is", null),
+          // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
+          // Supabase) -- sin paginar, se trunca solo y deja afuera los
+          // baches más recientes.
+          fetchAll<{ bache_id: string; stage_template_id: string; ended_at: string | null }>(
+            (from, to) =>
+              supabase
+                .from("bache_stage_records")
+                .select("bache_id, stage_template_id, ended_at")
+                .in("bache_id", bacheIds)
+                .not("ended_at", "is", null)
+                .range(from, to),
+          ),
           supabase
             .from("process_stage_templates")
             .select("id, product_id, sequence_order")
             .eq("active", true),
         ])
-      : [{ data: [] }, { data: [] }];
+      : [[], { data: [] }];
 
   const stagesByProductForReal = new Map<string, { id: string; sequence_order: number }[]>();
   const defaultStagesForReal: { id: string; sequence_order: number }[] = [];

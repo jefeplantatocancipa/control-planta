@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import type { StageRecordParameters } from "@/lib/supabase/types";
 import { formatDateTime } from "@/lib/format-date";
 
 const HEADERS = [
@@ -22,28 +24,39 @@ export async function GET() {
   const supabase = await createClient();
 
   const [
-    { data: envasados },
-    { data: baches },
-    { data: products },
-    { data: operarios },
-    { data: insumosStages },
-    { data: stageRecords },
+    [
+      { data: envasados },
+      { data: baches },
+      { data: products },
+      { data: operarios },
+      { data: insumosStages },
+    ],
+    stageRecords,
   ] = await Promise.all([
-    supabase
-      .from("envasados")
-      .select("*")
-      .not("ended_at", "is", null)
-      .order("ended_at", { ascending: false }),
-    supabase.from("baches").select("id, batch_code, product_id"),
-    supabase.from("products").select("id, name"),
-    supabase.from("profiles").select("id, full_name"),
-    supabase
-      .from("process_stage_templates")
-      .select("id, sequence_order")
-      .eq("captures_insumos", true),
-    supabase
-      .from("bache_stage_records")
-      .select("bache_id, stage_template_id, parameters"),
+    Promise.all([
+      supabase
+        .from("envasados")
+        .select("*")
+        .not("ended_at", "is", null)
+        .order("ended_at", { ascending: false }),
+      supabase.from("baches").select("id, batch_code, product_id"),
+      supabase.from("products").select("id, name"),
+      supabase.from("profiles").select("id, full_name"),
+      supabase
+        .from("process_stage_templates")
+        .select("id, sequence_order")
+        .eq("captures_insumos", true),
+    ]),
+    // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
+    // Supabase) -- sin paginar, se trunca solo y deja afuera los baches
+    // más recientes.
+    fetchAll<{ bache_id: string; stage_template_id: string; parameters: StageRecordParameters }>(
+      (from, to) =>
+        supabase
+          .from("bache_stage_records")
+          .select("bache_id, stage_template_id, parameters")
+          .range(from, to),
+    ),
   ]);
 
   const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
