@@ -184,7 +184,7 @@ export default async function EstadisticasPage({
       supabase.from("equipos").select("id, name").eq("active", true).order("name"),
       supabase
         .from("consumos_servicios")
-        .select("fecha, gas_consumo_m3, agua_edificio_consumo_m3, agua_produccion_consumo_m3, estimado"),
+        .select("fecha, gas_consumo_m3, agua_edificio_consumo_m3, agua_produccion_consumo_m3"),
       // Producción previa a la app (mayo-agosto 2026, cargada desde el Excel
       // que llevaba planta antes de este módulo) -- solo totales diarios, sin
       // desglose por producto/operario, para extender el histórico de abajo.
@@ -812,7 +812,7 @@ export default async function EstadisticasPage({
   // -------------------------------------------------------------------
   const serviciosPorMesMap = new Map<
     string,
-    { gas: number; aguaEdificio: number; aguaProduccion: number; diasEstimados: number; diasTotal: number }
+    { gas: number; aguaEdificio: number; aguaProduccion: number }
   >();
   for (const r of consumosServicios ?? []) {
     const mes = r.fecha.slice(0, 7);
@@ -820,14 +820,10 @@ export default async function EstadisticasPage({
       gas: 0,
       aguaEdificio: 0,
       aguaProduccion: 0,
-      diasEstimados: 0,
-      diasTotal: 0,
     };
     entry.gas += r.gas_consumo_m3 ?? 0;
     entry.aguaEdificio += r.agua_edificio_consumo_m3 ?? 0;
     entry.aguaProduccion += r.agua_produccion_consumo_m3 ?? 0;
-    entry.diasTotal += 1;
-    if (r.estimado) entry.diasEstimados += 1;
     serviciosPorMesMap.set(mes, entry);
   }
   const serviciosPorMes = Array.from(serviciosPorMesMap.entries())
@@ -1143,7 +1139,6 @@ export default async function EstadisticasPage({
                 <TableHead className="text-right">Gas (m³)</TableHead>
                 <TableHead className="text-right">Agua edificio (m³)</TableHead>
                 <TableHead className="text-right">Agua producción (m³)</TableHead>
-                <TableHead className="text-right">Días estimados</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1153,14 +1148,11 @@ export default async function EstadisticasPage({
                   <TableCell className="text-right tabular-nums">{kg(m.gas)}</TableCell>
                   <TableCell className="text-right tabular-nums">{kg(m.aguaEdificio)}</TableCell>
                   <TableCell className="text-right tabular-nums">{kg(m.aguaProduccion)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {m.diasEstimados} / {m.diasTotal}
-                  </TableCell>
                 </TableRow>
               ))}
               {serviciosPorMes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
                     Sin lecturas registradas todavía.
                   </TableCell>
                 </TableRow>
@@ -1168,11 +1160,9 @@ export default async function EstadisticasPage({
             </TableBody>
           </Table>
           <p className="mt-2 text-xs text-muted-foreground">
-            Suma de los consumos diarios anotados en Servicios. &quot;Días
-            estimados&quot; son lecturas que no se tomaron directo del
-            medidor (sin hoja de inspección, dato inconsistente, etc.). Los
-            días con un cambio o reinicio de medidor quedan sin dato (no se
-            suman) para no distorsionar el total del mes.
+            Suma de los consumos diarios anotados en Servicios. Los días con
+            un cambio o reinicio de medidor quedan sin dato (no se suman)
+            para no distorsionar el total del mes.
           </p>
         </CardContent>
       </Card>
