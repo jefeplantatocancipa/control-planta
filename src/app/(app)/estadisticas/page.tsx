@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Percent } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Percent, Target } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
@@ -675,6 +675,34 @@ export default async function EstadisticasPage({
     return durs.length > 0 ? durs.reduce((s, v) => s + v, 0) / durs.length : null;
   }
 
+  // -------------------------------------------------------------------
+  // Cumplimiento del programa: unidades programadas (envasado_orders, por
+  // fecha planeada) vs. unidades realmente empacadas (envasados, por fecha
+  // de ejecución) -- mismo origen que el gráfico semanal de más abajo,
+  // resumido en un solo %. Sin programa cargado para ese rango, null (no
+  // "0%", que se leería como incumplimiento total).
+  // -------------------------------------------------------------------
+  function unidadesProgramadasEnRango(desde: string, hasta: string) {
+    return (envasadoOrders ?? [])
+      .filter((o) => o.scheduled_date >= desde && o.scheduled_date < hasta)
+      .reduce((s, o) => s + (o.planned_quantity ?? 0), 0);
+  }
+  function unidadesEmpacadasEnRango(desde: string, hasta: string) {
+    return (envasados ?? [])
+      .filter((e) => {
+        const fecha = e.started_at.slice(0, 10);
+        return fecha >= desde && fecha < hasta;
+      })
+      .reduce((s, e) => s + e.cantidad_unidades, 0);
+  }
+  function pctCumplimiento(planned: number, executed: number) {
+    if (planned > 0) return Math.round((executed / planned) * 100);
+    return executed > 0 ? 100 : null;
+  }
+  const unidadesProgramadasMes = unidadesProgramadasEnRango(mesRango.inicio, mesRango.fin);
+  const unidadesEmpacadasUnidMes = unidadesEmpacadasEnRango(mesRango.inicio, mesRango.fin);
+  const cumplimientoPctMes = pctCumplimiento(unidadesProgramadasMes, unidadesEmpacadasUnidMes);
+
   const historialMeses = mesesEntre(HISTORIAL_INICIO_MES, mesActualStr).map((mesStr) => {
     const rango = monthRange(mesStr);
     const shortLabel = format(new Date(`${rango.inicio}T00:00:00`), "MMM", { locale: es });
@@ -691,6 +719,10 @@ export default async function EstadisticasPage({
         : kgProducido > 0
           ? ((kgProducido - kgEmpacado) / kgProducido) * 100
           : null;
+    const cumplimiento = pctCumplimiento(
+      unidadesProgramadasEnRango(rango.inicio, rango.fin),
+      unidadesEmpacadasEnRango(rango.inicio, rango.fin),
+    );
     return {
       mes: mesStr,
       label: shortLabel.charAt(0).toUpperCase() + shortLabel.slice(1),
@@ -698,6 +730,7 @@ export default async function EstadisticasPage({
       kgProducido,
       kgEmpacado,
       merma,
+      cumplimiento,
     };
   });
 
@@ -715,6 +748,9 @@ export default async function EstadisticasPage({
   const mermaHistorialChart = historialMeses
     .filter((m): m is typeof m & { merma: number } => m.merma != null)
     .map((m) => ({ label: m.label, value: Math.round(m.merma * 10) / 10 }));
+  const cumplimientoHistorialChart = historialMeses
+    .filter((m): m is typeof m & { cumplimiento: number } => m.cumplimiento != null)
+    .map((m) => ({ label: m.label, value: m.cumplimiento }));
 
   const produccionPorProductoMap = new Map<string, number>();
   for (const e of kgProducidoEvents) {
@@ -1029,7 +1065,7 @@ export default async function EstadisticasPage({
         <PrintButton />
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiCard
           icon={Clock}
           label="Tiempo promedio de preparación"
@@ -1043,6 +1079,13 @@ export default async function EstadisticasPage({
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
           chart={<KpiTrendChart data={mermaHistorialChart} unit="%" />}
+        />
+        <KpiCard
+          icon={Target}
+          label="Cumplimiento del programa"
+          value={cumplimientoPctMes != null ? `${cumplimientoPctMes}%` : "—"}
+          sublabel={`${kg(unidadesEmpacadasUnidMes)} und sobre ${kg(unidadesProgramadasMes)} und programadas`}
+          chart={<KpiTrendChart data={cumplimientoHistorialChart} unit="%" />}
         />
         <KpiCard
           icon={Package}
