@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OperarioBarChart } from "./operario-bar-chart";
+import { KpiCard } from "./kpi-card";
 import { KpiTrendChart } from "./kpi-trend-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
@@ -89,7 +90,11 @@ function nowMs() {
   return Date.now();
 }
 
-function KpiCard({
+// Las 5 tarjetas de arriba usan la versión clickeable (./kpi-card.tsx) que
+// se agranda en un diálogo -- estas de abajo (servicios y eficiencia por
+// kg) se quedan con la versión simple mientras se decide si también vale
+// la pena ahí.
+function StaticKpiCard({
   icon: Icon,
   label,
   value,
@@ -1229,21 +1234,24 @@ export default async function EstadisticasPage({
           label="Tiempo promedio de preparación"
           value={minutesLabel(avgPrepMinutes)}
           sublabel={`${prepDurations.length} bache${prepDurations.length === 1 ? "" : "s"} cerrados`}
-          chart={<KpiTrendChart data={prepHistorialChart} unit="h" />}
+          data={prepHistorialChart}
+          unit="h"
         />
         <KpiCard
           icon={Percent}
           label="Merma de producción"
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
-          chart={<KpiTrendChart data={mermaHistorialChart} unit="%" />}
+          data={mermaHistorialChart}
+          unit="%"
         />
         <KpiCard
           icon={Target}
           label="Cumplimiento del programa"
           value={cumplimientoPctMes != null ? `${cumplimientoPctMes}%` : "—"}
           sublabel={`${kg(unidadesEmpacadasUnidMes)} und sobre ${kg(unidadesProgramadasMes)} und programadas`}
-          chart={<KpiTrendChart data={cumplimientoHistorialChart} unit="%" />}
+          data={cumplimientoHistorialChart}
+          unit="%"
         />
         <KpiCard
           icon={Package}
@@ -1259,7 +1267,8 @@ export default async function EstadisticasPage({
               mesRango.label
             )
           }
-          chart={<KpiTrendChart data={producidoHistorialChart} unit="kg" />}
+          data={producidoHistorialChart}
+          unit="kg"
         />
         <KpiCard
           icon={PackageCheck}
@@ -1274,7 +1283,8 @@ export default async function EstadisticasPage({
               mesRango.label
             )
           }
-          chart={<KpiTrendChart data={empacadoHistorialChart} unit="kg" />}
+          data={empacadoHistorialChart}
+          unit="kg"
         />
       </div>
 
@@ -1330,28 +1340,28 @@ export default async function EstadisticasPage({
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">Consumo de servicios públicos ({mesRango.label})</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-          <KpiCard
+          <StaticKpiCard
             icon={Flame}
             label="Gas"
             value={`${kg(serviciosMesActual.gas)} m³`}
             sublabel={mesRango.label}
             chart={<KpiTrendChart data={gasHistorialChart} unit="m³" />}
           />
-          <KpiCard
+          <StaticKpiCard
             icon={Building2}
             label="Agua edificio"
             value={`${kg(serviciosMesActual.aguaEdificio)} m³`}
             sublabel={mesRango.label}
             chart={<KpiTrendChart data={aguaEdificioHistorialChart} unit="m³" />}
           />
-          <KpiCard
+          <StaticKpiCard
             icon={Droplet}
             label="Agua producción"
             value={`${kg(serviciosMesActual.aguaProduccion)} m³`}
             sublabel={mesRango.label}
             chart={<KpiTrendChart data={aguaProduccionHistorialChart} unit="m³" />}
           />
-          <KpiCard
+          <StaticKpiCard
             icon={Zap}
             label="Energía"
             value={energiaMesActual != null ? `${kg(energiaMesActual)} kWh` : "—"}
@@ -1366,21 +1376,21 @@ export default async function EstadisticasPage({
           Eficiencia por kilo empacado ({mesRango.label})
         </h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <KpiCard
+          <StaticKpiCard
             icon={Droplet}
             label="Agua de producción"
             value={aguaPorKgMes != null ? `${fmtRatio(aguaPorKgMes)} L/kg` : "—"}
             sublabel={mesRango.label}
             chart={<KpiTrendChart data={aguaPorKgHistorialChart} unit="L/kg" />}
           />
-          <KpiCard
+          <StaticKpiCard
             icon={Flame}
             label="Gas"
             value={gasPorKgMes != null ? `${fmtRatio(gasPorKgMes)} m³/kg` : "—"}
             sublabel={mesRango.label}
             chart={<KpiTrendChart data={gasPorKgHistorialChart} unit="m³/kg" />}
           />
-          <KpiCard
+          <StaticKpiCard
             icon={Zap}
             label="Energía"
             value={energiaPorKgMes != null ? `${fmtRatio(energiaPorKgMes)} kWh/kg` : "—"}
