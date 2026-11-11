@@ -1,6 +1,17 @@
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, Package, PackageCheck, Percent, Target } from "lucide-react";
+import {
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Droplet,
+  Flame,
+  Package,
+  PackageCheck,
+  Percent,
+  Target,
+} from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { requireRole } from "@/lib/auth/dal";
@@ -862,16 +873,32 @@ export default async function EstadisticasPage({
     entry.aguaProduccion += r.agua_produccion_consumo_m3 ?? 0;
     serviciosPorMesMap.set(mes, entry);
   }
-  const serviciosPorMes = Array.from(serviciosPorMesMap.entries())
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([mes, e]) => {
-      const label = format(new Date(`${mes}-01T00:00:00`), "MMMM yyyy", { locale: es });
-      return {
-        mes,
-        label: label.charAt(0).toUpperCase() + label.slice(1),
-        ...e,
-      };
-    });
+  // Tarjeta y gráficas van acordes al mismo selector de mes de arriba (no al
+  // mes calendario actual), igual que Kilos producidos/empacados.
+  const serviciosMesActual = serviciosPorMesMap.get(mesRango.mes) ?? {
+    gas: 0,
+    aguaEdificio: 0,
+    aguaProduccion: 0,
+  };
+  function mesCorto(mes: string) {
+    const s = format(new Date(`${mes}-01T00:00:00`), "MMM", { locale: es });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  const serviciosHistorialAsc = Array.from(serviciosPorMesMap.entries()).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  const gasHistorialChart = serviciosHistorialAsc.map(([mes, e]) => ({
+    label: mesCorto(mes),
+    value: Math.round(e.gas * 10) / 10,
+  }));
+  const aguaEdificioHistorialChart = serviciosHistorialAsc.map(([mes, e]) => ({
+    label: mesCorto(mes),
+    value: Math.round(e.aguaEdificio * 10) / 10,
+  }));
+  const aguaProduccionHistorialChart = serviciosHistorialAsc.map(([mes, e]) => ({
+    label: mesCorto(mes),
+    value: Math.round(e.aguaProduccion * 10) / 10,
+  }));
 
   const enmangadoByOperario = new Map<
     string,
@@ -1169,45 +1196,37 @@ export default async function EstadisticasPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Consumo de servicios públicos por mes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mes</TableHead>
-                <TableHead className="text-right">Gas (m³)</TableHead>
-                <TableHead className="text-right">Agua edificio (m³)</TableHead>
-                <TableHead className="text-right">Agua producción (m³)</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {serviciosPorMes.map((m) => (
-                <TableRow key={m.mes}>
-                  <TableCell className="font-medium">{m.label}</TableCell>
-                  <TableCell className="text-right tabular-nums">{kg(m.gas)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{kg(m.aguaEdificio)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{kg(m.aguaProduccion)}</TableCell>
-                </TableRow>
-              ))}
-              {serviciosPorMes.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Sin lecturas registradas todavía.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Suma de los consumos diarios anotados en Servicios. Los días con
-            un cambio o reinicio de medidor quedan sin dato (no se suman)
-            para no distorsionar el total del mes.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Consumo de servicios públicos ({mesRango.label})</h2>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <KpiCard
+            icon={Flame}
+            label="Gas"
+            value={`${kg(serviciosMesActual.gas)} m³`}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={gasHistorialChart} unit="m³" />}
+          />
+          <KpiCard
+            icon={Building2}
+            label="Agua edificio"
+            value={`${kg(serviciosMesActual.aguaEdificio)} m³`}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={aguaEdificioHistorialChart} unit="m³" />}
+          />
+          <KpiCard
+            icon={Droplet}
+            label="Agua producción"
+            value={`${kg(serviciosMesActual.aguaProduccion)} m³`}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={aguaProduccionHistorialChart} unit="m³" />}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Suma de los consumos diarios anotados en Servicios. Los días con
+          un cambio o reinicio de medidor quedan sin dato (no se suman)
+          para no distorsionar el total del mes.
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
