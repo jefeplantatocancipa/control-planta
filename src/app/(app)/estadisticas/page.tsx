@@ -1,4 +1,3 @@
-import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import {
   Building2,
@@ -35,7 +34,6 @@ import {
 } from "@/components/ui/table";
 import { OperarioBarChart } from "./operario-bar-chart";
 import { KpiCard } from "./kpi-card";
-import { KpiTrendChart } from "./kpi-trend-chart";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
 import { EtapasPorOperario, type EtapaOperarioRow } from "./etapas-por-operario";
@@ -88,51 +86,6 @@ function monthRange(mesParam: string | undefined) {
 
 function nowMs() {
   return Date.now();
-}
-
-// Las 5 tarjetas de arriba usan la versión clickeable (./kpi-card.tsx) que
-// se agranda en un diálogo -- estas de abajo (servicios y eficiencia por
-// kg) se quedan con la versión simple mientras se decide si también vale
-// la pena ahí.
-function StaticKpiCard({
-  icon: Icon,
-  label,
-  value,
-  sublabel,
-  chart,
-  chartCaption,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  sublabel: ReactNode;
-  chart?: ReactNode;
-  chartCaption?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-2">
-        <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-primary/10 p-2 text-primary">
-            <Icon className="size-5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground">{label}</span>
-            <span className="text-2xl font-semibold tabular-nums">{value}</span>
-            <span className="text-xs text-muted-foreground">{sublabel}</span>
-          </div>
-        </div>
-        {chart && (
-          <div className="flex flex-col gap-1">
-            {chart}
-            {chartCaption && (
-              <span className="text-[11px] text-muted-foreground">{chartCaption}</span>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
 }
 
 export default async function EstadisticasPage({
@@ -1340,33 +1293,37 @@ export default async function EstadisticasPage({
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">Consumo de servicios públicos ({mesRango.label})</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-          <StaticKpiCard
-            icon={Flame}
+          <KpiCard
+            icon={<Flame className="size-5" />}
             label="Gas"
             value={`${kg(serviciosMesActual.gas)} m³`}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={gasHistorialChart} unit="m³" />}
+            data={gasHistorialChart}
+            unit="m³"
           />
-          <StaticKpiCard
-            icon={Building2}
+          <KpiCard
+            icon={<Building2 className="size-5" />}
             label="Agua edificio"
             value={`${kg(serviciosMesActual.aguaEdificio)} m³`}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={aguaEdificioHistorialChart} unit="m³" />}
+            data={aguaEdificioHistorialChart}
+            unit="m³"
           />
-          <StaticKpiCard
-            icon={Droplet}
+          <KpiCard
+            icon={<Droplet className="size-5" />}
             label="Agua producción"
             value={`${kg(serviciosMesActual.aguaProduccion)} m³`}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={aguaProduccionHistorialChart} unit="m³" />}
+            data={aguaProduccionHistorialChart}
+            unit="m³"
           />
-          <StaticKpiCard
-            icon={Zap}
+          <KpiCard
+            icon={<Zap className="size-5" />}
             label="Energía"
             value={energiaMesActual != null ? `${kg(energiaMesActual)} kWh` : "—"}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={energiaHistorialChart} unit="kWh" />}
+            data={energiaHistorialChart}
+            unit="kWh"
           />
         </div>
       </div>
@@ -1376,26 +1333,29 @@ export default async function EstadisticasPage({
           Eficiencia por kilo empacado ({mesRango.label})
         </h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <StaticKpiCard
-            icon={Droplet}
+          <KpiCard
+            icon={<Droplet className="size-5" />}
             label="Agua de producción"
             value={aguaPorKgMes != null ? `${fmtRatio(aguaPorKgMes)} L/kg` : "—"}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={aguaPorKgHistorialChart} unit="L/kg" />}
+            data={aguaPorKgHistorialChart}
+            unit="L/kg"
           />
-          <StaticKpiCard
-            icon={Flame}
+          <KpiCard
+            icon={<Flame className="size-5" />}
             label="Gas"
             value={gasPorKgMes != null ? `${fmtRatio(gasPorKgMes)} m³/kg` : "—"}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={gasPorKgHistorialChart} unit="m³/kg" />}
+            data={gasPorKgHistorialChart}
+            unit="m³/kg"
           />
-          <StaticKpiCard
-            icon={Zap}
+          <KpiCard
+            icon={<Zap className="size-5" />}
             label="Energía"
             value={energiaPorKgMes != null ? `${fmtRatio(energiaPorKgMes)} kWh/kg` : "—"}
             sublabel={mesRango.label}
-            chart={<KpiTrendChart data={energiaPorKgHistorialChart} unit="kWh/kg" />}
+            data={energiaPorKgHistorialChart}
+            unit="kWh/kg"
           />
         </div>
       </div>
