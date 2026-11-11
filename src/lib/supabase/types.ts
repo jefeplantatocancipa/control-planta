@@ -1049,6 +1049,34 @@ export interface Database {
         >;
         Relationships: [];
       };
+      consumos_energia: {
+        Row: {
+          id: string;
+          mes: string;
+          kwh_factura: number | null;
+          valor_a_repartir: number | null;
+          costo_kwh_sin_recargo: number | null;
+          mora_cobros_unicos: number | null;
+          kwh_bodega: number | null;
+          observaciones: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          mes: string;
+          kwh_factura?: number | null;
+          valor_a_repartir?: number | null;
+          costo_kwh_sin_recargo?: number | null;
+          mora_cobros_unicos?: number | null;
+          kwh_bodega?: number | null;
+          observaciones?: string | null;
+          created_by?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["consumos_energia"]["Insert"]
+        >;
+        Relationships: [];
+      };
       inventario_categorias: {
         Row: {
           id: string;

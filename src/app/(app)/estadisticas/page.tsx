@@ -11,6 +11,7 @@ import {
   PackageCheck,
   Percent,
   Target,
+  Zap,
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -155,6 +156,7 @@ export default async function EstadisticasPage({
       { data: equipos },
       { data: consumosServicios },
       { data: produccionHistorica },
+      { data: consumosEnergia },
     ],
     stageRecordsAll,
   ] = await Promise.all([
@@ -200,6 +202,10 @@ export default async function EstadisticasPage({
       // que llevaba planta antes de este módulo) -- solo totales diarios, sin
       // desglose por producto/operario, para extender el histórico de abajo.
       supabase.from("produccion_historica").select("fecha, kilos_producidos, kilos_empacados"),
+      // Energía: a diferencia de gas/agua (lectura diaria propia), viene
+      // consolidada por mes de la factura compartida del edificio -- kwh_bodega
+      // ya es la parte repartida que le toca a esta bodega.
+      supabase.from("consumos_energia").select("mes, kwh_bodega"),
     ]),
     // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
     // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
@@ -900,6 +906,58 @@ export default async function EstadisticasPage({
     value: Math.round(e.aguaProduccion * 10) / 10,
   }));
 
+  // -------------------------------------------------------------------
+  // Energía: consolidada por mes de la factura (no por día), ver nota de la
+  // consulta arriba. kwh_bodega es la parte ya repartida que le toca a esta
+  // bodega -- null (no "0 kWh") cuando todavía no se carga la factura de ese
+  // mes, para no leerse como "no se consumió nada".
+  // -------------------------------------------------------------------
+  const energiaPorMesMap = new Map<string, number>();
+  for (const r of consumosEnergia ?? []) {
+    if (r.kwh_bodega == null) continue;
+    energiaPorMesMap.set(r.mes.slice(0, 7), r.kwh_bodega);
+  }
+  const energiaMesActual = energiaPorMesMap.get(mesRango.mes) ?? null;
+  const energiaHistorialChart = Array.from(energiaPorMesMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([mes, kwh]) => ({ label: mesCorto(mes), value: Math.round(kwh * 10) / 10 }));
+
+  // -------------------------------------------------------------------
+  // Eficiencia por kilo empacado: agua de producción, gas y energía sobre
+  // los kg empacados de ESE mes (mismo kgEmpacadoEnRango de la merma de
+  // arriba, ya mezcla histórico de Excel + datos en vivo). El agua de
+  // edificio queda afuera -- no es consumo de producción.
+  // -------------------------------------------------------------------
+  function ratioPorKg(valor: number | null, kgEmp: number) {
+    if (valor == null || kgEmp <= 0) return null;
+    return valor / kgEmp;
+  }
+  function fmtRatio(valor: number) {
+    return (Math.round(valor * 1000) / 1000).toLocaleString("es-CO");
+  }
+  const kgEmpacadosMesActual = kgEmpacadoEnRango(mesRango.inicio, mesRango.fin);
+  const aguaPorKgMes = ratioPorKg(serviciosMesActual.aguaProduccion * 1000, kgEmpacadosMesActual);
+  const gasPorKgMes = ratioPorKg(serviciosMesActual.gas, kgEmpacadosMesActual);
+  const energiaPorKgMes = ratioPorKg(energiaMesActual, kgEmpacadosMesActual);
+
+  const mesesParaRatio = Array.from(
+    new Set([...serviciosPorMesMap.keys(), ...energiaPorMesMap.keys()]),
+  ).sort();
+  const aguaPorKgHistorialChart: { label: string; value: number }[] = [];
+  const gasPorKgHistorialChart: { label: string; value: number }[] = [];
+  const energiaPorKgHistorialChart: { label: string; value: number }[] = [];
+  for (const mesStr of mesesParaRatio) {
+    const rango = monthRange(mesStr);
+    const kgEmp = kgEmpacadoEnRango(rango.inicio, rango.fin);
+    const servicios = serviciosPorMesMap.get(mesStr);
+    const agua = servicios ? ratioPorKg(servicios.aguaProduccion * 1000, kgEmp) : null;
+    const gas = servicios ? ratioPorKg(servicios.gas, kgEmp) : null;
+    const energia = ratioPorKg(energiaPorMesMap.get(mesStr) ?? null, kgEmp);
+    if (agua != null) aguaPorKgHistorialChart.push({ label: mesCorto(mesStr), value: Math.round(agua * 1000) / 1000 });
+    if (gas != null) gasPorKgHistorialChart.push({ label: mesCorto(mesStr), value: Math.round(gas * 1000) / 1000 });
+    if (energia != null) energiaPorKgHistorialChart.push({ label: mesCorto(mesStr), value: Math.round(energia * 1000) / 1000 });
+  }
+
   const enmangadoByOperario = new Map<
     string,
     { operario_name: string; eventos: number; total_unidades: number; total_mermas: number }
@@ -1198,7 +1256,7 @@ export default async function EstadisticasPage({
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">Consumo de servicios públicos ({mesRango.label})</h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
           <KpiCard
             icon={Flame}
             label="Gas"
@@ -1219,6 +1277,42 @@ export default async function EstadisticasPage({
             value={`${kg(serviciosMesActual.aguaProduccion)} m³`}
             sublabel={mesRango.label}
             chart={<KpiTrendChart data={aguaProduccionHistorialChart} unit="m³" />}
+          />
+          <KpiCard
+            icon={Zap}
+            label="Energía"
+            value={energiaMesActual != null ? `${kg(energiaMesActual)} kWh` : "—"}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={energiaHistorialChart} unit="kWh" />}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">
+          Eficiencia por kilo empacado ({mesRango.label})
+        </h2>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <KpiCard
+            icon={Droplet}
+            label="Agua de producción"
+            value={aguaPorKgMes != null ? `${fmtRatio(aguaPorKgMes)} L/kg` : "—"}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={aguaPorKgHistorialChart} unit="L/kg" />}
+          />
+          <KpiCard
+            icon={Flame}
+            label="Gas"
+            value={gasPorKgMes != null ? `${fmtRatio(gasPorKgMes)} m³/kg` : "—"}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={gasPorKgHistorialChart} unit="m³/kg" />}
+          />
+          <KpiCard
+            icon={Zap}
+            label="Energía"
+            value={energiaPorKgMes != null ? `${fmtRatio(energiaPorKgMes)} kWh/kg` : "—"}
+            sublabel={mesRango.label}
+            chart={<KpiTrendChart data={energiaPorKgHistorialChart} unit="kWh/kg" />}
           />
         </div>
       </div>
