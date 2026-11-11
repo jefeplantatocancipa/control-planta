@@ -1221,11 +1221,6 @@ export default async function EstadisticasPage({
             chart={<KpiTrendChart data={aguaProduccionHistorialChart} unit="m³" />}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          Suma de los consumos diarios anotados en Servicios. Los días con
-          un cambio o reinicio de medidor quedan sin dato (no se suman)
-          para no distorsionar el total del mes.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
