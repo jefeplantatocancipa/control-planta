@@ -691,6 +691,11 @@ export default async function EstadisticasPage({
       .map((b) => (new Date(b.completed_at!).getTime() - new Date(b.started_at).getTime()) / 60000);
     return durs.length > 0 ? durs.reduce((s, v) => s + v, 0) / durs.length : null;
   }
+  function bachesCerradosEnRango(desde: string, hasta: string) {
+    return (bachesCerrados ?? []).filter(
+      (b) => b.completed_at && b.completed_at.slice(0, 10) >= desde && b.completed_at.slice(0, 10) < hasta,
+    ).length;
+  }
 
   // -------------------------------------------------------------------
   // Cumplimiento del programa: unidades programadas (envasado_orders, por
@@ -748,8 +753,20 @@ export default async function EstadisticasPage({
       kgEmpacado,
       merma,
       cumplimiento,
+      baches: bachesCerradosEnRango(rango.inicio, rango.fin),
     };
   });
+
+  // Baches cerrados antes de septiembre 2026 no existen en la app (ver
+  // HISTORIAL_INICIO_MES arriba) -- se omiten esos meses en vez de mostrar
+  // "0 baches", que se leería como que no se produjo nada.
+  const bachesPorMes = historialMeses
+    .filter((m) => m.baches > 0)
+    .map((m) => {
+      const label = format(new Date(`${m.mes}-01T00:00:00`), "MMMM yyyy", { locale: es });
+      return { mes: m.mes, label: label.charAt(0).toUpperCase() + label.slice(1), baches: m.baches };
+    })
+    .reverse();
 
   const prepHistorialChart = historialMeses
     .filter((m): m is typeof m & { avgPrepMin: number } => m.avgPrepMin != null)
@@ -1354,6 +1371,37 @@ export default async function EstadisticasPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Baches cerrados por mes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mes</TableHead>
+                  <TableHead className="text-right">Baches cerrados</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bachesPorMes.map((m) => (
+                  <TableRow key={m.mes}>
+                    <TableCell className="font-medium">{m.label}</TableCell>
+                    <TableCell className="text-right tabular-nums">{m.baches}</TableCell>
+                  </TableRow>
+                ))}
+                {bachesPorMes.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center text-muted-foreground">
+                      Sin baches cerrados todavía.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Tiempo de preparación por producto</CardTitle>
