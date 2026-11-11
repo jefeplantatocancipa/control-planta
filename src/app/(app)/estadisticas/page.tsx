@@ -1230,7 +1230,7 @@ export default async function EstadisticasPage({
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiCard
-          icon={Clock}
+          icon={<Clock className="size-5" />}
           label="Tiempo promedio de preparación"
           value={minutesLabel(avgPrepMinutes)}
           sublabel={`${prepDurations.length} bache${prepDurations.length === 1 ? "" : "s"} cerrados`}
@@ -1238,7 +1238,7 @@ export default async function EstadisticasPage({
           unit="h"
         />
         <KpiCard
-          icon={Percent}
+          icon={<Percent className="size-5" />}
           label="Merma de producción"
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
@@ -1246,7 +1246,7 @@ export default async function EstadisticasPage({
           unit="%"
         />
         <KpiCard
-          icon={Target}
+          icon={<Target className="size-5" />}
           label="Cumplimiento del programa"
           value={cumplimientoPctMes != null ? `${cumplimientoPctMes}%` : "—"}
           sublabel={`${kg(unidadesEmpacadasUnidMes)} und sobre ${kg(unidadesProgramadasMes)} und programadas`}
@@ -1254,7 +1254,7 @@ export default async function EstadisticasPage({
           unit="%"
         />
         <KpiCard
-          icon={Package}
+          icon={<Package className="size-5" />}
           label="Kilos producidos"
           value={`${kg(kgProducidosMes)} kg`}
           sublabel={
@@ -1271,7 +1271,7 @@ export default async function EstadisticasPage({
           unit="kg"
         />
         <KpiCard
-          icon={PackageCheck}
+          icon={<PackageCheck className="size-5" />}
           label="Kilos empacados"
           value={`${kg(kgEmpacadosTotalMes)} kg`}
           sublabel={

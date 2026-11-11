@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -15,8 +15,13 @@ import { KpiTrendChart, type KpiTrendDatum } from "./kpi-trend-chart";
 // zoom-in-95 + fade ya lo trae el Dialog del design system) con la
 // gráfica más grande y el detalle mes a mes en tabla -- sin eso (sin
 // datos para graficar), la tarjeta queda igual que antes, sin clic.
+//
+// "icon" llega ya renderizado (<Clock className="size-5" />), no como el
+// componente (ej. Clock) -- este archivo es un Client Component y un
+// Server Component no puede pasarle un componente/función como prop, solo
+// JSX ya armado.
 export function KpiCard({
-  icon: Icon,
+  icon,
   label,
   value,
   sublabel,
@@ -24,7 +29,7 @@ export function KpiCard({
   unit,
   chartCaption,
 }: {
-  icon: ComponentType<{ className?: string }>;
+  icon: ReactNode;
   label: string;
   value: string;
   sublabel: ReactNode;
@@ -45,7 +50,7 @@ export function KpiCard({
       <CardContent className="flex flex-col gap-2">
         <div className="flex items-start gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
-            <Icon className="size-5" />
+            {icon}
           </div>
           <div className="flex flex-col">
             <span className="text-xs text-muted-foreground">{label}</span>
@@ -72,8 +77,8 @@ export function KpiCard({
       <DialogTrigger render={card} />
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Icon className="size-4 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-primary">
+            {icon}
             {label}
           </DialogTitle>
         </DialogHeader>
