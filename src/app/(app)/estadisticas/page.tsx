@@ -1043,7 +1043,6 @@ export default async function EstadisticasPage({
           value={mermaPct != null ? `${pct(mermaPct)}%` : "—"}
           sublabel={`${kg(kgMermaMes)} kg sobre ${kg(kgProducidosMes)} kg producidos`}
           chart={<KpiTrendChart data={mermaHistorialChart} unit="%" />}
-          chartCaption="Meses cerrados son aproximados (producido − empacado, sin inventario)"
         />
         <KpiCard
           icon={Package}
