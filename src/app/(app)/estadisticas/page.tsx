@@ -28,6 +28,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -148,6 +149,7 @@ export default async function EstadisticasPage({
       { data: insumos },
       { data: envasados },
       { data: envasadoOrders },
+      { data: productionOrders },
       { data: envasadoReferencias },
       { data: products },
       { data: stageTemplatesAll },
@@ -181,8 +183,11 @@ export default async function EstadisticasPage({
       // Unidades programadas por semana (vs. las realmente empacadas) --
       // scheduled_date es la fecha planeada de la orden, no de ejecución.
       supabase.from("envasado_orders").select("scheduled_date, planned_quantity"),
+      // Programado de "Bases (baches)", mismo origen que /cumplimiento:
+      // baches_planeados x volumen_por_bache del producto.
+      supabase.from("production_orders").select("product_id, scheduled_date, baches_planeados"),
       supabase.from("envasado_referencias").select("id, sku, name, peso_unitario"),
-      supabase.from("products").select("id, name, requiere_envasado"),
+      supabase.from("products").select("id, name, requiere_envasado, volumen_por_bache"),
       supabase
         .from("process_stage_templates")
         .select("id, product_id, name, sequence_order, captures_insumos"),
@@ -229,6 +234,7 @@ export default async function EstadisticasPage({
   const operarioNames = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const requiereEnvasadoById = new Map((products ?? []).map((p) => [p.id, p.requiere_envasado]));
+  const productVolumenById = new Map((products ?? []).map((p) => [p.id, p.volumen_por_bache]));
   const volumenRestanteById = new Map((todosBaches ?? []).map((b) => [b.id, b.volumen_restante_litros]));
 
   // -------------------------------------------------------------------
@@ -798,6 +804,56 @@ export default async function EstadisticasPage({
     }))
     .sort((a, b) => b.value - a.value);
 
+  // -------------------------------------------------------------------
+  // Bases (baches): programado vs. ejecutado por producto, mismo origen que
+  // la tabla "Bases (baches)" de /cumplimiento (baches_planeados x
+  // volumen_por_bache vs. el balance de masa de kgProducidoEvents), pero
+  // resumido por producto nada más -- sin el desglose lote por lote.
+  // -------------------------------------------------------------------
+  const programadoBasesPorProductoMap = new Map<string, number>();
+  for (const o of productionOrders ?? []) {
+    if (o.scheduled_date < mesRango.inicio || o.scheduled_date >= mesRango.fin) continue;
+    const volumen = productVolumenById.get(o.product_id);
+    if (!o.baches_planeados || !volumen) continue;
+    programadoBasesPorProductoMap.set(
+      o.product_id,
+      (programadoBasesPorProductoMap.get(o.product_id) ?? 0) + o.baches_planeados * volumen,
+    );
+  }
+  const ejecutadoBasesPorProductoMap = new Map<string, { kg: number; baches: number }>();
+  for (const e of kgProducidoEvents) {
+    if (e.date < mesRango.inicio || e.date >= mesRango.fin) continue;
+    const entry = ejecutadoBasesPorProductoMap.get(e.productId) ?? { kg: 0, baches: 0 };
+    entry.kg += e.kg;
+    entry.baches += 1;
+    ejecutadoBasesPorProductoMap.set(e.productId, entry);
+  }
+  const basesCumplimientoIds = new Set([
+    ...programadoBasesPorProductoMap.keys(),
+    ...ejecutadoBasesPorProductoMap.keys(),
+  ]);
+  const basesCumplimientoPorProducto = Array.from(basesCumplimientoIds)
+    .map((id) => {
+      const planned = programadoBasesPorProductoMap.get(id) ?? 0;
+      const ejecutado = ejecutadoBasesPorProductoMap.get(id) ?? { kg: 0, baches: 0 };
+      return {
+        id,
+        nombre: productNameById.get(id) ?? "Producto eliminado",
+        planned,
+        executed: ejecutado.kg,
+        baches: ejecutado.baches,
+      };
+    })
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const basesTotalPlanned = basesCumplimientoPorProducto.reduce((s, r) => s + r.planned, 0);
+  const basesTotalExecuted = basesCumplimientoPorProducto.reduce((s, r) => s + r.executed, 0);
+  const basesTotalBaches = basesCumplimientoPorProducto.reduce((s, r) => s + r.baches, 0);
+  function diffClass(diff: number) {
+    if (diff < 0) return "text-destructive";
+    if (diff > 0) return "text-emerald-600 dark:text-emerald-400";
+    return "text-muted-foreground";
+  }
+
   const empaquePorReferenciaMap = new Map<string, { nombre: string; total: number }>();
   for (const e of envasados ?? []) {
     const fecha = e.started_at.slice(0, 10);
@@ -1333,6 +1389,95 @@ export default async function EstadisticasPage({
           />
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Bases (baches) — {mesRango.label}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Producto</TableHead>
+                <TableHead className="text-right">Programado</TableHead>
+                <TableHead className="text-right">Ejecutado</TableHead>
+                <TableHead className="text-right">Diferencia</TableHead>
+                <TableHead className="text-right">Cumplimiento</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {basesCumplimientoPorProducto.map((r) => {
+                const diff = Math.round((r.executed - r.planned) * 10) / 10;
+                const rowPct = pctCumplimiento(r.planned, r.executed);
+                return (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{r.nombre}</TableCell>
+                    <TableCell className="text-right tabular-nums">{kg(r.planned)} kg</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {kg(r.executed)} kg
+                      {r.baches > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                          ({r.baches} bache{r.baches === 1 ? "" : "s"})
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className={`text-right tabular-nums ${diffClass(diff)}`}>
+                      {diff > 0 ? "+" : ""}
+                      {kg(diff)} kg
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {rowPct != null ? (
+                        <Badge variant={rowPct >= 100 ? "default" : "outline"}>{rowPct}%</Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {basesCumplimientoPorProducto.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    Sin baches programados ni producidos este mes.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+            {basesCumplimientoPorProducto.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right tabular-nums">{kg(basesTotalPlanned)} kg</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {kg(basesTotalExecuted)} kg
+                    {basesTotalBaches > 0 && (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        ({basesTotalBaches} bache{basesTotalBaches === 1 ? "" : "s"})
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right tabular-nums ${diffClass(Math.round((basesTotalExecuted - basesTotalPlanned) * 10) / 10)}`}
+                  >
+                    {basesTotalExecuted - basesTotalPlanned > 0 ? "+" : ""}
+                    {kg(basesTotalExecuted - basesTotalPlanned)} kg
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(() => {
+                      const totalPct = pctCumplimiento(basesTotalPlanned, basesTotalExecuted);
+                      return totalPct != null ? (
+                        <Badge variant={totalPct >= 100 ? "default" : "outline"}>{totalPct}%</Badge>
+                      ) : (
+                        "—"
+                      );
+                    })()}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            )}
+          </Table>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
