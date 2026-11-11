@@ -40,6 +40,9 @@ export default async function ProcesoPage() {
       { data: registrosEnCurso },
       { data: envasadoReferencias },
       { data: envasadosCerrados },
+      { data: encajadosEnCursoRaw },
+      { data: envasadosParaEncajado },
+      { data: encajadoEstibas },
     ],
     registrosCerrados,
   ] = await Promise.all([
@@ -73,6 +76,17 @@ export default async function ProcesoPage() {
         .from("envasados")
         .select("referencia_id, presentacion, started_at, ended_at, cantidad_unidades")
         .not("ended_at", "is", null),
+      // Encajado en curso: puede seguir activo después de que el envasado ya
+      // cerró (no hay que esperar a que termine para empezar a encajar), así
+      // que la presentación/lote se busca en TODOS los envasados, no solo
+      // los abiertos de arriba.
+      supabase
+        .from("encajados")
+        .select("id, bache_id, envasado_id, started_at, unidades_sueltas, unidades_averiadas")
+        .not("started_at", "is", null)
+        .is("ended_at", null),
+      supabase.from("envasados").select("id, presentacion, lote, cantidad_unidades"),
+      supabase.from("encajado_estibas").select("encajado_id, cajas_por_estiba"),
     ]),
     // Para el pronóstico de terminación (src/lib/pronostico-bache.ts):
     // etapas ya cerradas de cualquier bache (duración promedio histórica).
@@ -146,6 +160,34 @@ export default async function ProcesoPage() {
       hayParadaAbierta: (paradasByEnvasado.get(envasado.id) ?? []).some((p) => !p.ended_at),
       estimadoFin: pronostico?.estimadoFin ?? null,
       faltaDatoPronostico: pronostico?.faltaDato ?? true,
+    };
+  });
+
+  const envasadoInfoById = new Map((envasadosParaEncajado ?? []).map((e) => [e.id, e]));
+  const cajasPorEncajado = new Map<string, number>();
+  for (const est of encajadoEstibas ?? []) {
+    cajasPorEncajado.set(
+      est.encajado_id,
+      (cajasPorEncajado.get(est.encajado_id) ?? 0) + (est.cajas_por_estiba ?? 0),
+    );
+  }
+  const encajadosEnCurso = (encajadosEnCursoRaw ?? []).map((enc) => {
+    const bache = bachesById.get(enc.bache_id);
+    const envasado = envasadoInfoById.get(enc.envasado_id);
+    return {
+      id: enc.id,
+      bacheLabel: bache
+        ? `${bache.batch_code} — ${productNames.get(bache.product_id) ?? "—"}`
+        : "—",
+      presentacion: envasado?.presentacion ?? "—",
+      lote: envasado?.lote ?? null,
+      unidadesEnvasadas: envasado?.cantidad_unidades ?? 0,
+      cajas: cajasPorEncajado.get(enc.id) ?? 0,
+      unidadesSueltas: enc.unidades_sueltas,
+      unidadesAveriadas: enc.unidades_averiadas,
+      // El filtro .not("started_at", "is", null) de la consulta ya garantiza
+      // que no es null acá.
+      startedAt: enc.started_at!,
     };
   });
 
@@ -306,6 +348,43 @@ export default async function ProcesoPage() {
           ))}
           {envasadosEnCurso.length === 0 && (
             <p className="text-muted-foreground">Sin envasados en curso.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Encajado en curso</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {encajadosEnCurso.map((encajado) => (
+            <Card key={encajado.id}>
+              <CardHeader>
+                <CardTitle className="text-base">{encajado.bacheLabel}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {encajado.presentacion}
+                  {encajado.lote ? ` · Lote ${encajado.lote}` : ""}
+                </p>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1 text-sm">
+                <p>
+                  Unidades envasadas:{" "}
+                  <span className="font-semibold">{encajado.unidadesEnvasadas}</span>
+                </p>
+                <p>
+                  Cajas hechas: <span className="font-semibold">{encajado.cajas}</span>
+                </p>
+                {(encajado.unidadesSueltas > 0 || encajado.unidadesAveriadas > 0) && (
+                  <p className="text-muted-foreground">
+                    Sueltas: {encajado.unidadesSueltas} · Averiadas: {encajado.unidadesAveriadas}
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  Inicio: hace {timeSince(encajado.startedAt)}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+          {encajadosEnCurso.length === 0 && (
+            <p className="text-muted-foreground">Sin encajados en curso.</p>
           )}
         </div>
       </div>
