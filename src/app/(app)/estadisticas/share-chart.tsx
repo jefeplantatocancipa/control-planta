@@ -18,7 +18,15 @@ const COLORS = [
 
 const MAX_SLICES = 5;
 
-export function ShareChart({ data, unit }: { data: ShareDatum[]; unit: string }) {
+export function ShareChart({
+  data,
+  unit,
+  height = 280,
+}: {
+  data: ShareDatum[];
+  unit: string;
+  height?: number;
+}) {
   const sorted = [...data].sort((a, b) => b.value - a.value);
   const top = sorted.slice(0, MAX_SLICES);
   const rest = sorted.slice(MAX_SLICES);
@@ -27,7 +35,7 @@ export function ShareChart({ data, unit }: { data: ShareDatum[]; unit: string })
   const total = chartData.reduce((s, d) => s + d.value, 0);
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ResponsiveContainer width="100%" height={height}>
       <PieChart>
         <Pie
           data={chartData}

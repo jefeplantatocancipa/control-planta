@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OperarioBarChart } from "./operario-bar-chart";
+import { ExpandableCard } from "./expandable-card";
 import { KpiCard } from "./kpi-card";
 import { TrendChart, type TrendDatum } from "./trend-chart";
 import { ShareChart } from "./share-chart";
@@ -1450,105 +1451,99 @@ export default async function EstadisticasPage({
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Participación por producto ({mesRango.label})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {produccionPorProducto.length > 0 ? (
-              <ShareChart data={produccionPorProducto} unit="kg" />
+        <ExpandableCard
+          title={`Participación por producto (${mesRango.label})`}
+          expanded={
+            produccionPorProducto.length > 0 ? (
+              <ShareChart data={produccionPorProducto} unit="kg" height={420} />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Sin producción registrada este mes.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+              <p className="text-sm text-muted-foreground">Sin producción registrada este mes.</p>
+            )
+          }
+        >
+          {produccionPorProducto.length > 0 ? (
+            <ShareChart data={produccionPorProducto} unit="kg" />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Sin producción registrada este mes.
+            </p>
+          )}
+        </ExpandableCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Participación por referencia de envasado ({mesRango.label})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {empaquePorReferencia.length > 0 ? (
-              <ShareChart data={empaquePorReferencia} unit="kg" />
+        <ExpandableCard
+          title={`Participación por referencia de envasado (${mesRango.label})`}
+          expanded={
+            empaquePorReferencia.length > 0 ? (
+              <ShareChart data={empaquePorReferencia} unit="kg" height={420} />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Sin envasado registrado este mes.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+              <p className="text-sm text-muted-foreground">Sin envasado registrado este mes.</p>
+            )
+          }
+        >
+          {empaquePorReferencia.length > 0 ? (
+            <ShareChart data={empaquePorReferencia} unit="kg" />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Sin envasado registrado este mes.
+            </p>
+          )}
+        </ExpandableCard>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Baches cerrados por mes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mes</TableHead>
-                  <TableHead className="text-right">Baches cerrados</TableHead>
+        <ExpandableCard title="Baches cerrados por mes">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mes</TableHead>
+                <TableHead className="text-right">Baches cerrados</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {bachesPorMes.map((m) => (
+                <TableRow key={m.mes}>
+                  <TableCell className="font-medium">{m.label}</TableCell>
+                  <TableCell className="text-right tabular-nums">{m.baches}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bachesPorMes.map((m) => (
-                  <TableRow key={m.mes}>
-                    <TableCell className="font-medium">{m.label}</TableCell>
-                    <TableCell className="text-right tabular-nums">{m.baches}</TableCell>
-                  </TableRow>
-                ))}
-                {bachesPorMes.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      Sin baches cerrados todavía.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              ))}
+              {bachesPorMes.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground">
+                    Sin baches cerrados todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ExpandableCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Tiempo de preparación por producto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead>Baches cerrados</TableHead>
-                  <TableHead className="text-right">Tiempo promedio</TableHead>
+        <ExpandableCard title="Tiempo de preparación por producto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Producto</TableHead>
+                <TableHead>Baches cerrados</TableHead>
+                <TableHead className="text-right">Tiempo promedio</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {preparacionPorProducto.map((p) => (
+                <TableRow key={p.productId}>
+                  <TableCell className="font-medium">{p.nombre}</TableCell>
+                  <TableCell>{p.cantidad}</TableCell>
+                  <TableCell className="text-right">{minutesLabel(p.promedioMin)}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {preparacionPorProducto.map((p) => (
-                  <TableRow key={p.productId}>
-                    <TableCell className="font-medium">{p.nombre}</TableCell>
-                    <TableCell>{p.cantidad}</TableCell>
-                    <TableCell className="text-right">{minutesLabel(p.promedioMin)}</TableCell>
-                  </TableRow>
-                ))}
-                {preparacionPorProducto.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      Sin baches cerrados todavía.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              ))}
+              {preparacionPorProducto.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    Sin baches cerrados todavía.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ExpandableCard>
 
         <Card>
           <CardHeader>
