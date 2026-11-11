@@ -1077,6 +1077,26 @@ export interface Database {
         >;
         Relationships: [];
       };
+      enmangado_historico_mensual: {
+        Row: {
+          id: string;
+          mes: string;
+          registros: number;
+          unidades_producidas: number;
+          paradas_min: number;
+          created_at: string;
+        };
+        Insert: {
+          mes: string;
+          registros?: number;
+          unidades_producidas?: number;
+          paradas_min?: number;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["enmangado_historico_mensual"]["Insert"]
+        >;
+        Relationships: [];
+      };
       inventario_categorias: {
         Row: {
           id: string;

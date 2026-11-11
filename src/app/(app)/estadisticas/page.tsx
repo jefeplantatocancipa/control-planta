@@ -6,8 +6,10 @@ import {
   Clock,
   Droplet,
   Flame,
+  Layers,
   Package,
   PackageCheck,
+  PauseCircle,
   Percent,
   Target,
   Zap,
@@ -118,6 +120,7 @@ export default async function EstadisticasPage({
       { data: consumosServicios },
       { data: produccionHistorica },
       { data: consumosEnergia },
+      { data: enmangadoHistoricoMensual },
     ],
     stageRecordsAll,
   ] = await Promise.all([
@@ -170,6 +173,12 @@ export default async function EstadisticasPage({
       // consolidada por mes de la factura compartida del edificio -- kwh_bodega
       // ya es la parte repartida que le toca a esta bodega.
       supabase.from("consumos_energia").select("mes, kwh_bodega"),
+      // Enmangado histórico: la planilla de control (turno, personal,
+      // paradas) es la fuente real de cuánto se enmangó -- se carga ya
+      // resumida por mes, no turno por turno.
+      supabase
+        .from("enmangado_historico_mensual")
+        .select("mes, unidades_producidas, paradas_min"),
     ]),
     // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
     // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
@@ -955,6 +964,32 @@ export default async function EstadisticasPage({
     .map(([mes, kwh]) => ({ label: mesCorto(mes), value: Math.round(kwh * 10) / 10 }));
 
   // -------------------------------------------------------------------
+  // Enmangado histórico: unidades y tiempo de paradas por mes, de la
+  // planilla de control (ver nota de la consulta arriba) -- null cuando
+  // ese mes todavía no se cargó, no "0" (se leería como que no se
+  // enmangó nada).
+  // -------------------------------------------------------------------
+  const enmangadoPorMesMap = new Map<string, { unidades: number; paradasMin: number }>();
+  for (const r of enmangadoHistoricoMensual ?? []) {
+    enmangadoPorMesMap.set(r.mes.slice(0, 7), {
+      unidades: r.unidades_producidas,
+      paradasMin: r.paradas_min,
+    });
+  }
+  const enmangadoMesActual = enmangadoPorMesMap.get(mesRango.mes) ?? null;
+  const enmangadoHistorialAsc = Array.from(enmangadoPorMesMap.entries()).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  const enmangadoUnidadesHistorialChart = enmangadoHistorialAsc.map(([mes, e]) => ({
+    label: mesCorto(mes),
+    value: e.unidades,
+  }));
+  const enmangadoParadasHistorialChart = enmangadoHistorialAsc.map(([mes, e]) => ({
+    label: mesCorto(mes),
+    value: Math.round((e.paradasMin / 60) * 10) / 10,
+  }));
+
+  // -------------------------------------------------------------------
   // Eficiencia por kilo empacado: agua de producción, gas y energía sobre
   // los kg empacados de ESE mes (mismo kgEmpacadoEnRango de la merma de
   // arriba, ya mezcla histórico de Excel + datos en vivo). El agua de
@@ -1357,6 +1392,32 @@ export default async function EstadisticasPage({
             sublabel={mesRango.label}
             data={energiaPorKgHistorialChart}
             unit="kWh/kg"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Enmangado ({mesRango.label})</h2>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <KpiCard
+            icon={<Layers className="size-5" />}
+            label="Unidades enmangadas"
+            value={enmangadoMesActual != null ? `${kg(enmangadoMesActual.unidades)} und` : "—"}
+            sublabel={mesRango.label}
+            data={enmangadoUnidadesHistorialChart}
+            unit="und"
+          />
+          <KpiCard
+            icon={<PauseCircle className="size-5" />}
+            label="Tiempo de paradas"
+            value={
+              enmangadoMesActual != null
+                ? `${kg(enmangadoMesActual.paradasMin / 60)} h`
+                : "—"
+            }
+            sublabel={mesRango.label}
+            data={enmangadoParadasHistorialChart}
+            unit="h"
           />
         </div>
       </div>
