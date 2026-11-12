@@ -1,0 +1,13 @@
+-- Bache 249 (Entero de la Cuesta, 6 de septiembre 2026) queda marcado
+-- "completado" sin completed_at, con una sola etapa registrada y sin
+-- ningún envasado vinculado -- nunca se produjo de verdad, y estaba
+-- inflando "kg producidos" de septiembre en Estadísticas. bache_id en
+-- bache_stage_records tiene on delete cascade, así que borrar el bache
+-- alcanza para llevarse su única etapa (y, en cascada, cualquier equipo
+-- asignado a esa etapa).
+--
+-- Nota: si ese bache llegó a descontar algún insumo de Inventario (su
+-- etapa capturaba insumos), ese movimiento queda igual en
+-- inventario_movimientos -- revisar el historial de ahí si hace falta
+-- revertirlo también.
+delete from baches where id = '30872d87-8f0f-4513-b76b-b367fe7b85ba';
