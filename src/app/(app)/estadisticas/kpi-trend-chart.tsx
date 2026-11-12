@@ -5,6 +5,11 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 export interface KpiTrendDatum {
   label: string;
   value: number;
+  // Proyección lineal del mes en curso (dato parcial x días del mes /
+  // días transcurridos) -- solo presente en el punto anterior (repite su
+  // "value", para que la línea punteada arranque ahí) y en el último
+  // punto (el valor proyectado). El resto de los meses no la llevan.
+  proyeccion?: number;
 }
 
 // Mini gráfica mes a mes para debajo de una KpiCard -- mismo tamaño en
@@ -54,7 +59,10 @@ export function KpiTrendChart({
             fontSize: 12,
           }}
           labelFormatter={() => ""}
-          formatter={(value) => `${Number(value).toLocaleString("es-CO")} ${unit}`}
+          formatter={(value, name) => [
+            `${Number(value).toLocaleString("es-CO")} ${unit}`,
+            name === "proyeccion" ? "Proyección" : "Real",
+          ]}
         />
         <Line
           type="monotone"
@@ -63,6 +71,16 @@ export function KpiTrendChart({
           strokeWidth={2}
           dot={{ r: 3, fill: "var(--chart-4)" }}
           activeDot={{ r: 4 }}
+        />
+        <Line
+          type="monotone"
+          dataKey="proyeccion"
+          stroke="#f59e0b"
+          strokeWidth={2}
+          strokeDasharray="5 4"
+          dot={{ r: 3, fill: "var(--card)", stroke: "#f59e0b", strokeWidth: 2 }}
+          activeDot={{ r: 4 }}
+          connectNulls={false}
         />
       </LineChart>
     </ResponsiveContainer>

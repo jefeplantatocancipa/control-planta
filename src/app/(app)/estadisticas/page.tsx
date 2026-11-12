@@ -761,14 +761,34 @@ export default async function EstadisticasPage({
   const prepHistorialChart = historialMeses
     .filter((m): m is typeof m & { avgPrepMin: number } => m.avgPrepMin != null)
     .map((m) => ({ label: m.label, value: Math.round((m.avgPrepMin / 60) * 10) / 10 }));
-  const producidoHistorialChart = historialMeses.map((m) => ({
-    label: m.label,
-    value: Math.round(m.kgProducido * 10) / 10,
-  }));
-  const empacadoHistorialChart = historialMeses.map((m) => ({
-    label: m.label,
-    value: Math.round(m.kgEmpacado * 10) / 10,
-  }));
+
+  // Proyección lineal del mes en curso (dato parcial x días del mes / días
+  // transcurridos) para los dos totales acumulados del mes -- producido y
+  // empacado. Se agrega como una segunda línea punteada en el gráfico
+  // (ver kpi-trend-chart.tsx), no reemplaza el valor real del mes.
+  const hoy = new Date();
+  const diasEnMesActual = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const diasTranscurridosMesActual = hoy.getDate();
+  function conProyeccionMesActual(
+    chart: { label: string; value: number }[],
+  ): { label: string; value: number; proyeccion?: number }[] {
+    const ultimo = historialMeses[historialMeses.length - 1];
+    if (chart.length < 2 || !ultimo || ultimo.mes !== mesActualStr) return chart;
+    const factor = diasEnMesActual / diasTranscurridosMesActual;
+    return chart.map((d, i) => {
+      if (i === chart.length - 2) return { ...d, proyeccion: d.value };
+      if (i === chart.length - 1) {
+        return { ...d, proyeccion: Math.round(d.value * factor * 10) / 10 };
+      }
+      return d;
+    });
+  }
+  const producidoHistorialChart = conProyeccionMesActual(
+    historialMeses.map((m) => ({ label: m.label, value: Math.round(m.kgProducido * 10) / 10 })),
+  );
+  const empacadoHistorialChart = conProyeccionMesActual(
+    historialMeses.map((m) => ({ label: m.label, value: Math.round(m.kgEmpacado * 10) / 10 })),
+  );
   const mermaHistorialChart = historialMeses
     .filter((m): m is typeof m & { merma: number } => m.merma != null)
     .map((m) => ({ label: m.label, value: Math.round(m.merma * 10) / 10 }));
