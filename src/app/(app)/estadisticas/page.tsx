@@ -572,10 +572,15 @@ export default async function EstadisticasPage({
   // -------------------------------------------------------------------
   const INVENTARIO_FINAL_CONOCIDO: Record<string, number> = {
     "2026-07": 3000,
-    "2026-08": 6000,
+    "2026-08": 9000,
     "2026-09": 9000,
     "2026-10": 6000,
   };
+  // Ajuste físico adicional sobre el pendiente en vivo del mes actual (ver
+  // kgPendienteActual abajo) -- mismo criterio que el inventario final de
+  // los meses ya cerrados: un conteo real de planta que el sistema no
+  // puede calcular solo.
+  const AJUSTE_INVENTARIO_ACTUAL_KG = 3000;
   function mesAnteriorDe(mesStr: string) {
     const [y, m] = mesStr.split("-").map(Number);
     return format(new Date(y, m - 2, 1), "yyyy-MM");
@@ -607,18 +612,26 @@ export default async function EstadisticasPage({
 
   const mesActualStr = format(new Date(), "yyyy-MM");
 
+  // Solo baches completamente terminados -- uno todavía "en_proceso" puede
+  // ya tener kg producido contado (el balance de masa cuenta cualquier
+  // bache, no solo los completados) sin que su volumen_restante_litros sea
+  // todavía un número estable, así que contarlo acá distorsionaría la
+  // medición.
   const kgPendienteActual = (todosBaches ?? [])
-    .filter((b) => b.status !== "cancelado" && requiereEnvasadoById.get(b.product_id) !== false)
+    .filter((b) => b.status === "completado" && requiereEnvasadoById.get(b.product_id) !== false)
     .reduce((s, b) => s + Math.max(0, b.volumen_restante_litros ?? 0), 0);
 
   // Balance exacto cuando se conoce el inventario inicial (= final del mes
   // anterior) Y el final de ESE mes (el del mes actual es el pendiente EN
-  // VIVO) -- si falta cualquiera de los dos, null (el llamador cae a la
-  // aproximación producido - empacado).
+  // VIVO + el ajuste físico de arriba) -- si falta cualquiera de los dos,
+  // null (el llamador cae a la aproximación producido - empacado).
   function kgMermaEnMes(mesStr: string, kgProducido: number, kgEmpacado: number): number | null {
     const inicial = INVENTARIO_FINAL_CONOCIDO[mesAnteriorDe(mesStr)];
     if (inicial == null) return null;
-    const final = mesStr === mesActualStr ? kgPendienteActual : INVENTARIO_FINAL_CONOCIDO[mesStr];
+    const final =
+      mesStr === mesActualStr
+        ? kgPendienteActual + AJUSTE_INVENTARIO_ACTUAL_KG
+        : INVENTARIO_FINAL_CONOCIDO[mesStr];
     if (final == null) return null;
     return inicial + kgProducido - final - kgEmpacado;
   }
