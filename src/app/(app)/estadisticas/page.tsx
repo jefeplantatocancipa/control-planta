@@ -169,7 +169,9 @@ export default async function EstadisticasPage({
       // Producción previa a la app (mayo-agosto 2026, cargada desde el Excel
       // que llevaba planta antes de este módulo) -- solo totales diarios, sin
       // desglose por producto/operario, para extender el histórico de abajo.
-      supabase.from("produccion_historica").select("fecha, kilos_producidos, kilos_empacados"),
+      supabase
+        .from("produccion_historica")
+        .select("fecha, kilos_producidos, kilos_empacados, produccion"),
       // Energía: a diferencia de gas/agua (lectura diaria propia), viene
       // consolidada por mes de la factura compartida del edificio -- kwh_bodega
       // ya es la parte repartida que le toca a esta bodega.
@@ -513,6 +515,12 @@ export default async function EstadisticasPage({
   // diarios cargados en produccion_historica. Sin solape con datos en vivo
   // (ese Excel llega hasta el 2026-08-29), así que sumar ambas fuentes no
   // duplica nada.
+  //
+  // El cremado no pasa por envasado (kilos_empacados del Excel original
+  // solo reflejaba envasado real), pero igual que en vivo (kgCremadoMes
+  // más abajo) cuenta como "terminado" -- se suma aparte desde el
+  // desglose por referencia (produccion jsonb) para que la merma
+  // histórica no lo deje afuera.
   function historicoEnRango(desde: string, hasta: string) {
     let producido = 0;
     let empacado = 0;
@@ -520,6 +528,11 @@ export default async function EstadisticasPage({
       if (r.fecha < desde || r.fecha >= hasta) continue;
       producido += r.kilos_producidos ?? 0;
       empacado += r.kilos_empacados ?? 0;
+      for (const item of r.produccion ?? []) {
+        if (item.referencia?.toLowerCase().includes("cremado")) {
+          empacado += Number(item.kilos) || 0;
+        }
+      }
     }
     return { producido, empacado };
   }
