@@ -6,10 +6,10 @@ import {
   Clock,
   Droplet,
   Flame,
+  Gauge,
   Layers,
   Package,
   PackageCheck,
-  PauseCircle,
   Percent,
   Target,
   Zap,
@@ -120,7 +120,7 @@ export default async function EstadisticasPage({
       { data: consumosServicios },
       { data: produccionHistorica },
       { data: consumosEnergia },
-      { data: enmangadoHistoricoMensual },
+      { data: enmangadoReferencias },
     ],
     stageRecordsAll,
   ] = await Promise.all([
@@ -173,12 +173,7 @@ export default async function EstadisticasPage({
       // consolidada por mes de la factura compartida del edificio -- kwh_bodega
       // ya es la parte repartida que le toca a esta bodega.
       supabase.from("consumos_energia").select("mes, kwh_bodega"),
-      // Enmangado histórico: la planilla de control (turno, personal,
-      // paradas) es la fuente real de cuánto se enmangó -- se carga ya
-      // resumida por mes, no turno por turno.
-      supabase
-        .from("enmangado_historico_mensual")
-        .select("mes, unidades_producidas, paradas_min"),
+      supabase.from("enmangado_referencias").select("id, name"),
     ]),
     // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
     // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
@@ -964,19 +959,35 @@ export default async function EstadisticasPage({
     .map(([mes, kwh]) => ({ label: mesCorto(mes), value: Math.round(kwh * 10) / 10 }));
 
   // -------------------------------------------------------------------
-  // Enmangado histórico: unidades y tiempo de paradas por mes, de la
-  // planilla de control (ver nota de la consulta arriba) -- null cuando
-  // ese mes todavía no se cargó, no "0" (se leería como que no se
-  // enmangó nada).
+  // Enmangado: unidades y unidades/hora por mes, directo de vasos_enmangados
+  // (ya tiene el detalle real turno por turno, agosto 2026 en adelante) --
+  // no de enmangado_historico_mensual (ese resumen quedó obsoleto apenas se
+  // cargó el detalle real). Las horas sólo cuentan vasos con ended_at (todo
+  // lo histórico lo tiene; un enmangado en vivo todavía sin cerrar, no).
   // -------------------------------------------------------------------
-  const enmangadoPorMesMap = new Map<string, { unidades: number; paradasMin: number }>();
-  for (const r of enmangadoHistoricoMensual ?? []) {
-    enmangadoPorMesMap.set(r.mes.slice(0, 7), {
-      unidades: r.unidades_producidas,
-      paradasMin: r.paradas_min,
-    });
+  const enmangadoReferenciaNameById = new Map(
+    (enmangadoReferencias ?? []).map((r) => [r.id, r.name]),
+  );
+  const enmangadoPorMesMap = new Map<string, { unidades: number; horas: number }>();
+  for (const v of vasosEnmangados ?? []) {
+    if (!v.ended_at) continue;
+    const mes = v.started_at.slice(0, 7);
+    const horas = (new Date(v.ended_at).getTime() - new Date(v.started_at).getTime()) / 3_600_000;
+    const entry = enmangadoPorMesMap.get(mes) ?? { unidades: 0, horas: 0 };
+    entry.unidades += v.cantidad_unidades;
+    if (horas > 0) entry.horas += horas;
+    enmangadoPorMesMap.set(mes, entry);
   }
-  const enmangadoMesActual = enmangadoPorMesMap.get(mesRango.mes) ?? null;
+  const enmangadoMesActualRaw = enmangadoPorMesMap.get(mesRango.mes) ?? null;
+  const enmangadoMesActual = enmangadoMesActualRaw
+    ? {
+        unidades: enmangadoMesActualRaw.unidades,
+        unidadesPorHora:
+          enmangadoMesActualRaw.horas > 0
+            ? enmangadoMesActualRaw.unidades / enmangadoMesActualRaw.horas
+            : null,
+      }
+    : null;
   const enmangadoHistorialAsc = Array.from(enmangadoPorMesMap.entries()).sort(([a], [b]) =>
     a.localeCompare(b),
   );
@@ -984,10 +995,27 @@ export default async function EstadisticasPage({
     label: mesCorto(mes),
     value: e.unidades,
   }));
-  const enmangadoParadasHistorialChart = enmangadoHistorialAsc.map(([mes, e]) => ({
-    label: mesCorto(mes),
-    value: Math.round((e.paradasMin / 60) * 10) / 10,
-  }));
+  const enmangadoPorHoraHistorialChart = enmangadoHistorialAsc
+    .filter(([, e]) => e.horas > 0)
+    .map(([mes, e]) => ({ label: mesCorto(mes), value: Math.round((e.unidades / e.horas) * 10) / 10 }));
+
+  // Participación por referencia enmangada del mes elegido arriba (mismo
+  // selector que Kilos producidos/empacados).
+  const enmangadoPorReferenciaMap = new Map<string, number>();
+  for (const v of vasosEnmangados ?? []) {
+    const mes = v.started_at.slice(0, 7);
+    if (mes !== mesRango.mes) continue;
+    enmangadoPorReferenciaMap.set(
+      v.referencia_id,
+      (enmangadoPorReferenciaMap.get(v.referencia_id) ?? 0) + v.cantidad_unidades,
+    );
+  }
+  const enmangadoPorReferencia = Array.from(enmangadoPorReferenciaMap.entries())
+    .map(([id, total]) => ({
+      label: enmangadoReferenciaNameById.get(id) ?? "Referencia eliminada",
+      value: total,
+    }))
+    .sort((a, b) => b.value - a.value);
 
   // -------------------------------------------------------------------
   // Eficiencia por kilo empacado: agua de producción, gas y energía sobre
@@ -1408,18 +1436,36 @@ export default async function EstadisticasPage({
             unit="und"
           />
           <KpiCard
-            icon={<PauseCircle className="size-5" />}
-            label="Tiempo de paradas"
+            icon={<Gauge className="size-5" />}
+            label="Unidades por hora"
             value={
-              enmangadoMesActual != null
-                ? `${kg(enmangadoMesActual.paradasMin / 60)} h`
+              enmangadoMesActual?.unidadesPorHora != null
+                ? `${kg(enmangadoMesActual.unidadesPorHora)} und/h`
                 : "—"
             }
             sublabel={mesRango.label}
-            data={enmangadoParadasHistorialChart}
-            unit="h"
+            data={enmangadoPorHoraHistorialChart}
+            unit="und/h"
           />
         </div>
+        <ExpandableCard
+          title={`Participación por referencia enmangada (${mesRango.label})`}
+          expanded={
+            enmangadoPorReferencia.length > 0 ? (
+              <ShareChart data={enmangadoPorReferencia} unit="und" height={420} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin enmangados registrados este mes.</p>
+            )
+          }
+        >
+          {enmangadoPorReferencia.length > 0 ? (
+            <ShareChart data={enmangadoPorReferencia} unit="und" />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Sin enmangados registrados este mes.
+            </p>
+          )}
+        </ExpandableCard>
       </div>
 
       <Card>
