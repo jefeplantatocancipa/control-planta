@@ -557,20 +557,29 @@ export default async function EstadisticasPage({
   // Merma de producción: balance de masa tipo inventario.
   //   inventario inicial del mes + producido el mes - empacado el mes
   //   = lo que debería quedar pendiente de empacar.
-  // Si lo que REALMENTE queda pendiente (volumen_restante_litros de todos
-  // los baches vivos, dato en vivo) es menos que eso, la diferencia es
-  // masa perdida en el proceso (derrames, rechazos, diferencias de
-  // pesaje). El cremado nunca cuenta como "pendiente" -- ya se cuenta
-  // como terminado en cuanto se produce (no pasa por envasado).
+  // Si lo que REALMENTE queda pendiente (el inventario final de ese mes) es
+  // menos que eso, la diferencia es masa perdida en el proceso (derrames,
+  // rechazos, diferencias de pesaje). El cremado nunca cuenta como
+  // "pendiente" -- ya se cuenta como terminado en cuanto se produce (no
+  // pasa por envasado).
   //
-  // El inventario inicial del primer mes de esta métrica (octubre 2026) se
-  // cargó a mano -- el sistema no tenía cómo saberlo antes de empezar a
-  // medir esto -- con el inventario físico real reportado por planta al
-  // cierre de septiembre 2026 (9.200 kg). De ahí en adelante se calcula
-  // solo, arrastrando producido/empacado desde esa fecha de referencia.
+  // El inventario final de cada mes es un dato físico real que reporta
+  // planta al cierre -- no se puede calcular solo, así que se carga acá a
+  // mano a medida que se tiene. Sin ese dato, el mes usa la aproximación
+  // de abajo (producido − empacado, que no descuenta lo que quedó sin
+  // empacar todavía). El mes actual no necesita estar en este mapa: usa
+  // el pendiente EN VIVO (kgPendienteActual) como su "final".
   // -------------------------------------------------------------------
-  const INVENTARIO_INICIAL_REFERENCIA_KG = 9200;
-  const INVENTARIO_INICIAL_REFERENCIA_FECHA = "2026-10-01";
+  const INVENTARIO_FINAL_CONOCIDO: Record<string, number> = {
+    "2026-07": 3000,
+    "2026-08": 6000,
+    "2026-09": 9000,
+    "2026-10": 6000,
+  };
+  function mesAnteriorDe(mesStr: string) {
+    const [y, m] = mesStr.split("-").map(Number);
+    return format(new Date(y, m - 2, 1), "yyyy-MM");
+  }
 
   function kgProducidoEnRango(desde: string, hasta: string) {
     const vivo = kgProducidoEvents
@@ -596,29 +605,26 @@ export default async function EstadisticasPage({
     return envasado + cremado + historicoEnRango(desde, hasta).empacado;
   }
 
-  const inventarioInicialMes =
-    mesRango.inicio <= INVENTARIO_INICIAL_REFERENCIA_FECHA
-      ? INVENTARIO_INICIAL_REFERENCIA_KG
-      : INVENTARIO_INICIAL_REFERENCIA_KG +
-        kgProducidoEnRango(INVENTARIO_INICIAL_REFERENCIA_FECHA, mesRango.inicio) -
-        kgEmpacadoEnRango(INVENTARIO_INICIAL_REFERENCIA_FECHA, mesRango.inicio);
+  const mesActualStr = format(new Date(), "yyyy-MM");
 
   const kgPendienteActual = (todosBaches ?? [])
     .filter((b) => b.status !== "cancelado" && requiereEnvasadoById.get(b.product_id) !== false)
     .reduce((s, b) => s + Math.max(0, b.volumen_restante_litros ?? 0), 0);
 
-  // El balance "exacto" (inventario inicial arrastrado + pendiente EN VIVO)
-  // solo tiene sentido para el mes actual -- el pendiente en vivo es "lo
-  // que hay ahora", no "lo que había al cerrar" un mes que ya pasó. Si el
-  // selector de mes apunta a un mes ya cerrado, usar el pendiente de hoy
-  // mezcla movimiento de meses posteriores con ese mes y da una merma que
-  // no corresponde. Para cualquier mes que no sea el actual se usa la
-  // misma aproximación que el histórico de abajo (producido - empacado).
-  const mesActualStr = format(new Date(), "yyyy-MM");
-  const kgMermaMes =
-    mesRango.mes === mesActualStr
-      ? inventarioInicialMes + kgProducidosMes - kgPendienteActual - kgEmpacadosTotalMes
-      : kgProducidosMes - kgEmpacadosTotalMes;
+  // Balance exacto cuando se conoce el inventario inicial (= final del mes
+  // anterior) Y el final de ESE mes (el del mes actual es el pendiente EN
+  // VIVO) -- si falta cualquiera de los dos, null (el llamador cae a la
+  // aproximación producido - empacado).
+  function kgMermaEnMes(mesStr: string, kgProducido: number, kgEmpacado: number): number | null {
+    const inicial = INVENTARIO_FINAL_CONOCIDO[mesAnteriorDe(mesStr)];
+    if (inicial == null) return null;
+    const final = mesStr === mesActualStr ? kgPendienteActual : INVENTARIO_FINAL_CONOCIDO[mesStr];
+    if (final == null) return null;
+    return inicial + kgProducido - final - kgEmpacado;
+  }
+
+  const kgMermaMesExacta = kgMermaEnMes(mesRango.mes, kgProducidosMes, kgEmpacadosTotalMes);
+  const kgMermaMes = kgMermaMesExacta ?? kgProducidosMes - kgEmpacadosTotalMes;
   const mermaPct = kgProducidosMes > 0 ? (kgMermaMes / kgProducidosMes) * 100 : null;
 
   // -------------------------------------------------------------------
@@ -699,14 +705,16 @@ export default async function EstadisticasPage({
     const shortLabel = format(new Date(`${rango.inicio}T00:00:00`), "MMM", { locale: es });
     const kgProducido = kgProducidoEnRango(rango.inicio, rango.fin);
     const kgEmpacado = kgEmpacadoEnRango(rango.inicio, rango.fin);
-    // El mes actual usa el balance completo (inventario inicial + pendiente
-    // real en vivo, ver mermaPct arriba). Los meses anteriores no tienen
-    // ese dato (no existía la métrica todavía), así que se aproxima con
-    // producido - empacado nada más -- menos preciso, pero sirve para ver
-    // la tendencia.
+    // Balance exacto cuando se conoce el inventario de ese mes (ver
+    // INVENTARIO_FINAL_CONOCIDO arriba); si no, se aproxima con producido -
+    // empacado nada más -- menos preciso (no descuenta lo que quedó sin
+    // empacar), pero sirve para ver la tendencia.
+    const mermaExacta = kgMermaEnMes(mesStr, kgProducido, kgEmpacado);
     const merma =
-      mesStr === mesActualStr
-        ? mermaPct
+      mermaExacta != null
+        ? kgProducido > 0
+          ? (mermaExacta / kgProducido) * 100
+          : null
         : kgProducido > 0
           ? ((kgProducido - kgEmpacado) / kgProducido) * 100
           : null;
