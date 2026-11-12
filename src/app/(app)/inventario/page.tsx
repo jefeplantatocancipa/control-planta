@@ -11,7 +11,12 @@ import {
 } from "@/components/ui/table";
 import { MovimientoDialog } from "./movimiento-dialog";
 import { ImportEntradasDialog } from "./import-entradas-dialog";
+import { InventarioFinalDialog } from "./inventario-final-dialog";
+import { DeleteButton } from "@/components/delete-button";
+import { deleteInventarioFinalMensual } from "./actions";
 import { formatDateTime } from "@/lib/format-date";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import type { InventarioInsumoTipo } from "@/lib/supabase/types";
 
 const TIPO_LABELS: Record<InventarioInsumoTipo, string> = {
@@ -126,6 +131,7 @@ export default async function InventarioPage() {
     { data: movimientos },
     { data: movimientosConLote },
     { data: profiles },
+    { data: inventarioFinalMensual },
   ] = await Promise.all([
     supabase.from("v_inventario_stock").select("*").order("name"),
     supabase.from("insumos").select("id, name").eq("active", true).order("name"),
@@ -144,6 +150,10 @@ export default async function InventarioPage() {
       .select("insumo_tipo, insumo_id, lote, cantidad")
       .not("lote", "is", null),
     supabase.from("profiles").select("id, full_name"),
+    supabase
+      .from("inventario_producto_terminado_mensual")
+      .select("*")
+      .order("mes", { ascending: false }),
   ]);
 
   const catalogos = {
@@ -238,6 +248,64 @@ export default async function InventarioPage() {
       <StockTable title="Material de empaque" rows={porTipo("empaque")} lotesByInsumo={lotesDisplay} />
       <StockTable title="Vasos blancos" rows={porTipo("vaso_blanco")} lotesByInsumo={lotesDisplay} />
       <StockTable title="Otros (aseo, etc.)" rows={porTipo("generico")} lotesByInsumo={lotesDisplay} />
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-medium">Inventario final de producto terminado</h2>
+            <p className="text-sm text-muted-foreground">
+              Lo que queda hecho pero sin empacar al cierre de cada mes (conteo
+              físico). Estadísticas lo usa para calcular la merma real.
+            </p>
+          </div>
+          {canAjustar && <InventarioFinalDialog />}
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Mes</TableHead>
+              <TableHead className="text-right">Kilos</TableHead>
+              <TableHead>Notas</TableHead>
+              <TableHead>Quién</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(inventarioFinalMensual ?? []).map((row) => {
+              const label = format(new Date(`${row.mes}T00:00:00`), "MMMM yyyy", { locale: es });
+              return (
+                <TableRow key={row.id}>
+                  <TableCell className="font-medium">
+                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{row.kilos}</TableCell>
+                  <TableCell className="text-muted-foreground">{row.notas ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {profileNames.get(row.created_by ?? "") ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {profile.role === "jefe_planta" && (
+                      <DeleteButton
+                        action={deleteInventarioFinalMensual}
+                        id={row.id}
+                        title="Eliminar inventario del mes"
+                        description="Ese mes vuelve a quedar sin dato (Estadísticas usa la aproximación)."
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {(inventarioFinalMensual ?? []).length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  Sin inventario final cargado todavía.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
       <div className="flex flex-col gap-2">
         <h2 className="text-lg font-medium">Movimientos recientes</h2>

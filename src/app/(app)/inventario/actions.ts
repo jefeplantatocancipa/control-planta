@@ -275,3 +275,81 @@ export async function importInventarioEntradas(
   revalidatePath("/enmangado");
   return { success: true, imported, warnings };
 }
+
+// ---------------------------------------------------------------------------
+// Inventario final de producto terminado sin empacar, por mes -- conteo
+// físico que reporta planta al cierre de cada mes. Lo usa Estadísticas para
+// la merma exacta (inventario inicial + producido - final - empacado); acá
+// solo se carga/corrige el número, no se calcula nada.
+// ---------------------------------------------------------------------------
+const InventarioFinalMensualSchema = z.object({
+  mes: z.string().regex(/^\d{4}-\d{2}$/, "Elegí un mes."),
+  kilos: z.coerce.number().min(0, "Los kilos no pueden ser negativos."),
+  notas: z.string().trim().optional(),
+});
+
+export async function upsertInventarioFinalMensual(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "supervisor"]);
+
+  const parsed = InventarioFinalMensualSchema.safeParse({
+    mes: formData.get("mes"),
+    kilos: formData.get("kilos"),
+    notas: formData.get("notas") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("inventario_producto_terminado_mensual")
+    .upsert(
+      {
+        mes: `${parsed.data.mes}-01`,
+        kilos: parsed.data.kilos,
+        notas: parsed.data.notas || null,
+        created_by: profile.id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "mes" },
+    );
+
+  if (error) {
+    return { error: "No se pudo guardar el inventario del mes." };
+  }
+
+  revalidatePath("/inventario");
+  revalidatePath("/estadisticas");
+  return { success: true };
+}
+
+const DeleteInventarioFinalMensualSchema = z.object({ id: z.string().uuid() });
+
+export async function deleteInventarioFinalMensual(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const parsed = DeleteInventarioFinalMensualSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("inventario_producto_terminado_mensual")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo eliminar." };
+  }
+
+  revalidatePath("/inventario");
+  revalidatePath("/estadisticas");
+  return { success: true };
+}

@@ -121,6 +121,7 @@ export default async function EstadisticasPage({
       { data: produccionHistorica },
       { data: consumosEnergia },
       { data: enmangadoReferencias },
+      { data: inventarioFinalMensual },
     ],
     stageRecordsAll,
   ] = await Promise.all([
@@ -174,6 +175,10 @@ export default async function EstadisticasPage({
       // ya es la parte repartida que le toca a esta bodega.
       supabase.from("consumos_energia").select("mes, kwh_bodega"),
       supabase.from("enmangado_referencias").select("id, name"),
+      // Inventario final de producto terminado sin empacar, por mes --
+      // conteo físico que carga planta desde /inventario (ver nota de
+      // INVENTARIO_FINAL_CONOCIDO más abajo).
+      supabase.from("inventario_producto_terminado_mensual").select("mes, kilos"),
     ]),
     // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
     // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
@@ -564,22 +569,17 @@ export default async function EstadisticasPage({
   // pasa por envasado).
   //
   // El inventario final de cada mes es un dato físico real que reporta
-  // planta al cierre -- no se puede calcular solo, así que se carga acá a
-  // mano a medida que se tiene. Sin ese dato, el mes usa la aproximación
-  // de abajo (producido − empacado, que no descuenta lo que quedó sin
-  // empacar todavía). El mes actual no necesita estar en este mapa: usa
-  // el pendiente EN VIVO (kgPendienteActual) como su "final".
+  // planta al cierre -- no se puede calcular solo. Se carga desde
+  // /inventario (tabla inventario_producto_terminado_mensual), no acá en
+  // el código. Sin ese dato, el mes usa la aproximación de abajo
+  // (producido − empacado, que no descuenta lo que quedó sin empacar
+  // todavía). El mes actual, si todavía no tiene un cierre cargado, usa el
+  // pendiente EN VIVO (kgPendienteActual) + un ajuste físico conocido como
+  // "final" en lo que se hace el cierre real.
   // -------------------------------------------------------------------
-  const INVENTARIO_FINAL_CONOCIDO: Record<string, number> = {
-    "2026-07": 3000,
-    "2026-08": 9000,
-    "2026-09": 9000,
-    "2026-10": 6000,
-  };
-  // Ajuste físico adicional sobre el pendiente en vivo del mes actual (ver
-  // kgPendienteActual abajo) -- mismo criterio que el inventario final de
-  // los meses ya cerrados: un conteo real de planta que el sistema no
-  // puede calcular solo.
+  const INVENTARIO_FINAL_CONOCIDO = new Map(
+    (inventarioFinalMensual ?? []).map((r) => [r.mes.slice(0, 7), r.kilos]),
+  );
   const AJUSTE_INVENTARIO_ACTUAL_KG = 3000;
   function mesAnteriorDe(mesStr: string) {
     const [y, m] = mesStr.split("-").map(Number);
@@ -622,16 +622,17 @@ export default async function EstadisticasPage({
     .reduce((s, b) => s + Math.max(0, b.volumen_restante_litros ?? 0), 0);
 
   // Balance exacto cuando se conoce el inventario inicial (= final del mes
-  // anterior) Y el final de ESE mes (el del mes actual es el pendiente EN
-  // VIVO + el ajuste físico de arriba) -- si falta cualquiera de los dos,
-  // null (el llamador cae a la aproximación producido - empacado).
+  // anterior) Y el final de ESE mes -- el del mes actual, mientras no se
+  // cargue un cierre real para él, es el pendiente EN VIVO + el ajuste
+  // físico de arriba. Si falta cualquiera de los dos, null (el llamador
+  // cae a la aproximación producido - empacado).
   function kgMermaEnMes(mesStr: string, kgProducido: number, kgEmpacado: number): number | null {
-    const inicial = INVENTARIO_FINAL_CONOCIDO[mesAnteriorDe(mesStr)];
+    const inicial = INVENTARIO_FINAL_CONOCIDO.get(mesAnteriorDe(mesStr));
     if (inicial == null) return null;
     const final =
       mesStr === mesActualStr
-        ? kgPendienteActual + AJUSTE_INVENTARIO_ACTUAL_KG
-        : INVENTARIO_FINAL_CONOCIDO[mesStr];
+        ? (INVENTARIO_FINAL_CONOCIDO.get(mesStr) ?? kgPendienteActual + AJUSTE_INVENTARIO_ACTUAL_KG)
+        : INVENTARIO_FINAL_CONOCIDO.get(mesStr);
     if (final == null) return null;
     return inicial + kgProducido - final - kgEmpacado;
   }

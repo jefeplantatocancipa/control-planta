@@ -1097,6 +1097,28 @@ export interface Database {
         >;
         Relationships: [];
       };
+      inventario_producto_terminado_mensual: {
+        Row: {
+          id: string;
+          mes: string;
+          kilos: number;
+          notas: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          mes: string;
+          kilos: number;
+          notas?: string | null;
+          created_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["inventario_producto_terminado_mensual"]["Insert"]
+        >;
+        Relationships: [];
+      };
       inventario_categorias: {
         Row: {
           id: string;
