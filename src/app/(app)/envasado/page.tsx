@@ -20,6 +20,17 @@ import { DeleteButton } from "@/components/delete-button";
 import { ReabrirEnvasadoButton } from "./reabrir-envasado-button";
 import { deleteEnvasado } from "./actions";
 import { formatDate, formatDateTime } from "@/lib/format-date";
+
+function tiempoTotalLabel(startedAt: string, endedAt: string | null) {
+  if (!endedAt) return "—";
+  const minutos = Math.round(
+    (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000,
+  );
+  if (minutos < 0) return "—";
+  const horas = Math.floor(minutos / 60);
+  const resto = minutos % 60;
+  return horas > 0 ? `${horas} h ${resto} min` : `${resto} min`;
+}
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ORDER_STATUS_CLASSES } from "../programa/order-status-styles";
@@ -493,7 +504,7 @@ export default async function EnvasadoPage() {
                 <TableHead>Lote</TableHead>
                 <TableHead>Insumos (kg)</TableHead>
                 <TableHead>Unidades</TableHead>
-                <TableHead>Mermas</TableHead>
+                <TableHead>Tiempo total</TableHead>
                 <TableHead>Registrado por</TableHead>
                 <TableHead>Finalizado</TableHead>
                 <TableHead className="sticky right-0 bg-background" />
@@ -511,7 +522,9 @@ export default async function EnvasadoPage() {
                     {massBalanceByBache.get(envasado.bache_id)?.kg ?? "—"}
                   </TableCell>
                   <TableCell>{envasado.cantidad_unidades}</TableCell>
-                  <TableCell>{envasado.cantidad_mermas}</TableCell>
+                  <TableCell>
+                    {tiempoTotalLabel(envasado.started_at, envasado.ended_at)}
+                  </TableCell>
                   <TableCell>{operarioNames.get(envasado.operario_id) ?? "—"}</TableCell>
                   <TableCell>
                     {envasado.ended_at && formatDateTime(envasado.ended_at)}
