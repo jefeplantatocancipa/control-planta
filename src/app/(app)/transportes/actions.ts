@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { requireProfile } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { puedeVerTransportes } from "@/lib/transportes-acceso";
+import { isTransportesEnabled } from "@/lib/feature-flags";
 import { sendMailWithAttachment } from "@/lib/email/send-mail";
 import { AREAS, URGENCIA, SI_NO } from "./constants";
 
@@ -83,7 +84,7 @@ export async function solicitarTransporte(
   formData: FormData,
 ): Promise<ActionState> {
   const profile = await requireProfile();
-  if (!puedeVerTransportes(profile.email)) {
+  if (!isTransportesEnabled() || !puedeVerTransportes(profile.email)) {
     return { error: "No tenés acceso a este módulo." };
   }
 

@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { requireProfile } from "@/lib/auth/dal";
 import { puedeVerTransportes } from "@/lib/transportes-acceso";
+import { isTransportesEnabled } from "@/lib/feature-flags";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ export default async function TransportesPage({
   }>;
 }) {
   const profile = await requireProfile();
+  if (!isTransportesEnabled()) notFound();
   if (!puedeVerTransportes(profile.email)) redirect("/");
 
   const filtros = await searchParams;

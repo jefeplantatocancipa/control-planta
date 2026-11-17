@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Activity, Beaker, BookText, CalendarClock, ClipboardList, Factory, LineChart, Package, Tags, Truck, Warehouse } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth/dal";
-import { isEnmangadoEnabled } from "@/lib/feature-flags";
+import { isEnmangadoEnabled, isTransportesEnabled } from "@/lib/feature-flags";
 import { puedeVerTransportes } from "@/lib/transportes-acceso";
 import type { UserRole } from "@/lib/supabase/types";
 
@@ -112,7 +112,8 @@ export default async function HomePage() {
     (card) =>
       card.roles.includes(profile.role) &&
       (card.href !== "/enmangado" || isEnmangadoEnabled()) &&
-      (card.href !== "/transportes" || puedeVerTransportes(profile.email)),
+      (card.href !== "/transportes" ||
+        (isTransportesEnabled() && puedeVerTransportes(profile.email))),
   );
 
   return (

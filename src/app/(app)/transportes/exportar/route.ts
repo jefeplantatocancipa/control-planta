@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { format } from "date-fns";
 import { requireProfile } from "@/lib/auth/dal";
 import { puedeVerTransportes } from "@/lib/transportes-acceso";
+import { isTransportesEnabled } from "@/lib/feature-flags";
 import { createClient } from "@/lib/supabase/server";
 import { URGENCIA } from "../constants";
 
@@ -31,7 +32,7 @@ function formatFecha(fecha: string) {
 
 export async function GET(request: NextRequest) {
   const profile = await requireProfile();
-  if (!puedeVerTransportes(profile.email)) {
+  if (!isTransportesEnabled() || !puedeVerTransportes(profile.email)) {
     return new Response("No autorizado", { status: 403 });
   }
 

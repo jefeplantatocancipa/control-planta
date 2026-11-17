@@ -7,3 +7,7 @@
 export function isEnmangadoEnabled() {
   return process.env.NEXT_PUBLIC_FEATURE_ENMANGADO !== "false";
 }
+
+export function isTransportesEnabled() {
+  return process.env.NEXT_PUBLIC_FEATURE_TRANSPORTES !== "false";
+}

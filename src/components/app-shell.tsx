@@ -28,7 +28,7 @@ import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import type { CurrentProfile } from "@/lib/auth/dal";
 import type { UserRole } from "@/lib/supabase/types";
 import { logout } from "@/app/login/actions";
-import { isEnmangadoEnabled } from "@/lib/feature-flags";
+import { isEnmangadoEnabled, isTransportesEnabled } from "@/lib/feature-flags";
 import { puedeVerTransportes } from "@/lib/transportes-acceso";
 
 interface NavItem {
@@ -80,7 +80,8 @@ export function AppShell({
     (item) =>
       item.roles.includes(profile.role) &&
       (item.href !== "/enmangado" || isEnmangadoEnabled()) &&
-      (item.href !== "/transportes" || puedeVerTransportes(profile.email)),
+      (item.href !== "/transportes" ||
+        (isTransportesEnabled() && puedeVerTransportes(profile.email))),
   );
   const mobileItems = items.filter((item) => MOBILE_ITEMS.includes(item.href));
 
