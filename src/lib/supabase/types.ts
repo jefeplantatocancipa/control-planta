@@ -1119,6 +1119,48 @@ export interface Database {
         >;
         Relationships: [];
       };
+      solicitudes_transporte: {
+        Row: {
+          id: string;
+          fecha_solicitud: string;
+          hora_solicitud: string;
+          solicitante_id: string;
+          solicitante_nombre: string;
+          area_solicitante: string;
+          descripcion_objeto: string;
+          cantidad: number;
+          peso_aprox_kg: number | null;
+          requiere_refrigeracion: boolean;
+          origen: string;
+          destino: string;
+          fecha_traslado: string;
+          hora_traslado: string;
+          quien_recibe: string;
+          urgencia: "Urgente" | "No Urgente";
+          created_at: string;
+        };
+        Insert: {
+          fecha_solicitud: string;
+          hora_solicitud: string;
+          solicitante_id: string;
+          solicitante_nombre: string;
+          area_solicitante: string;
+          descripcion_objeto: string;
+          cantidad: number;
+          peso_aprox_kg?: number | null;
+          requiere_refrigeracion?: boolean;
+          origen: string;
+          destino: string;
+          fecha_traslado: string;
+          hora_traslado: string;
+          quien_recibe: string;
+          urgencia: "Urgente" | "No Urgente";
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["solicitudes_transporte"]["Insert"]
+        >;
+        Relationships: [];
+      };
       inventario_categorias: {
         Row: {
           id: string;
