@@ -27,6 +27,10 @@ import type { Database } from "@/lib/supabase/types";
 type Referencia = Database["public"]["Tables"]["enmangado_referencias"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
+function hoyISO() {
+  return new Date().toLocaleDateString("en-CA");
+}
+
 interface OrderOption {
   id: string;
   label: string;
@@ -47,6 +51,7 @@ function NewEnmangadoForm({
     createVasoEnmangado,
     {},
   );
+  const [fecha] = useState(hoyISO);
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -129,6 +134,18 @@ function NewEnmangadoForm({
       <div className="flex flex-col gap-2">
         <Label htmlFor="lote_etiqueta">Lote / etiqueta</Label>
         <Input id="lote_etiqueta" name="lote_etiqueta" placeholder="Opcional" />
+      </div>
+
+      <input type="hidden" name="fecha" value={fecha} />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="hora_inicio">Hora de inicio</Label>
+          <Input id="hora_inicio" name="hora_inicio" type="time" required />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="hora_final">Hora final</Label>
+          <Input id="hora_final" name="hora_final" type="time" required />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

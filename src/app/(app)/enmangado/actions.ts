@@ -341,17 +341,25 @@ export async function updateEnmangadoOrderStatus(
 // ---------------------------------------------------------------------------
 // Captura de vasos enmangados (descuenta stock de vasos blancos)
 // ---------------------------------------------------------------------------
-const VasoEnmangadoSchema = z.object({
-  referencia_id: z.string().uuid({ message: "Elegí una referencia." }),
-  enmangado_order_id: z.string().uuid().nullable(),
-  operario_id: z.string().uuid({ message: "Elegí quién realizó el enmangado." }),
-  lote_etiqueta: z.string().trim().optional(),
-  cantidad_unidades: z.coerce
-    .number()
-    .min(0, "La cantidad no puede ser negativa."),
-  cantidad_mermas: z.coerce.number().min(0, "Las mermas no pueden ser negativas."),
-  notes: z.string().trim().optional(),
-});
+const VasoEnmangadoSchema = z
+  .object({
+    referencia_id: z.string().uuid({ message: "Elegí una referencia." }),
+    enmangado_order_id: z.string().uuid().nullable(),
+    operario_id: z.string().uuid({ message: "Elegí quién realizó el enmangado." }),
+    lote_etiqueta: z.string().trim().optional(),
+    fecha: z.string().min(1, "La fecha es obligatoria."),
+    hora_inicio: z.string().min(1, "La hora de inicio es obligatoria."),
+    hora_final: z.string().min(1, "La hora final es obligatoria."),
+    cantidad_unidades: z.coerce
+      .number()
+      .min(0, "La cantidad no puede ser negativa."),
+    cantidad_mermas: z.coerce.number().min(0, "Las mermas no pueden ser negativas."),
+    notes: z.string().trim().optional(),
+  })
+  .refine((d) => d.hora_final > d.hora_inicio, {
+    message: "La hora final debe ser posterior a la de inicio.",
+    path: ["hora_final"],
+  });
 
 export async function createVasoEnmangado(
   _prevState: ActionState,
@@ -365,6 +373,9 @@ export async function createVasoEnmangado(
     enmangado_order_id: orderId && orderId !== NO_ORDER_VALUE ? orderId : null,
     operario_id: formData.get("operario_id"),
     lote_etiqueta: formData.get("lote_etiqueta"),
+    fecha: formData.get("fecha"),
+    hora_inicio: formData.get("hora_inicio"),
+    hora_final: formData.get("hora_final"),
     cantidad_unidades: formData.get("cantidad_unidades"),
     cantidad_mermas: formData.get("cantidad_mermas") || 0,
     notes: formData.get("notes"),
@@ -373,16 +384,22 @@ export async function createVasoEnmangado(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
-  const now = new Date().toISOString();
+  // Colombia no tiene horario de verano -- UTC-5 fijo todo el año.
+  const { referencia_id, enmangado_order_id, operario_id, lote_etiqueta, fecha, hora_inicio, hora_final, cantidad_unidades, cantidad_mermas, notes } =
+    parsed.data;
   const supabase = await createClient();
   const { data: created, error } = await supabase
     .from("vasos_enmangados")
     .insert({
-      ...parsed.data,
-      lote_etiqueta: parsed.data.lote_etiqueta || null,
-      notes: parsed.data.notes || null,
-      started_at: now,
-      ended_at: now,
+      referencia_id,
+      enmangado_order_id,
+      operario_id,
+      lote_etiqueta: lote_etiqueta || null,
+      cantidad_unidades,
+      cantidad_mermas,
+      notes: notes || null,
+      started_at: `${fecha}T${hora_inicio}:00-05:00`,
+      ended_at: `${fecha}T${hora_final}:00-05:00`,
       created_by: profile.id,
     })
     .select("id")
