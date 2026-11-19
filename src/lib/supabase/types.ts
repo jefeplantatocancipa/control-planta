@@ -13,6 +13,14 @@ export type ProcessType = "bache";
 export type ProgramStatus = "borrador" | "publicado" | "cerrado";
 export type OrderStatus = "pendiente" | "en_proceso" | "completado" | "cancelado";
 export type BacheStatus = "en_proceso" | "completado" | "cancelado";
+export type DesviacionTipo = "tiempo" | "receta";
+export type DesviacionMotivo =
+  | "falla_equipo"
+  | "espera_insumos"
+  | "espera_leche"
+  | "ajuste_proceso"
+  | "error_registro"
+  | "otro";
 
 export type InventarioInsumoTipo = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
 export type InventarioTablaDestino = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
@@ -379,6 +387,7 @@ export interface Database {
           tipo: "lavado" | "novedad";
           turno_id: string | null;
           equipo_id: string | null;
+          bache_id: string | null;
           texto: string;
           created_by: string;
           created_at: string;
@@ -387,6 +396,7 @@ export interface Database {
           tipo: "lavado" | "novedad";
           turno_id?: string | null;
           equipo_id?: string | null;
+          bache_id?: string | null;
           texto: string;
           created_by: string;
         };
@@ -932,6 +942,62 @@ export interface Database {
         };
         Update: Partial<
           Database["public"]["Tables"]["bache_stage_firmas"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      desviaciones: {
+        Row: {
+          id: string;
+          bache_id: string;
+          stage_record_id: string;
+          tipo: DesviacionTipo;
+          insumo_id: string | null;
+          valor_real: number;
+          valor_esperado: number | null;
+          limite_inferior: number | null;
+          limite_superior: number | null;
+          motivo: DesviacionMotivo;
+          descripcion: string;
+          turno_id: string | null;
+          bitacora_entrada_id: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          bache_id: string;
+          stage_record_id: string;
+          tipo: DesviacionTipo;
+          insumo_id?: string | null;
+          valor_real: number;
+          valor_esperado?: number | null;
+          limite_inferior?: number | null;
+          limite_superior?: number | null;
+          motivo: DesviacionMotivo;
+          descripcion: string;
+          turno_id?: string | null;
+          bitacora_entrada_id?: string | null;
+          created_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["desviaciones"]["Insert"]>;
+        Relationships: [];
+      };
+      desviacion_firmas: {
+        Row: {
+          id: string;
+          desviacion_id: string;
+          aprobado: boolean;
+          observaciones: string | null;
+          firmado_por: string;
+          firmado_at: string;
+        };
+        Insert: {
+          desviacion_id: string;
+          aprobado: boolean;
+          observaciones?: string | null;
+          firmado_por: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["desviacion_firmas"]["Insert"]
         >;
         Relationships: [];
       };

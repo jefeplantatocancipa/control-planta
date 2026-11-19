@@ -792,6 +792,52 @@ export async function firmarEtapaBache(
   return { success: true };
 }
 
+// ---------------------------------------------------------------------------
+// Firma de calidad sobre una desviación -- mismo esquema que la firma de
+// etapa, nunca bloquea ni condiciona nada ya registrado.
+// ---------------------------------------------------------------------------
+const FirmarDesviacionSchema = z.object({
+  desviacion_id: z.string().uuid(),
+  bache_id: z.string().uuid(),
+  aprobado: z.enum(["true", "false"]).transform((v) => v === "true"),
+  observaciones: z.string().trim().optional(),
+});
+
+export async function firmarDesviacion(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "calidad"]);
+
+  const parsed = FirmarDesviacionSchema.safeParse({
+    desviacion_id: formData.get("desviacion_id"),
+    bache_id: formData.get("bache_id"),
+    aprobado: formData.get("aprobado"),
+    observaciones: formData.get("observaciones"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("desviacion_firmas").upsert(
+    {
+      desviacion_id: parsed.data.desviacion_id,
+      aprobado: parsed.data.aprobado,
+      observaciones: parsed.data.observaciones || null,
+      firmado_por: profile.id,
+    },
+    { onConflict: "desviacion_id" },
+  );
+
+  if (error) {
+    return { error: "No se pudo guardar la firma." };
+  }
+
+  revalidatePath(`/baches/${parsed.data.bache_id}`);
+  return { success: true };
+}
+
 const AddReadingSchema = z.object({
   record_id: z.string().uuid(),
   bache_id: z.string().uuid(),
