@@ -250,6 +250,10 @@ export interface Database {
           captures_insumos: boolean;
           captures_readings: boolean;
           active: boolean;
+          standard_duration_min: number | null;
+          duration_tolerance_low_pct: number;
+          duration_tolerance_high_pct: number;
+          duration_alarm_enabled: boolean;
           created_at: string;
         };
         Insert: {
@@ -261,6 +265,10 @@ export interface Database {
           captures_insumos?: boolean;
           captures_readings?: boolean;
           active?: boolean;
+          standard_duration_min?: number | null;
+          duration_tolerance_low_pct?: number;
+          duration_tolerance_high_pct?: number;
+          duration_alarm_enabled?: boolean;
         };
         Update: Partial<
           Database["public"]["Tables"]["process_stage_templates"]["Insert"]

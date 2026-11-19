@@ -39,6 +39,7 @@ import {
 } from "./actions";
 import { ALL_PRODUCTS_VALUE } from "./constants";
 import type { Database, StageParameterDef } from "@/lib/supabase/types";
+import type { EstandarCalculado } from "@/lib/duracion-estandar";
 
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
@@ -227,17 +228,72 @@ function ParameterEditor({
   );
 }
 
+// Texto de referencia con el estándar calculado (mediana de los últimos 90
+// días) para esta etapa. Si la etapa es compartida entre varios productos
+// (product_id null), cada producto puede tardar distinto -- se muestra un
+// desglose en vez de mezclar todo en un solo número.
+function EstandarCalculadoReferencia({
+  stage,
+  products,
+  estandarCalculadoPorProductoEtapa,
+}: {
+  stage: StageTemplate | null;
+  products: Product[];
+  estandarCalculadoPorProductoEtapa: Record<string, EstandarCalculado>;
+}) {
+  if (!stage) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        El estándar calculado aparece acá una vez que la etapa exista y tenga
+        cierres registrados.
+      </p>
+    );
+  }
+  const productosARevisar = stage.product_id
+    ? products.filter((p) => p.id === stage.product_id)
+    : products;
+  const filas = productosARevisar
+    .map((p) => ({
+      nombre: p.name,
+      estandar: estandarCalculadoPorProductoEtapa[`${p.id}:${stage.id}`],
+    }))
+    .filter((f) => f.estandar && f.estandar.cantidad > 0);
+
+  if (filas.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Estándar calculado: sin datos suficientes todavía (hacen falta al
+        menos 5 cierres en los últimos 90 días).
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-muted-foreground">
+      Estándar calculado:{" "}
+      {filas
+        .map((f) =>
+          f.estandar!.medianaMin != null
+            ? `${f.nombre} ${Math.round(f.estandar!.medianaMin)} min (${f.estandar!.cantidad} registros)`
+            : `${f.nombre} sin datos suficientes (${f.estandar!.cantidad} registro${f.estandar!.cantidad === 1 ? "" : "s"})`,
+        )
+        .join(" · ")}
+    </p>
+  );
+}
+
 function StageForm({
   stage,
   products,
   equipos,
   initialRequirements,
+  estandarCalculadoPorProductoEtapa,
   onSuccess,
 }: {
   stage: StageTemplate | null;
   products: Product[];
   equipos: Equipo[];
   initialRequirements: EquipoRequirement[];
+  estandarCalculadoPorProductoEtapa: Record<string, EstandarCalculado>;
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -351,6 +407,68 @@ function StageForm({
         onChange={setEquipoRequirements}
         equipos={equipos}
       />
+
+      <div className="flex flex-col gap-2 rounded-lg border p-3">
+        <Label>Alarma de tiempo</Label>
+        <EstandarCalculadoReferencia
+          stage={stage}
+          products={products}
+          estandarCalculadoPorProductoEtapa={estandarCalculadoPorProductoEtapa}
+        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="standard_duration_min" className="text-xs font-normal">
+              Tiempo estándar manual (min)
+            </Label>
+            <Input
+              id="standard_duration_min"
+              name="standard_duration_min"
+              type="number"
+              min={0}
+              step="any"
+              placeholder="Usa el calculado"
+              defaultValue={stage?.standard_duration_min ?? undefined}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="duration_tolerance_low_pct" className="text-xs font-normal">
+              Tolerancia inferior %
+            </Label>
+            <Input
+              id="duration_tolerance_low_pct"
+              name="duration_tolerance_low_pct"
+              type="number"
+              min={0}
+              step="any"
+              defaultValue={stage?.duration_tolerance_low_pct ?? 30}
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="duration_tolerance_high_pct" className="text-xs font-normal">
+              Tolerancia superior %
+            </Label>
+            <Input
+              id="duration_tolerance_high_pct"
+              name="duration_tolerance_high_pct"
+              type="number"
+              min={0}
+              step="any"
+              defaultValue={stage?.duration_tolerance_high_pct ?? 30}
+              required
+            />
+          </div>
+        </div>
+        <Label className="flex items-center gap-2 text-sm font-normal">
+          <input
+            type="checkbox"
+            name="duration_alarm_enabled"
+            defaultChecked={stage?.duration_alarm_enabled ?? true}
+            className="size-4"
+          />
+          Activar alarma de tiempo
+        </Label>
+      </div>
 
       <Label className="flex items-center gap-2">
         <input
@@ -598,12 +716,14 @@ export function StagesPanel({
   products,
   equipos,
   stageRequirements,
+  estandarCalculadoPorProductoEtapa,
   canWrite = true,
 }: {
   stages: StageTemplate[];
   products: Product[];
   equipos: Equipo[];
   stageRequirements: EquipoRequirement[];
+  estandarCalculadoPorProductoEtapa: Record<string, EstandarCalculado>;
   canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -704,6 +824,7 @@ export function StagesPanel({
             products={products}
             equipos={equipos}
             initialRequirements={editing ? requirementsByStage.get(editing.id) ?? [] : []}
+            estandarCalculadoPorProductoEtapa={estandarCalculadoPorProductoEtapa}
             onSuccess={() => setOpen(false)}
           />
         </DialogContent>

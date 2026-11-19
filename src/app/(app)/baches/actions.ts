@@ -6,6 +6,12 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
+import { registrarDesviacion } from "./desviaciones";
+import {
+  medianaMinutosPorProductoEtapa,
+  estandarEfectivo,
+  limitesDuracion,
+} from "@/lib/duracion-estandar";
 import type { StageRecordParameters, StageReading } from "@/lib/supabase/types";
 
 export interface ActionState {
@@ -404,6 +410,25 @@ const BaseOtroBacheSchema = z.array(
   }),
 );
 
+const DesviacionInputSchema = z.object({
+  tipo: z.enum(["tiempo", "receta"]),
+  insumo_id: z.string().uuid().optional(),
+  valor_real: z.coerce.number(),
+  valor_esperado: z.coerce.number().nullable(),
+  limite_inferior: z.coerce.number().nullable(),
+  limite_superior: z.coerce.number().nullable(),
+  motivo: z.enum([
+    "falla_equipo",
+    "espera_insumos",
+    "espera_leche",
+    "ajuste_proceso",
+    "error_registro",
+    "otro",
+  ]),
+  descripcion: z.string().trim().min(10, "La descripción de la desviación es muy corta."),
+});
+const DesviacionesSchema = z.array(DesviacionInputSchema);
+
 export async function finishStage(
   _prevState: ActionState,
   formData: FormData,
@@ -420,23 +445,99 @@ export async function finishStage(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  const desviacionesParsed = DesviacionesSchema.safeParse(
+    JSON.parse(String(formData.get("desviaciones") || "[]")),
+  );
+  if (!desviacionesParsed.success) {
+    return { error: "Justificación de desviación inválida." };
+  }
+
   const supabase = await createClient();
 
   // El esquema de parámetros (y si incluye checklist de insumos) es la
   // fuente de verdad server-side: evita confiar en datos arbitrarios
-  // enviados desde el cliente.
-  const [{ data: template }, { data: existingRecord }] = await Promise.all([
+  // enviados desde el cliente. Lo mismo para la alarma de tiempo: se
+  // recalcula acá, no se confía en lo que mande el formulario.
+  const [{ data: template }, { data: existingRecord }, { data: bache }] = await Promise.all([
     supabase
       .from("process_stage_templates")
-      .select("parameter_schema, captures_insumos")
+      .select(
+        "name, parameter_schema, captures_insumos, standard_duration_min, duration_tolerance_low_pct, duration_tolerance_high_pct, duration_alarm_enabled",
+      )
       .eq("id", parsed.data.stage_template_id)
       .single(),
     supabase
       .from("bache_stage_records")
-      .select("parameters")
+      .select("parameters, started_at")
       .eq("id", parsed.data.record_id)
       .single(),
+    supabase
+      .from("baches")
+      .select("batch_code, product_id, status")
+      .eq("id", parsed.data.bache_id)
+      .single(),
   ]);
+
+  // Alarma de tiempo: ¿esta etapa quedó fuera de [estándar×(1-tolInf),
+  // estándar×(1+tolSup)]? Si sí y la alarma está activa, hace falta una
+  // justificación de tipo "tiempo" en lo que mandó el cliente -- sin ella
+  // no se cierra la etapa. Nunca al revés: con la justificación presente,
+  // esto no vuelve a bloquear nada.
+  let elapsedMin: number | null = null;
+  let standardMin: number | null = null;
+  let limites: { limiteInferior: number; limiteSuperior: number } | null = null;
+  if (existingRecord && template && bache) {
+    elapsedMin = (Date.now() - new Date(existingRecord.started_at).getTime()) / 60000;
+
+    let calculadoMin: number | null = null;
+    const { data: productBaches } = await supabase
+      .from("baches")
+      .select("id")
+      .eq("product_id", bache.product_id);
+    const bacheIds = (productBaches ?? []).map((b) => b.id);
+    if (bacheIds.length > 0) {
+      const { data: recent } = await supabase
+        .from("bache_stage_records")
+        .select("started_at, ended_at")
+        .eq("stage_template_id", parsed.data.stage_template_id)
+        .in("bache_id", bacheIds)
+        .not("ended_at", "is", null)
+        .gte("ended_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
+      const registros = (recent ?? []).map((r) => ({
+        product_id: bache.product_id,
+        stage_template_id: parsed.data.stage_template_id,
+        started_at: r.started_at,
+        ended_at: r.ended_at!,
+      }));
+      calculadoMin =
+        medianaMinutosPorProductoEtapa(registros).get(
+          `${bache.product_id}:${parsed.data.stage_template_id}`,
+        )?.medianaMin ?? null;
+    }
+    standardMin = estandarEfectivo({
+      manualOverrideMin: template.standard_duration_min,
+      calculadoMin,
+    });
+    limites =
+      standardMin != null
+        ? limitesDuracion({
+            standardMin,
+            toleranceLowPct: template.duration_tolerance_low_pct,
+            toleranceHighPct: template.duration_tolerance_high_pct,
+          })
+        : null;
+  }
+  const requiereJustificacionTiempo =
+    Boolean(template?.duration_alarm_enabled) &&
+    limites != null &&
+    elapsedMin != null &&
+    (elapsedMin < limites.limiteInferior || elapsedMin > limites.limiteSuperior);
+  const desviacionTiempo = desviacionesParsed.data.find((d) => d.tipo === "tiempo");
+  if (requiereJustificacionTiempo && !desviacionTiempo) {
+    return {
+      error: "Esta etapa quedó fuera del tiempo estándar: hace falta justificar la desviación.",
+    };
+  }
 
   // Se parte de lo que ya había (preserva "lecturas" si la etapa las usa,
   // ya que esas se van agregando aparte con addReading mientras está en
@@ -516,6 +617,26 @@ export async function finishStage(
     return { error: "No se pudo finalizar la etapa." };
   }
 
+  // La etapa ya quedó cerrada arriba -- si esto falla, no revierte nada
+  // (la justificación y la nota en Bitácora son un registro aparte).
+  if (desviacionTiempo) {
+    await registrarDesviacion(supabase, {
+      bacheId: parsed.data.bache_id,
+      batchCode: bache?.batch_code ?? "—",
+      stageRecordId: parsed.data.record_id,
+      stageName: template?.name ?? "—",
+      tipo: "tiempo",
+      unidad: "min",
+      valorReal: elapsedMin ?? desviacionTiempo.valor_real,
+      valorEsperado: standardMin,
+      limiteInferior: limites?.limiteInferior ?? null,
+      limiteSuperior: limites?.limiteSuperior ?? null,
+      motivo: desviacionTiempo.motivo,
+      descripcion: desviacionTiempo.descripcion,
+      createdBy: profile.id,
+    });
+  }
+
   // Se descuenta del bache de origen lo que se tomó (contra el valor ya
   // verificado arriba), para que no quede contado dos veces -- una vez en
   // su propio balance y otra en el de este bache -- y para que el
@@ -533,17 +654,14 @@ export async function finishStage(
     );
   }
 
-  // Bache y etapa recién cerrada: hacen falta para dos cosas -- el consumo
-  // automático de insumos y saber si esta era la ÚLTIMA etapa del proceso
-  // (para cerrar el bache solo).
-  const [{ data: bache }, { data: currentStage }] = await Promise.all([
-    supabase.from("baches").select("product_id, status").eq("id", parsed.data.bache_id).single(),
-    supabase
-      .from("process_stage_templates")
-      .select("sequence_order")
-      .eq("id", parsed.data.stage_template_id)
-      .single(),
-  ]);
+  // Etapa recién cerrada: hace falta para dos cosas -- el consumo automático
+  // de insumos y saber si esta era la ÚLTIMA etapa del proceso (para cerrar
+  // el bache solo). "bache" ya se trajo arriba, antes del cierre.
+  const { data: currentStage } = await supabase
+    .from("process_stage_templates")
+    .select("sequence_order")
+    .eq("id", parsed.data.stage_template_id)
+    .single();
 
   if (bache && currentStage) {
     const { data: ownStages } = await supabase

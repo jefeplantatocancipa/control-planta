@@ -9,6 +9,7 @@ import { StageCard } from "./stage-card";
 import { BacheStatusActions } from "./bache-status-actions";
 import { FinalizarBacheBanner } from "./finalizar-bache-banner";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
+import { medianaMinutosPorProductoEtapa, fechaHaceNDiasISO } from "@/lib/duracion-estandar";
 import type { BacheStatus } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -85,6 +86,31 @@ export default async function BacheDetailPage({
   // criterio que usa la reserva al iniciar una etapa.
   const usos = await usosDeEquipos(supabase);
   const equiposOcupadosIds = new Set(usos.filter((u) => u.enCurso).map((u) => u.equipoId));
+
+  // Estándar calculado (mediana de los últimos 90 días) para las etapas de
+  // ESTE producto, para la alarma de tiempo -- ver src/lib/duracion-estandar.ts.
+  const { data: productBaches } = await supabase
+    .from("baches")
+    .select("id")
+    .eq("product_id", bache.product_id);
+  const productBacheIds = (productBaches ?? []).map((b) => b.id);
+  const { data: stageRecords90d } =
+    productBacheIds.length > 0
+      ? await supabase
+          .from("bache_stage_records")
+          .select("stage_template_id, started_at, ended_at")
+          .in("bache_id", productBacheIds)
+          .not("ended_at", "is", null)
+          .gte("ended_at", fechaHaceNDiasISO(90))
+      : { data: [] };
+  const medianaPorEtapa = medianaMinutosPorProductoEtapa(
+    (stageRecords90d ?? []).map((r) => ({
+      product_id: bache.product_id,
+      stage_template_id: r.stage_template_id,
+      started_at: r.started_at,
+      ended_at: r.ended_at!,
+    })),
+  );
 
   const recordIds = (records ?? []).map((r) => r.id);
   const { data: recordEquiposData } =
@@ -223,6 +249,9 @@ export default async function BacheDetailPage({
               requirements={[]}
               recordEquipoIds={record ? equipoIdsByRecord.get(record.id) ?? [] : []}
               equiposOcupadosIds={equiposOcupadosIds}
+              calculatedStandardMin={
+                medianaPorEtapa.get(`${bache.product_id}:${stage.id}`)?.medianaMin ?? null
+              }
               firma={
                 firma
                   ? {

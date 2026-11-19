@@ -6,6 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format-date";
 import { pronosticosTerminacion } from "@/lib/pronostico-bache";
 import { pronosticosEnvasado } from "@/lib/pronostico-envasado";
+import {
+  medianaMinutosPorProductoEtapa,
+  estandarEfectivo,
+  minutosDesde,
+} from "@/lib/duracion-estandar";
+import { DuracionAlarmaBadge } from "@/components/duracion-alarma-badge";
 import { StageFlow } from "./stage-flow";
 
 function timeSince(iso: string) {
@@ -225,6 +231,26 @@ export default async function ProcesoPage() {
   });
   const pronosticoByBacheId = new Map(pronosticos.map((p) => [p.bacheId, p]));
 
+  // Estándar de tiempo por etapa (mismo cálculo que en el detalle del bache
+  // y en Administración -- ver src/lib/duracion-estandar.ts), reutilizando
+  // los registros cerrados que ya se trajeron para el pronóstico de arriba.
+  const productIdByBacheId = new Map((allBaches ?? []).map((b) => [b.id, b.product_id]));
+  const registrosDuracion = (registrosCerrados ?? [])
+    .map((r) => {
+      const productId = productIdByBacheId.get(r.bache_id);
+      return productId && r.ended_at
+        ? {
+            product_id: productId,
+            stage_template_id: r.stage_template_id,
+            started_at: r.started_at,
+            ended_at: r.ended_at,
+          }
+        : null;
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const medianaPorEtapa = medianaMinutosPorProductoEtapa(registrosDuracion);
+  const templateById = new Map((templates ?? []).map((t) => [t.id, t]));
+
   const baches = proceso ?? [];
 
   return (
@@ -243,6 +269,14 @@ export default async function ProcesoPage() {
           const inProgress = current > 0 && !bache.stage_ended_at;
           const allDone = current === totalStages && Boolean(bache.stage_ended_at);
           const pronostico = pronosticoByBacheId.get(bache.bache_id);
+          const stageTemplate = bache.stage_id ? templateById.get(bache.stage_id) : undefined;
+          const standardMin = stageTemplate
+            ? estandarEfectivo({
+                manualOverrideMin: stageTemplate.standard_duration_min,
+                calculadoMin:
+                  medianaPorEtapa.get(`${bache.product_id}:${bache.stage_id}`)?.medianaMin ?? null,
+              })
+            : null;
 
           return (
             <Card key={bache.bache_id}>
@@ -269,9 +303,20 @@ export default async function ProcesoPage() {
                 />
                 {bache.stage_name ? (
                   <div className="text-sm">
-                    <p className="font-medium">
-                      Etapa {current}/{totalStages}: {bache.stage_name}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">
+                        Etapa {current}/{totalStages}: {bache.stage_name}
+                      </p>
+                      {inProgress && stageTemplate && bache.stage_started_at && (
+                        <DuracionAlarmaBadge
+                          elapsedMin={minutosDesde(bache.stage_started_at)}
+                          standardMin={standardMin}
+                          toleranceLowPct={stageTemplate.duration_tolerance_low_pct}
+                          toleranceHighPct={stageTemplate.duration_tolerance_high_pct}
+                          alarmEnabled={stageTemplate.duration_alarm_enabled}
+                        />
+                      )}
+                    </div>
                     <p className="text-muted-foreground">
                       {bache.operario_name ?? "—"}
                       {inProgress && bache.stage_started_at

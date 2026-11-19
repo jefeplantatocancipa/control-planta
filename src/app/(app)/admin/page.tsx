@@ -13,6 +13,7 @@ import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
 import { TurnosPanel } from "./turnos-panel";
 import { InventarioCategoriasPanel } from "./inventario-categorias-panel";
 import { ImportInventarioCatalogoDialog } from "./import-inventario-catalogo-dialog";
+import { medianaMinutosPorProductoEtapa, fechaHaceNDiasISO } from "@/lib/duracion-estandar";
 
 export default async function AdminPage() {
   const profile = await requireRole(["jefe_planta", "asistente_adm"]);
@@ -33,6 +34,8 @@ export default async function AdminPage() {
     { data: equipos },
     { data: stageEquipoRequirements },
     { data: inventarioCategorias },
+    { data: baches90d },
+    { data: stageRecords90d },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
     supabase
@@ -50,7 +53,30 @@ export default async function AdminPage() {
     supabase.from("equipos").select("*").order("name"),
     supabase.from("stage_equipo_requirements").select("*"),
     supabase.from("inventario_categorias").select("*").order("nombre"),
+    supabase.from("baches").select("id, product_id"),
+    supabase
+      .from("bache_stage_records")
+      .select("bache_id, stage_template_id, started_at, ended_at")
+      .not("ended_at", "is", null)
+      .gte("ended_at", fechaHaceNDiasISO(90)),
   ]);
+
+  // Estándar de tiempo por producto+etapa (mediana de los últimos 90 días,
+  // ver src/lib/duracion-estandar.ts) -- solo como referencia en el
+  // formulario de cada etapa, el cálculo real que aplica la alarma se hace
+  // en el momento (baches/[id]/page.tsx, proceso/page.tsx, finishStage).
+  const productIdByBacheId = new Map((baches90d ?? []).map((b) => [b.id, b.product_id]));
+  const registrosDuracion = (stageRecords90d ?? [])
+    .map((r) => {
+      const productId = productIdByBacheId.get(r.bache_id);
+      return productId && r.ended_at
+        ? { product_id: productId, stage_template_id: r.stage_template_id, started_at: r.started_at, ended_at: r.ended_at }
+        : null;
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const medianaPorProductoEtapa = Object.fromEntries(
+    medianaMinutosPorProductoEtapa(registrosDuracion),
+  );
 
   // El correo de login vive en auth.users, no en profiles -- hace falta el
   // cliente admin (service role) para poder listarlo por usuario.
@@ -89,6 +115,7 @@ export default async function AdminPage() {
             products={products ?? []}
             equipos={equipos ?? []}
             stageRequirements={stageEquipoRequirements ?? []}
+            estandarCalculadoPorProductoEtapa={medianaPorProductoEtapa}
             canWrite={canWrite}
           />
         </TabsContent>

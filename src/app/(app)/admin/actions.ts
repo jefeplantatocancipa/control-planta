@@ -117,6 +117,13 @@ const StageTemplateSchema = z.object({
         return z.NEVER;
       }
     }),
+  standard_duration_min: z.coerce.number().positive().nullable(),
+  duration_tolerance_low_pct: z.coerce
+    .number()
+    .min(0, "La tolerancia no puede ser negativa."),
+  duration_tolerance_high_pct: z.coerce
+    .number()
+    .min(0, "La tolerancia no puede ser negativa."),
 });
 
 // Una etapa puede necesitar varios equipos a la vez (ej. un tanque Y un
@@ -170,12 +177,16 @@ export async function upsertStageTemplate(
   await requireRole(["jefe_planta"]);
 
   const productId = formData.get("product_id");
+  const standardDurationMin = formData.get("standard_duration_min");
   const parsed = StageTemplateSchema.safeParse({
     id: formData.get("id") || undefined,
     product_id: productId && productId !== ALL_PRODUCTS_VALUE ? productId : null,
     name: formData.get("name"),
     sequence_order: formData.get("sequence_order"),
     parameter_schema: formData.get("parameter_schema") || "[]",
+    standard_duration_min: standardDurationMin || null,
+    duration_tolerance_low_pct: formData.get("duration_tolerance_low_pct") || 30,
+    duration_tolerance_high_pct: formData.get("duration_tolerance_high_pct") || 30,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -185,6 +196,7 @@ export async function upsertStageTemplate(
   const active = formData.get("active") === "on";
   const captures_insumos = formData.get("captures_insumos") === "on";
   const captures_readings = formData.get("captures_readings") === "on";
+  const duration_alarm_enabled = formData.get("duration_alarm_enabled") === "on";
 
   const requirementsParsed = z
     .array(EquipoRequirementSchema)
@@ -197,7 +209,13 @@ export async function upsertStageTemplate(
 
   await makeRoomAtSequenceOrder(supabase, values.product_id, values.sequence_order, id);
 
-  const payload = { ...values, active, captures_insumos, captures_readings };
+  const payload = {
+    ...values,
+    active,
+    captures_insumos,
+    captures_readings,
+    duration_alarm_enabled,
+  };
   const { data: saved, error } = id
     ? await supabase
         .from("process_stage_templates")
@@ -297,6 +315,13 @@ export async function cloneStagesForProduct(
       captures_insumos: stage.captures_insumos,
       captures_readings: stage.captures_readings,
       active: stage.active,
+      // El estándar manual es específico de la duración real del producto
+      // de origen -- no se copia, que se calcule solo con el historial del
+      // producto nuevo. Las tolerancias y si la alarma está activa sí son
+      // metodología y tiene sentido heredarlas.
+      duration_tolerance_low_pct: stage.duration_tolerance_low_pct,
+      duration_tolerance_high_pct: stage.duration_tolerance_high_pct,
+      duration_alarm_enabled: stage.duration_alarm_enabled,
     })),
   );
 
