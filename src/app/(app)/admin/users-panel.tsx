@@ -28,19 +28,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateProfile, createUser, resetUserPassword, type ActionState } from "./actions";
+import {
+  updateProfile,
+  createUser,
+  resetUserPassword,
+  setUserActive,
+  type ActionState,
+} from "./actions";
+import { ImportUsuariosDialog } from "./import-usuarios-dialog";
+import { ROLE_LABELS } from "./constants";
 import type { Database, UserRole } from "@/lib/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  jefe_planta: "Jefe de planta",
-  supervisor: "Supervisor",
-  operario: "Operario",
-  planeacion: "Planeación",
-  calidad: "Calidad",
-  asistente_adm: "Asistente Adm",
-};
 
 function UserForm({
   profile,
@@ -245,6 +244,24 @@ function ResetPasswordForm({
   );
 }
 
+function ToggleActiveButton({ profile }: { profile: Profile }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    setUserActive,
+    {},
+  );
+
+  return (
+    <form action={action} className="inline-flex items-center gap-1">
+      <input type="hidden" name="id" value={profile.id} />
+      <input type="hidden" name="active" value={(!profile.active).toString()} />
+      <Button type="submit" variant="ghost" size="sm" disabled={pending}>
+        {pending ? "..." : profile.active ? "Desactivar" : "Activar"}
+      </Button>
+      {state.error && <span className="text-xs text-destructive">{state.error}</span>}
+    </form>
+  );
+}
+
 export function UsersPanel({
   profiles,
   currentUserId,
@@ -261,17 +278,34 @@ export function UsersPanel({
   const [createOpen, setCreateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState<Profile | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+
+  const inactiveCount = profiles.filter((p) => !p.active).length;
+  const visibleProfiles = showInactive ? profiles : profiles.filter((p) => p.active);
 
   return (
     <div className="flex flex-col gap-4">
       {canWrite && (
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-          >
-            Nuevo usuario
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {inactiveCount > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowInactive((v) => !v)}
+            >
+              {showInactive
+                ? "Ocultar inactivos"
+                : `Mostrar inactivos (${inactiveCount})`}
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <ImportUsuariosDialog />
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              Nuevo usuario
+            </Button>
+          </div>
         </div>
       )}
 
@@ -285,7 +319,7 @@ export function UsersPanel({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {profiles.map((profile) => (
+          {visibleProfiles.map((profile) => (
             <TableRow key={profile.id}>
               <TableCell className="font-medium">
                 {profile.full_name}
@@ -301,7 +335,7 @@ export function UsersPanel({
               </TableCell>
               <TableCell className="text-right">
                 {canWrite && (
-                  <>
+                  <div className="flex items-center justify-end gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -322,15 +356,16 @@ export function UsersPanel({
                     >
                       Editar
                     </Button>
-                  </>
+                    {profile.id !== currentUserId && <ToggleActiveButton profile={profile} />}
+                  </div>
                 )}
               </TableCell>
             </TableRow>
           ))}
-          {profiles.length === 0 && (
+          {visibleProfiles.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
-                Sin usuarios todavía.
+                {profiles.length === 0 ? "Sin usuarios todavía." : "Sin usuarios activos."}
               </TableCell>
             </TableRow>
           )}

@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalize, cellText } from "../programa/excel-utils";
 import type { UserRole } from "@/lib/supabase/types";
-import { ALL_PRODUCTS_VALUE } from "./constants";
+import { ALL_PRODUCTS_VALUE, ROLE_LABELS } from "./constants";
 
 export interface ActionState {
   error?: string;
@@ -398,6 +398,38 @@ export async function updateProfile(
   return { success: true };
 }
 
+const SetUserActiveSchema = z.object({ id: z.string().uuid() });
+
+export async function setUserActive(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const currentProfile = await requireRole(["jefe_planta"]);
+
+  const parsed = SetUserActiveSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+  const active = formData.get("active") === "true";
+
+  if (parsed.data.id === currentProfile.id && !active) {
+    return { error: "No podés desactivarte a vos mismo." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ active })
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    return { error: "No se pudo actualizar el usuario." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 const ResetPasswordSchema = z.object({
   id: z.string().uuid(),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
@@ -515,6 +547,128 @@ export async function createUser(
 
   revalidatePath("/admin");
   return { success: true };
+}
+
+const ROLE_BY_LABEL = new Map<string, UserRole>(
+  (Object.entries(ROLE_LABELS) as [UserRole, string][]).flatMap(([role, label]) => [
+    [normalize(label), role],
+    [role, role],
+  ]),
+);
+
+export async function importUsuarios(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Elegí un archivo de Excel (.xlsx)." };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer as never);
+  } catch {
+    return { error: "No se pudo leer el archivo. ¿Es un .xlsx válido?" };
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { error: "El archivo no tiene hojas." };
+
+  let headerRowNumber = -1;
+  let columns: Record<string, number> = {};
+  for (let r = 1; r <= Math.min(sheet.rowCount, 20); r++) {
+    const row = sheet.getRow(r);
+    const map: Record<string, number> = {};
+    row.eachCell((cell, colNumber) => {
+      const key = normalize(cellText(cell));
+      if (key) map[key] = colNumber;
+    });
+    if ("nombre" in map && "rol" in map) {
+      headerRowNumber = r;
+      columns = map;
+      break;
+    }
+  }
+  if (headerRowNumber === -1) {
+    return { error: 'No se encontraron las columnas "Nombre" y "Rol". Revisá el archivo.' };
+  }
+
+  const colApellido = findColumn(columns, ["apellido"]);
+
+  const supabase = await createClient();
+  const { data: existingProfiles } = await supabase
+    .from("profiles")
+    .select("id, full_name");
+  const profileIdByName = new Map(
+    (existingProfiles ?? []).map((p) => [normalize(p.full_name), p.id]),
+  );
+
+  const admin = createAdminClient();
+  const warnings: string[] = [];
+  let imported = 0;
+
+  for (let r = headerRowNumber + 1; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const nombre = cellText(row.getCell(columns["nombre"]));
+    const apellido = colApellido ? cellText(row.getCell(colApellido)) : "";
+    const rolTexto = cellText(row.getCell(columns["rol"]));
+    if (!nombre && !rolTexto) continue; // fila vacía: fin de la tabla
+
+    const fullName = [nombre, apellido].filter(Boolean).join(" ").trim();
+    if (!fullName) {
+      warnings.push(`Fila ${r}: falta el nombre.`);
+      continue;
+    }
+    const role = ROLE_BY_LABEL.get(normalize(rolTexto || "operario"));
+    if (!role) {
+      warnings.push(`Fila ${r} (${fullName}): rol "${rolTexto}" no reconocido.`);
+      continue;
+    }
+
+    const existingId = profileIdByName.get(normalize(fullName));
+    if (existingId) {
+      // Ya existe un usuario con ese nombre: se actualiza el rol y se
+      // reactiva (está en la planilla vigente) en vez de duplicarlo.
+      const { error } = await supabase
+        .from("profiles")
+        .update({ role, active: true })
+        .eq("id", existingId);
+      if (error) {
+        warnings.push(`Fila ${r} (${fullName}): no se pudo actualizar.`);
+        continue;
+      }
+      imported++;
+      continue;
+    }
+
+    // Igual que un operario creado a mano: correo/contraseña internos que
+    // nunca se usan para iniciar sesión, hasta que alguien se los cambie.
+    const email = `${slugify(fullName)}-${randomToken()}@planta.local`;
+    const password = `${randomToken()}${randomToken()}`;
+    const { data: created, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, role },
+    });
+    if (error || !created.user) {
+      warnings.push(`Fila ${r} (${fullName}): no se pudo crear.`);
+      continue;
+    }
+    profileIdByName.set(normalize(fullName), created.user.id);
+    imported++;
+  }
+
+  revalidatePath("/admin");
+  return {
+    success: true,
+    imported,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
