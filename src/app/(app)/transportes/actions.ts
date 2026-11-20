@@ -23,9 +23,9 @@ export interface ActionState {
   success?: boolean;
 }
 
-// Fijo por ahora: un solo destinatario para todas las solicitudes. Si en el
-// futuro hace falta variarlo, se vuelve una variable de entorno.
-const DESTINATARIO = "coordinador.logistica2@fasalact.com";
+// TEMPORAL para la prueba del nuevo formato de Excel -- volver a
+// "coordinador.logistica2@fasalact.com" antes del cierre definitivo.
+const DESTINATARIO = "ser66nn51@gmail.com";
 
 const NUMERO_INVALIDO = "Por favor incluir únicamente datos numéricos.";
 
