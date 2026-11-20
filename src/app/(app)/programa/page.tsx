@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { buttonVariants } from "@/components/ui/button";
 import { NewProgramDialog } from "./new-program-dialog";
 import { ImportBachesDialog } from "./import-baches-dialog";
 import { ImportEnvasadoDialog } from "./import-envasado-dialog";
@@ -109,6 +111,10 @@ export default async function ProgramaPage() {
   // borrar (órdenes o el programa entero) queda exclusivo del jefe de planta.
   const canWrite = profile.role === "jefe_planta" || profile.role === "planeacion";
   const canDelete = profile.role === "jefe_planta";
+  const canPedirInsumos =
+    profile.role === "jefe_planta" ||
+    profile.role === "asistente_adm" ||
+    profile.role === "planeacion";
 
   // Horas reales por orden: primer bache que arrancó / último que terminó,
   // de los baches ya vinculados a esa orden (production_order_id).
@@ -156,13 +162,20 @@ export default async function ProgramaPage() {
             producto.
           </p>
         </div>
-        {canWrite && (
-          <div className="flex gap-2">
-            <ImportBachesDialog />
-            <ImportEnvasadoDialog />
-            <NewProgramDialog />
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canPedirInsumos && (
+            <Link href="/pedidos-insumos/nuevo" className={buttonVariants({ variant: "outline" })}>
+              Pedir insumos
+            </Link>
+          )}
+          {canWrite && (
+            <>
+              <ImportBachesDialog />
+              <ImportEnvasadoDialog />
+              <NewProgramDialog />
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">

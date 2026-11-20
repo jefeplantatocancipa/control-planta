@@ -24,15 +24,19 @@ function getTransporter() {
 
 export async function sendMailWithAttachment(opts: {
   to: string;
+  cc?: string;
   subject: string;
   text: string;
+  html?: string;
   attachment: { filename: string; content: Buffer };
 }) {
   await getTransporter().sendMail({
     from: `"Control de Planta" <${process.env.GMAIL_USER}>`,
     to: opts.to,
+    cc: opts.cc,
     subject: opts.subject,
     text: opts.text,
+    html: opts.html,
     attachments: [
       {
         filename: opts.attachment.filename,
