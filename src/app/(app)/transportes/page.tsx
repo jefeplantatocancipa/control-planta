@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { TransporteForm } from "./transporte-form";
 import { FiltrosForm } from "./filtros-form";
+import { ReenviarButton } from "./reenviar-button";
 import { URGENCIA } from "./constants";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -114,6 +115,7 @@ export default async function TransportesPage({
                 <TableHead>Hora</TableHead>
                 <TableHead>Recibe</TableHead>
                 <TableHead>Urgencia</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -149,11 +151,14 @@ export default async function TransportesPage({
                       {s.urgencia}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <ReenviarButton id={s.id} />
+                  </TableCell>
                 </TableRow>
               ))}
               {(solicitudes ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-muted-foreground">
+                  <TableCell colSpan={14} className="text-center text-muted-foreground">
                     {hayFiltros
                       ? "Sin solicitudes para estos filtros."
                       : "Sin solicitudes todavía."}
