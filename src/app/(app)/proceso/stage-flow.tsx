@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { BandaAlarma } from "@/lib/duracion-estandar";
 
 // El nombre de la etapa es texto libre (lo edita Administración), así que
 // el ícono se elige por palabra clave y cae a un círculo genérico si no
@@ -45,10 +46,12 @@ export function StageFlow({
   stageNames,
   current,
   allDone,
+  currentBanda = "ok",
 }: {
   stageNames: string[];
   current: number;
   allDone: boolean;
+  currentBanda?: BandaAlarma;
 }) {
   if (stageNames.length === 0) return null;
 
@@ -84,7 +87,11 @@ export function StageFlow({
                     isDone
                       ? "border-primary bg-primary text-primary-foreground"
                       : isCurrent
-                        ? "animate-pulse border-primary text-primary"
+                        ? currentBanda === "rojo"
+                          ? "animate-pulse border-destructive bg-destructive/10 text-destructive"
+                          : currentBanda === "amarillo"
+                            ? "animate-pulse border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            : "animate-pulse border-primary text-primary"
                         : "border-border bg-card text-muted-foreground",
                   )}
                 >

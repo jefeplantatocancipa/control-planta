@@ -10,6 +10,7 @@ import {
   medianaMinutosPorProductoEtapa,
   estandarEfectivo,
   minutosDesde,
+  bandaAlarma,
 } from "@/lib/duracion-estandar";
 import { DuracionAlarmaBadge } from "@/components/duracion-alarma-badge";
 import { StageFlow } from "./stage-flow";
@@ -277,6 +278,16 @@ export default async function ProcesoPage() {
                   medianaPorEtapa.get(`${bache.product_id}:${bache.stage_id}`)?.medianaMin ?? null,
               })
             : null;
+          const currentBanda =
+            inProgress && stageTemplate && bache.stage_started_at
+              ? bandaAlarma({
+                  elapsedMin: minutosDesde(bache.stage_started_at),
+                  standardMin,
+                  toleranceLowPct: stageTemplate.duration_tolerance_low_pct,
+                  toleranceHighPct: stageTemplate.duration_tolerance_high_pct,
+                  alarmEnabled: stageTemplate.duration_alarm_enabled,
+                })
+              : "ok";
 
           return (
             <Card key={bache.bache_id}>
@@ -300,6 +311,7 @@ export default async function ProcesoPage() {
                   stageNames={stageListFor(bache.product_id).map((s) => s.name)}
                   current={current}
                   allDone={allDone}
+                  currentBanda={currentBanda}
                 />
                 {bache.stage_name ? (
                   <div className="text-sm">
