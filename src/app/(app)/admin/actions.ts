@@ -704,6 +704,9 @@ const InsumoSchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio."),
   unit: z.string().trim().min(1, "La unidad es obligatoria."),
   stock_minimo: z.coerce.number().min(0).nullable(),
+  excluir_pedido_programa_motivo: z
+    .enum(["pedido_semanal", "otro_manejo"])
+    .nullable(),
 });
 
 export async function upsertInsumo(
@@ -713,11 +716,15 @@ export async function upsertInsumo(
   await requireRole(["jefe_planta"]);
 
   const stockMinimo = formData.get("stock_minimo");
+  const excluirPedidoPrograma = formData.get("excluir_pedido_programa") === "on";
   const parsed = InsumoSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
     unit: formData.get("unit"),
     stock_minimo: stockMinimo || null,
+    excluir_pedido_programa_motivo: excluirPedidoPrograma
+      ? formData.get("excluir_pedido_programa_motivo") || null
+      : null,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -728,8 +735,13 @@ export async function upsertInsumo(
   const supabase = await createClient();
 
   const { error } = id
-    ? await supabase.from("insumos").update({ ...values, active }).eq("id", id)
-    : await supabase.from("insumos").insert({ ...values, active });
+    ? await supabase
+        .from("insumos")
+        .update({ ...values, active, excluir_pedido_programa: excluirPedidoPrograma })
+        .eq("id", id)
+    : await supabase
+        .from("insumos")
+        .insert({ ...values, active, excluir_pedido_programa: excluirPedidoPrograma });
 
   if (error) {
     return { error: "No se pudo guardar el insumo." };
@@ -1354,9 +1366,22 @@ export async function importEnvasadoInsumos(
 // ---------------------------------------------------------------------------
 // Receta de material de empaque por referencia
 // ---------------------------------------------------------------------------
+const EnvasadoRecipeItemSchema = z.object({
+  envasado_insumo_id: z.string().uuid(),
+  cantidad_por_unidad: z.coerce.number().positive().nullable(),
+});
 const EnvasadoRecipeSchema = z.object({
   referencia_id: z.string().uuid({ message: "Elegí una referencia." }),
-  envasado_insumo_ids: z.array(z.string().uuid()),
+  recipe: z
+    .string()
+    .transform((raw, ctx) => {
+      try {
+        return z.array(EnvasadoRecipeItemSchema).parse(JSON.parse(raw));
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Receta inválida." });
+        return z.NEVER;
+      }
+    }),
 });
 
 export async function saveEnvasadoReferenciaRecipe(
@@ -1367,7 +1392,7 @@ export async function saveEnvasadoReferenciaRecipe(
 
   const parsed = EnvasadoRecipeSchema.safeParse({
     referencia_id: formData.get("referencia_id"),
-    envasado_insumo_ids: formData.getAll("envasado_insumo_ids"),
+    recipe: formData.get("recipe") || "[]",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -1383,13 +1408,13 @@ export async function saveEnvasadoReferenciaRecipe(
     return { error: "No se pudo guardar la receta." };
   }
 
-  if (parsed.data.envasado_insumo_ids.length > 0) {
+  if (parsed.data.recipe.length > 0) {
     const { error: insertError } = await supabase
       .from("envasado_referencia_insumos")
       .insert(
-        parsed.data.envasado_insumo_ids.map((envasado_insumo_id) => ({
+        parsed.data.recipe.map((item) => ({
           referencia_id: parsed.data.referencia_id,
-          envasado_insumo_id,
+          ...item,
         })),
       );
     if (insertError) {

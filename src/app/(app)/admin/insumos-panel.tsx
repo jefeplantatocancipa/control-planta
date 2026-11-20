@@ -70,6 +70,9 @@ function InsumoForm({
     upsertInsumo,
     {},
   );
+  const [excluirPedido, setExcluirPedido] = useState(
+    insumo?.excluir_pedido_programa ?? false,
+  );
 
   useEffect(() => {
     if (state.success) onSuccess();
@@ -115,6 +118,45 @@ function InsumoForm({
         />
         Activo
       </Label>
+      <div className="flex flex-col gap-2 rounded-lg border p-3">
+        <Label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="excluir_pedido_programa"
+            checked={excluirPedido}
+            onChange={(e) => setExcluirPedido(e.target.checked)}
+            className="size-4"
+          />
+          Excluir del pedido por programa
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          No va a aparecer en el cálculo de Pedido de insumos aunque esté en
+          alguna receta (ej. cultivos, lactasa, leche cruda).
+        </p>
+        {excluirPedido && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="excluir_pedido_programa_motivo" className="text-xs font-normal">
+              Motivo
+            </Label>
+            <Select
+              name="excluir_pedido_programa_motivo"
+              defaultValue={insumo?.excluir_pedido_programa_motivo ?? "pedido_semanal"}
+              items={[
+                { value: "pedido_semanal", label: "Se pide semanalmente aparte" },
+                { value: "otro_manejo", label: "Tiene otro manejo" },
+              ]}
+            >
+              <SelectTrigger id="excluir_pedido_programa_motivo" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pedido_semanal">Se pide semanalmente aparte</SelectItem>
+                <SelectItem value="otro_manejo">Tiene otro manejo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
@@ -393,9 +435,14 @@ export function InsumosPanel({
                 <TableCell className="font-medium">{insumo.name}</TableCell>
                 <TableCell className="text-muted-foreground">{insumo.unit}</TableCell>
                 <TableCell>
-                  <Badge variant={insumo.active ? "default" : "outline"}>
-                    {insumo.active ? "Activo" : "Inactivo"}
-                  </Badge>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant={insumo.active ? "default" : "outline"}>
+                      {insumo.active ? "Activo" : "Inactivo"}
+                    </Badge>
+                    {insumo.excluir_pedido_programa && (
+                      <Badge variant="outline">Excluido del pedido</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   {canWrite && (

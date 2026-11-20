@@ -43,6 +43,32 @@ type EnvasadoInsumo = Database["public"]["Tables"]["envasado_insumos"]["Row"];
 type EnvasadoReferencia =
   Database["public"]["Tables"]["envasado_referencias"]["Row"];
 
+interface EnvasadoRecipeDraft {
+  checked: boolean;
+  cantidad: string;
+}
+
+function emptyEnvasadoDraft(): EnvasadoRecipeDraft {
+  return { checked: false, cantidad: "" };
+}
+
+function envasadoDraftsFor(
+  insumos: EnvasadoInsumo[],
+  recipe: Map<string, number | null>,
+) {
+  const map = new Map<string, EnvasadoRecipeDraft>();
+  for (const insumo of insumos) {
+    const cantidad = recipe.get(insumo.id);
+    map.set(
+      insumo.id,
+      recipe.has(insumo.id)
+        ? { checked: true, cantidad: cantidad != null ? String(cantidad) : "" }
+        : emptyEnvasadoDraft(),
+    );
+  }
+  return map;
+}
+
 function EnvasadoInsumoForm({
   insumo,
   onSuccess,
@@ -145,12 +171,12 @@ function RecipeEditor({
 }: {
   referencias: EnvasadoReferencia[];
   insumos: EnvasadoInsumo[];
-  recipeByReferencia: Map<string, Set<string>>;
+  recipeByReferencia: Map<string, Map<string, number | null>>;
   canWrite: boolean;
 }) {
   const [referenciaId, setReferenciaId] = useState(referencias[0]?.id ?? "");
-  const [checked, setChecked] = useState<Set<string>>(
-    new Set(recipeByReferencia.get(referencias[0]?.id ?? "") ?? []),
+  const [drafts, setDrafts] = useState<Map<string, EnvasadoRecipeDraft>>(
+    envasadoDraftsFor(insumos, recipeByReferencia.get(referencias[0]?.id ?? "") ?? new Map()),
   );
   const [state, action, pending] = useActionState<ActionState, FormData>(
     saveEnvasadoReferenciaRecipe,
@@ -159,24 +185,28 @@ function RecipeEditor({
 
   function selectReferencia(id: string) {
     setReferenciaId(id);
-    setChecked(new Set(recipeByReferencia.get(id) ?? []));
+    setDrafts(envasadoDraftsFor(insumos, recipeByReferencia.get(id) ?? new Map()));
   }
 
-  function toggle(insumoId: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(insumoId)) next.delete(insumoId);
-      else next.add(insumoId);
+  function update(insumoId: string, patch: Partial<EnvasadoRecipeDraft>) {
+    setDrafts((prev) => {
+      const next = new Map(prev);
+      next.set(insumoId, { ...(next.get(insumoId) ?? emptyEnvasadoDraft()), ...patch });
       return next;
     });
   }
 
+  const recipePayload = Array.from(drafts.entries())
+    .filter(([, d]) => d.checked)
+    .map(([envasado_insumo_id, d]) => ({
+      envasado_insumo_id,
+      cantidad_por_unidad: d.cantidad.trim() ? Number(d.cantidad) : null,
+    }));
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="referencia_id" value={referenciaId} />
-      {Array.from(checked).map((id) => (
-        <input key={id} type="hidden" name="envasado_insumo_ids" value={id} />
-      ))}
+      <input type="hidden" name="recipe" value={JSON.stringify(recipePayload)} />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="recipe-referencia">Referencia</Label>
@@ -201,25 +231,51 @@ function RecipeEditor({
         </Select>
       </div>
 
-      <div className="flex flex-col gap-2">
-        {insumos.map((insumo) => (
-          <label key={insumo.id} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4"
-              checked={checked.has(insumo.id)}
-              onChange={() => toggle(insumo.id)}
-              disabled={!canWrite}
-            />
-            {insumo.name}
-          </label>
-        ))}
+      <div className="flex flex-col gap-3">
+        {insumos.map((insumo) => {
+          const draft = drafts.get(insumo.id) ?? emptyEnvasadoDraft();
+          return (
+            <div key={insumo.id} className="flex flex-col gap-2 rounded-lg border p-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4"
+                  checked={draft.checked}
+                  onChange={(e) => update(insumo.id, { checked: e.target.checked })}
+                  disabled={!canWrite}
+                />
+                {insumo.name}
+              </label>
+              {draft.checked && (
+                <div className="flex flex-col gap-1 pl-6 sm:w-48">
+                  <Label className="text-xs font-normal text-muted-foreground">
+                    Cantidad / unidad envasada
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    min={0}
+                    value={draft.cantidad}
+                    onChange={(e) => update(insumo.id, { cantidad: e.target.value })}
+                    disabled={!canWrite}
+                    placeholder="Ej: 1, o 0.0417 para cajas de 24"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
         {insumos.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Sin insumos de envasado en el catálogo todavía.
           </p>
         )}
       </div>
+      <p className="text-xs text-muted-foreground">
+        Para vasos/tapas/etiquetas es 1 por unidad. Para cajas, cargá la
+        fracción (1 ÷ unidades por caja) -- el resultado te va a dar con
+        decimales, ajustalo al pedir.
+      </p>
 
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
@@ -246,17 +302,21 @@ export function EnvasadoInsumosPanel({
 }: {
   insumos: EnvasadoInsumo[];
   referencias: EnvasadoReferencia[];
-  referenciaInsumos: { referencia_id: string; envasado_insumo_id: string }[];
+  referenciaInsumos: {
+    referencia_id: string;
+    envasado_insumo_id: string;
+    cantidad_por_unidad: number | null;
+  }[];
   canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EnvasadoInsumo | null>(null);
 
-  const recipeByReferencia = new Map<string, Set<string>>();
+  const recipeByReferencia = new Map<string, Map<string, number | null>>();
   for (const row of referenciaInsumos) {
-    const set = recipeByReferencia.get(row.referencia_id) ?? new Set<string>();
-    set.add(row.envasado_insumo_id);
-    recipeByReferencia.set(row.referencia_id, set);
+    const map = recipeByReferencia.get(row.referencia_id) ?? new Map<string, number | null>();
+    map.set(row.envasado_insumo_id, row.cantidad_por_unidad);
+    recipeByReferencia.set(row.referencia_id, map);
   }
 
   return (

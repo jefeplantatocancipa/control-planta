@@ -22,6 +22,7 @@ export type DesviacionMotivo =
   | "error_registro"
   | "otro";
 
+export type MotivoExclusionPedido = "pedido_semanal" | "otro_manejo";
 export type PedidoInsumosEstado = "enviado" | "recibido_parcial" | "recibido";
 export type PedidoInsumosOrdenTipo = "bache" | "envasado";
 
@@ -182,6 +183,8 @@ export interface Database {
           stock_minimo: number | null;
           active: boolean;
           created_at: string;
+          excluir_pedido_programa: boolean;
+          excluir_pedido_programa_motivo: MotivoExclusionPedido | null;
         };
         Insert: {
           name: string;
@@ -190,6 +193,8 @@ export interface Database {
           categoria_id?: string | null;
           stock_minimo?: number | null;
           active?: boolean;
+          excluir_pedido_programa?: boolean;
+          excluir_pedido_programa_motivo?: MotivoExclusionPedido | null;
         };
         Update: Partial<Database["public"]["Tables"]["insumos"]["Insert"]>;
         Relationships: [];
@@ -444,6 +449,22 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["envasado_orders"]["Insert"]
         >;
+        Relationships: [];
+      };
+      pedido_insumos_config: {
+        Row: {
+          id: boolean;
+          destinatario_email: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          destinatario_email: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pedido_insumos_config"]["Insert"]>;
         Relationships: [];
       };
       pedidos_insumos: {
