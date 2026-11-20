@@ -1,6 +1,5 @@
 "use server";
 
-import ExcelJS from "exceljs";
 import { z } from "zod";
 import { format } from "date-fns";
 import { requireProfile } from "@/lib/auth/dal";
@@ -8,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { puedeVerTransportes } from "@/lib/transportes-acceso";
 import { isTransportesEnabled } from "@/lib/feature-flags";
 import { sendMailWithAttachment } from "@/lib/email/send-mail";
+import { llenarFormatoTransporte, serialFecha, serialHora } from "@/lib/transportes/llenar-formato";
 import { AREAS, URGENCIA, SI_NO } from "./constants";
 
 // fecha_solicitud/fecha_requerida son columnas "date" planas (sin hora), no
@@ -26,26 +26,6 @@ export interface ActionState {
 // Fijo por ahora: un solo destinatario para todas las solicitudes. Si en el
 // futuro hace falta variarlo, se vuelve una variable de entorno.
 const DESTINATARIO = "coordinador.logistica2@fasalact.com";
-
-// Mismo orden y texto exacto de columnas que Formato_Solicitud_de_Transporte.xlsx
-// (ver SPEC_solicitud_transporte.md) -- si el que recibe el correo tiene algo
-// del otro lado que matchee por nombre de columna, tiene que calzar literal.
-const HEADERS = [
-  "Fecha de Solicitud",
-  "Hora de Solicitud",
-  "Quién lo Solicita",
-  "Área Solicitante",
-  "Descripción del Objeto a Transportar",
-  "Cantidad",
-  "Peso(Aprox)",
-  "Requiere Refrigeración",
-  "Origen",
-  "Destino",
-  "Fecha Requerida del Traslado",
-  "Hora Requerida del Traslado",
-  "Quién Recibe",
-  "Urgencia(Si o No)",
-];
 
 const NUMERO_INVALIDO = "Por favor incluir únicamente datos numéricos.";
 
@@ -132,49 +112,22 @@ export async function solicitarTransporte(
     return { error: "No se pudo guardar la solicitud." };
   }
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Hoja1");
-  sheet.addRow(HEADERS);
-  const headerRow = sheet.getRow(1);
-  headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F6FC5" } };
-    cell.alignment = { vertical: "middle", horizontal: "center" };
+  const xlsxBuffer = await llenarFormatoTransporte({
+    A: serialFecha(data.fecha_solicitud),
+    B: serialHora(data.hora_solicitud),
+    C: profile.full_name,
+    D: data.area_solicitante,
+    E: data.descripcion,
+    F: data.cantidad,
+    G: data.peso ?? null,
+    H: refrigeracionLabel,
+    I: data.origen,
+    J: data.destino,
+    K: serialFecha(data.fecha_requerida),
+    L: serialHora(data.hora_requerida),
+    M: data.quien_recibe,
+    N: data.urgencia,
   });
-  sheet.addRow([
-    formatFecha(data.fecha_solicitud),
-    data.hora_solicitud,
-    profile.full_name,
-    data.area_solicitante,
-    data.descripcion,
-    data.cantidad,
-    data.peso ?? "",
-    refrigeracionLabel,
-    data.origen,
-    data.destino,
-    formatFecha(data.fecha_requerida),
-    data.hora_requerida,
-    data.quien_recibe,
-    data.urgencia,
-  ]);
-  sheet.columns = [
-    { width: 16 },
-    { width: 14 },
-    { width: 20 },
-    { width: 20 },
-    { width: 36 },
-    { width: 10 },
-    { width: 12 },
-    { width: 18 },
-    { width: 16 },
-    { width: 16 },
-    { width: 20 },
-    { width: 18 },
-    { width: 16 },
-    { width: 16 },
-  ];
-
-  const buffer = await workbook.xlsx.writeBuffer();
 
   try {
     await sendMailWithAttachment({
@@ -194,7 +147,7 @@ export async function solicitarTransporte(
         "Se adjunta el detalle en Excel.",
       attachment: {
         filename: `solicitud-transporte-${data.fecha_requerida}.xlsx`,
-        content: Buffer.from(buffer),
+        content: xlsxBuffer,
       },
     });
   } catch {
