@@ -22,6 +22,9 @@ export type DesviacionMotivo =
   | "error_registro"
   | "otro";
 
+export type PedidoInsumosEstado = "enviado" | "recibido_parcial" | "recibido";
+export type PedidoInsumosOrdenTipo = "bache" | "envasado";
+
 export type InventarioInsumoTipo = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
 export type InventarioTablaDestino = "materia_prima" | "empaque" | "vaso_blanco" | "generico";
 export type InventarioMovimientoTipo = "entrada" | "consumo" | "ajuste" | "despacho";
@@ -443,6 +446,69 @@ export interface Database {
         >;
         Relationships: [];
       };
+      pedidos_insumos: {
+        Row: {
+          id: string;
+          folio: number;
+          program_id: string;
+          fecha_requerida: string | null;
+          observaciones: string | null;
+          estado: PedidoInsumosEstado;
+          enviado_por: string;
+          enviado_at: string;
+          created_at: string;
+        };
+        Insert: {
+          program_id: string;
+          fecha_requerida?: string | null;
+          observaciones?: string | null;
+          estado?: PedidoInsumosEstado;
+          enviado_por: string;
+          enviado_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pedidos_insumos"]["Insert"]>;
+        Relationships: [];
+      };
+      pedidos_insumos_ordenes: {
+        Row: {
+          id: string;
+          pedido_id: string;
+          tipo: PedidoInsumosOrdenTipo;
+          production_order_id: string | null;
+          envasado_order_id: string | null;
+        };
+        Insert: {
+          pedido_id: string;
+          tipo: PedidoInsumosOrdenTipo;
+          production_order_id?: string | null;
+          envasado_order_id?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["pedidos_insumos_ordenes"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      pedidos_insumos_lineas: {
+        Row: {
+          id: string;
+          pedido_id: string;
+          insumo_tipo: "materia_prima" | "empaque";
+          insumo_id: string;
+          cantidad_requerida: number;
+          cantidad_pedida: number;
+        };
+        Insert: {
+          pedido_id: string;
+          insumo_tipo: "materia_prima" | "empaque";
+          insumo_id: string;
+          cantidad_requerida: number;
+          cantidad_pedida: number;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["pedidos_insumos_lineas"]["Insert"]
+        >;
+        Relationships: [];
+      };
       enmangado_programs: {
         Row: {
           id: string;
@@ -743,10 +809,12 @@ export interface Database {
         Row: {
           referencia_id: string;
           envasado_insumo_id: string;
+          cantidad_por_unidad: number | null;
         };
         Insert: {
           referencia_id: string;
           envasado_insumo_id: string;
+          cantidad_por_unidad?: number | null;
         };
         Update: Partial<
           Database["public"]["Tables"]["envasado_referencia_insumos"]["Insert"]
