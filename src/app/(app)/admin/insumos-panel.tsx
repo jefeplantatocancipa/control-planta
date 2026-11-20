@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeleteButton } from "@/components/delete-button";
+import { ImportRecetaProductoDialog } from "./import-receta-producto-dialog";
 import {
   upsertInsumo,
   deleteInsumo,
@@ -40,6 +41,23 @@ import type { Database } from "@/lib/supabase/types";
 
 type Insumo = Database["public"]["Tables"]["insumos"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
+
+interface RecipeConfig {
+  cantidad_kg_por_1000l: number | null;
+  tolerancia_inferior_pct: number | null;
+  tolerancia_superior_pct: number | null;
+  obligatorio: boolean;
+}
+
+// Los 3 campos numéricos quedan como string en el draft -- son inputs
+// controlados y "" (vacío) es un valor válido (sin tolerancia cargada).
+interface RecipeRowDraft {
+  checked: boolean;
+  cantidad: string;
+  tolInf: string;
+  tolSup: string;
+  obligatorio: boolean;
+}
 
 function InsumoForm({
   insumo,
@@ -111,6 +129,22 @@ function InsumoForm({
   );
 }
 
+function emptyDraft(cfg?: RecipeConfig): RecipeRowDraft {
+  return {
+    checked: Boolean(cfg),
+    cantidad: cfg?.cantidad_kg_por_1000l != null ? String(cfg.cantidad_kg_por_1000l) : "",
+    tolInf: cfg?.tolerancia_inferior_pct != null ? String(cfg.tolerancia_inferior_pct) : "",
+    tolSup: cfg?.tolerancia_superior_pct != null ? String(cfg.tolerancia_superior_pct) : "",
+    obligatorio: cfg?.obligatorio ?? false,
+  };
+}
+
+function draftsFor(insumos: Insumo[], recipe: Map<string, RecipeConfig>) {
+  const map = new Map<string, RecipeRowDraft>();
+  for (const insumo of insumos) map.set(insumo.id, emptyDraft(recipe.get(insumo.id)));
+  return map;
+}
+
 function RecipeEditor({
   products,
   insumos,
@@ -119,12 +153,12 @@ function RecipeEditor({
 }: {
   products: Product[];
   insumos: Insumo[];
-  recipeByProduct: Map<string, Set<string>>;
+  recipeByProduct: Map<string, Map<string, RecipeConfig>>;
   canWrite: boolean;
 }) {
   const [productId, setProductId] = useState(products[0]?.id ?? "");
-  const [checked, setChecked] = useState<Set<string>>(
-    new Set(recipeByProduct.get(products[0]?.id ?? "") ?? []),
+  const [drafts, setDrafts] = useState<Map<string, RecipeRowDraft>>(
+    draftsFor(insumos, recipeByProduct.get(products[0]?.id ?? "") ?? new Map()),
   );
   const [state, action, pending] = useActionState<ActionState, FormData>(
     saveProductRecipe,
@@ -133,24 +167,31 @@ function RecipeEditor({
 
   function selectProduct(id: string) {
     setProductId(id);
-    setChecked(new Set(recipeByProduct.get(id) ?? []));
+    setDrafts(draftsFor(insumos, recipeByProduct.get(id) ?? new Map()));
   }
 
-  function toggle(insumoId: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(insumoId)) next.delete(insumoId);
-      else next.add(insumoId);
+  function update(insumoId: string, patch: Partial<RecipeRowDraft>) {
+    setDrafts((prev) => {
+      const next = new Map(prev);
+      next.set(insumoId, { ...(next.get(insumoId) ?? emptyDraft()), ...patch });
       return next;
     });
   }
 
+  const recipePayload = Array.from(drafts.entries())
+    .filter(([, d]) => d.checked)
+    .map(([insumo_id, d]) => ({
+      insumo_id,
+      cantidad_kg_por_1000l: d.cantidad.trim() ? Number(d.cantidad) : null,
+      tolerancia_inferior_pct: d.tolInf.trim() ? Number(d.tolInf) : null,
+      tolerancia_superior_pct: d.tolSup.trim() ? Number(d.tolSup) : null,
+      obligatorio: d.obligatorio,
+    }));
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="product_id" value={productId} />
-      {Array.from(checked).map((id) => (
-        <input key={id} type="hidden" name="insumo_ids" value={id} />
-      ))}
+      <input type="hidden" name="recipe" value={JSON.stringify(recipePayload)} />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="recipe-product">Producto</Label>
@@ -175,25 +216,92 @@ function RecipeEditor({
         </Select>
       </div>
 
-      <div className="flex flex-col gap-2">
-        {insumos.map((insumo) => (
-          <label key={insumo.id} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4"
-              checked={checked.has(insumo.id)}
-              onChange={() => toggle(insumo.id)}
-              disabled={!canWrite}
-            />
-            {insumo.name}
-          </label>
-        ))}
+      <div className="flex flex-col gap-3">
+        {insumos.map((insumo) => {
+          const draft = drafts.get(insumo.id) ?? emptyDraft();
+          return (
+            <div key={insumo.id} className="flex flex-col gap-2 rounded-lg border p-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4"
+                  checked={draft.checked}
+                  onChange={(e) => update(insumo.id, { checked: e.target.checked })}
+                  disabled={!canWrite}
+                />
+                {insumo.name}
+              </label>
+              {draft.checked && (
+                <div className="grid grid-cols-2 gap-2 pl-6 sm:grid-cols-4">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      kg / 1.000 L
+                    </Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={draft.cantidad}
+                      onChange={(e) => update(insumo.id, { cantidad: e.target.value })}
+                      disabled={!canWrite}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Tolerancia inf. %
+                    </Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={draft.tolInf}
+                      onChange={(e) => update(insumo.id, { tolInf: e.target.value })}
+                      disabled={!canWrite}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Tolerancia sup. %
+                    </Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={draft.tolSup}
+                      onChange={(e) => update(insumo.id, { tolSup: e.target.value })}
+                      disabled={!canWrite}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 self-end pb-2 text-xs">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={draft.obligatorio}
+                      onChange={(e) => update(insumo.id, { obligatorio: e.target.checked })}
+                      disabled={!canWrite}
+                    />
+                    Obligatorio
+                  </label>
+                </div>
+              )}
+            </div>
+          );
+        })}
         {insumos.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Sin insumos en el catálogo todavía.
           </p>
         )}
       </div>
+      <p className="text-xs text-muted-foreground">
+        Cantidad y tolerancias son opcionales: sin tolerancia cargada para un
+        insumo, se muestra la cantidad esperada pero no se pide
+        justificación. &quot;Obligatorio&quot; exige justificar si el
+        insumo no se marca al finalizar la etapa.
+      </p>
 
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
@@ -212,6 +320,8 @@ function RecipeEditor({
   );
 }
 
+type ProductInsumoRow = Database["public"]["Tables"]["product_insumos"]["Row"];
+
 export function InsumosPanel({
   insumos,
   products,
@@ -220,17 +330,22 @@ export function InsumosPanel({
 }: {
   insumos: Insumo[];
   products: Product[];
-  productInsumos: { product_id: string; insumo_id: string }[];
+  productInsumos: ProductInsumoRow[];
   canWrite?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Insumo | null>(null);
 
-  const recipeByProduct = new Map<string, Set<string>>();
+  const recipeByProduct = new Map<string, Map<string, RecipeConfig>>();
   for (const row of productInsumos) {
-    const set = recipeByProduct.get(row.product_id) ?? new Set<string>();
-    set.add(row.insumo_id);
-    recipeByProduct.set(row.product_id, set);
+    const map = recipeByProduct.get(row.product_id) ?? new Map<string, RecipeConfig>();
+    map.set(row.insumo_id, {
+      cantidad_kg_por_1000l: row.cantidad_kg_por_1000l,
+      tolerancia_inferior_pct: row.tolerancia_inferior_pct,
+      tolerancia_superior_pct: row.tolerancia_superior_pct,
+      obligatorio: row.obligatorio,
+    });
+    recipeByProduct.set(row.product_id, map);
   }
 
   return (
@@ -314,12 +429,15 @@ export function InsumosPanel({
       <Separator />
 
       <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="font-medium">Receta por producto</h3>
-          <p className="text-sm text-muted-foreground">
-            Los insumos marcados acá son los que aparecen para chequear en la
-            etapa de alistamiento de insumos de cada bache.
-          </p>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="font-medium">Receta por producto</h3>
+            <p className="text-sm text-muted-foreground">
+              Los insumos marcados acá son los que aparecen para chequear en
+              la etapa de alistamiento de insumos de cada bache.
+            </p>
+          </div>
+          {canWrite && <ImportRecetaProductoDialog />}
         </div>
         {products.length > 0 ? (
           <RecipeEditor

@@ -8,7 +8,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { StageCard } from "./stage-card";
 import { BacheStatusActions } from "./bache-status-actions";
 import { FinalizarBacheBanner } from "./finalizar-bache-banner";
+import { DesviacionesSection, type DesviacionDisplay } from "./desviaciones-section";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
+import { medianaMinutosPorProductoEtapa, fechaHaceNDiasISO } from "@/lib/duracion-estandar";
 import type { BacheStatus } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -69,6 +71,11 @@ export default async function BacheDetailPage({
     supabase.from("profiles").select("id, full_name"),
   ]);
 
+  const [{ data: desviaciones }, { data: desviacionFirmas }] = await Promise.all([
+    supabase.from("desviaciones").select("*").eq("bache_id", bache.id).order("created_at"),
+    supabase.from("desviacion_firmas").select("*"),
+  ]);
+
   // Baches candidatos para "agregar base de otro bache": mismo producto,
   // con algo de volumen todavía sin envasar, sin contar este mismo bache.
   const { data: otrosBachesConBase } = await supabase
@@ -85,6 +92,31 @@ export default async function BacheDetailPage({
   // criterio que usa la reserva al iniciar una etapa.
   const usos = await usosDeEquipos(supabase);
   const equiposOcupadosIds = new Set(usos.filter((u) => u.enCurso).map((u) => u.equipoId));
+
+  // Estándar calculado (mediana de los últimos 90 días) para las etapas de
+  // ESTE producto, para la alarma de tiempo -- ver src/lib/duracion-estandar.ts.
+  const { data: productBaches } = await supabase
+    .from("baches")
+    .select("id")
+    .eq("product_id", bache.product_id);
+  const productBacheIds = (productBaches ?? []).map((b) => b.id);
+  const { data: stageRecords90d } =
+    productBacheIds.length > 0
+      ? await supabase
+          .from("bache_stage_records")
+          .select("stage_template_id, started_at, ended_at")
+          .in("bache_id", productBacheIds)
+          .not("ended_at", "is", null)
+          .gte("ended_at", fechaHaceNDiasISO(90))
+      : { data: [] };
+  const medianaPorEtapa = medianaMinutosPorProductoEtapa(
+    (stageRecords90d ?? []).map((r) => ({
+      product_id: bache.product_id,
+      stage_template_id: r.stage_template_id,
+      started_at: r.started_at,
+      ended_at: r.ended_at!,
+    })),
+  );
 
   const recordIds = (records ?? []).map((r) => r.id);
   const { data: recordEquiposData } =
@@ -105,9 +137,24 @@ export default async function BacheDetailPage({
   const profileNames = new Map((allProfiles ?? []).map((p) => [p.id, p.full_name]));
 
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
+  // Cantidad esperada escalada al volumen real de este bache (la receta
+  // guarda kg por cada 1.000 L) -- sin volumen o sin cantidad cargada, no
+  // hay esperado para mostrar (y por lo tanto tampoco alarma).
   const productRecipeInsumos = (productInsumos ?? [])
-    .map((row) => ({ id: row.insumo_id, name: insumoNames.get(row.insumo_id) }))
-    .filter((insumo): insumo is { id: string; name: string } => Boolean(insumo.name));
+    .map((row) => ({
+      id: row.insumo_id,
+      name: insumoNames.get(row.insumo_id),
+      cantidadEsperadaKg:
+        row.cantidad_kg_por_1000l != null && bache.volumen_total_litros != null
+          ? (row.cantidad_kg_por_1000l * bache.volumen_total_litros) / 1000
+          : null,
+      toleranciaInferiorPct: row.tolerancia_inferior_pct,
+      toleranciaSuperiorPct: row.tolerancia_superior_pct,
+      obligatorio: row.obligatorio,
+    }))
+    .filter(
+      (insumo): insumo is typeof insumo & { name: string } => Boolean(insumo.name),
+    );
 
   let stages = ownTemplates.data ?? [];
   if (stages.length === 0) {
@@ -136,6 +183,7 @@ export default async function BacheDetailPage({
   // anterior ya completada en este mismo bache, parte de lo que se confirmó
   // ahí (para "arrastrar" solo lo realmente prealistado, no toda la receta).
   const insumosStages = stages.filter((stage) => stage.captures_insumos);
+  const recipeMetaById = new Map(productRecipeInsumos.map((r) => [r.id, r]));
   function recipeInsumosFor(stage: (typeof stages)[number]) {
     if (!stage.captures_insumos) return [];
     const priorStage = insumosStages
@@ -146,16 +194,56 @@ export default async function BacheDetailPage({
     if (priorRecord?.ended_at && Array.isArray(priorRecord.parameters.insumos)) {
       // Se arrastran lote/peso/marca ya confirmados en la etapa anterior:
       // acá solo hace falta marcar cuáles se usan, no volver a tipearlos.
-      return priorRecord.parameters.insumos.map((insumo) => ({
-        id: insumo.insumo_id,
-        name: insumo.nombre,
-        lote: insumo.lote,
-        peso: insumo.peso,
-        marca: insumo.marca,
-      }));
+      // La cantidad esperada/tolerancias siguen viniendo de la receta.
+      return priorRecord.parameters.insumos.map((insumo) => {
+        const meta = recipeMetaById.get(insumo.insumo_id);
+        return {
+          id: insumo.insumo_id,
+          name: insumo.nombre,
+          lote: insumo.lote,
+          peso: insumo.peso,
+          marca: insumo.marca,
+          cantidadEsperadaKg: meta?.cantidadEsperadaKg ?? null,
+          toleranciaInferiorPct: meta?.toleranciaInferiorPct ?? null,
+          toleranciaSuperiorPct: meta?.toleranciaSuperiorPct ?? null,
+          obligatorio: meta?.obligatorio ?? false,
+        };
+      });
     }
     return [];
   }
+
+  const stageTemplateIdByRecordId = new Map((records ?? []).map((r) => [r.id, r.stage_template_id]));
+  const stageNameById = new Map(stages.map((s) => [s.id, s.name]));
+  const desviacionFirmaByDesviacionId = new Map(
+    (desviacionFirmas ?? []).map((f) => [f.desviacion_id, f]),
+  );
+  const desviacionesDisplay: DesviacionDisplay[] = (desviaciones ?? []).map((d) => {
+    const firma = desviacionFirmaByDesviacionId.get(d.id);
+    const stageTemplateId = stageTemplateIdByRecordId.get(d.stage_record_id);
+    return {
+      id: d.id,
+      tipo: d.tipo,
+      stageName: (stageTemplateId && stageNameById.get(stageTemplateId)) ?? "—",
+      insumoNombre: d.insumo_id ? (insumoNames.get(d.insumo_id) ?? "—") : null,
+      valorReal: d.valor_real,
+      valorEsperado: d.valor_esperado,
+      limiteInferior: d.limite_inferior,
+      limiteSuperior: d.limite_superior,
+      motivo: d.motivo,
+      descripcion: d.descripcion,
+      creadoPorNombre: profileNames.get(d.created_by) ?? "—",
+      createdAt: d.created_at,
+      firma: firma
+        ? {
+            aprobado: firma.aprobado,
+            observaciones: firma.observaciones,
+            firmadoPorNombre: profileNames.get(firma.firmado_por) ?? "—",
+            firmadoAt: firma.firmado_at,
+          }
+        : null,
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -223,6 +311,9 @@ export default async function BacheDetailPage({
               requirements={[]}
               recordEquipoIds={record ? equipoIdsByRecord.get(record.id) ?? [] : []}
               equiposOcupadosIds={equiposOcupadosIds}
+              calculatedStandardMin={
+                medianaPorEtapa.get(`${bache.product_id}:${stage.id}`)?.medianaMin ?? null
+              }
               firma={
                 firma
                   ? {
@@ -244,6 +335,12 @@ export default async function BacheDetailPage({
           </p>
         )}
       </div>
+
+      <DesviacionesSection
+        bacheId={bache.id}
+        desviaciones={desviacionesDisplay}
+        canFirmar={canFirmar}
+      />
     </div>
   );
 }

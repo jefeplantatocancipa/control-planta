@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  AlertTriangle,
   Building2,
   ChevronLeft,
   ChevronRight,
@@ -21,6 +22,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { StageRecordParameters } from "@/lib/supabase/types";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
+import { DESVIACION_MOTIVO_LABELS } from "@/lib/desviacion-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -122,6 +124,7 @@ export default async function EstadisticasPage({
       { data: consumosEnergia },
       { data: enmangadoReferencias },
       { data: inventarioFinalMensual },
+      { data: desviaciones },
     ],
     stageRecordsAll,
   ] = await Promise.all([
@@ -181,6 +184,12 @@ export default async function EstadisticasPage({
       // conteo físico que carga planta desde /inventario (ver nota de
       // INVENTARIO_FINAL_CONOCIDO más abajo).
       supabase.from("inventario_producto_terminado_mensual").select("mes, kilos"),
+      // Desviaciones (tiempo de etapa / receta de insumos) -- ver
+      // src/app/(app)/baches/desviaciones.ts. El nombre de la etapa se
+      // resuelve después, cruzando con bache_stage_records/stageTemplatesAll.
+      supabase
+        .from("desviaciones")
+        .select("tipo, motivo, stage_record_id, created_by, created_at"),
     ]),
     // bache_stage_records ya pasa de 1000 filas (el tope por pedido de
     // Supabase) -- sin paginar, esto se trunca solo y deja afuera los
@@ -760,6 +769,75 @@ export default async function EstadisticasPage({
       baches: bachesCerradosEnRango(rango.inicio, rango.fin),
     };
   });
+
+  // -------------------------------------------------------------------
+  // Desviaciones (tiempo de etapa / receta de insumos) -- ver
+  // src/app/(app)/baches/desviaciones.ts. Se resuelve el nombre de la etapa
+  // cruzando stage_record_id -> stage_template_id (consulta puntual, acotada
+  // a los pocos registros referenciados) -> nombre (stageTemplatesAll, ya
+  // traído arriba).
+  // -------------------------------------------------------------------
+  const stageRecordIdsDesviaciones = Array.from(
+    new Set((desviaciones ?? []).map((d) => d.stage_record_id)),
+  );
+  const { data: stageRecordsDesviaciones } =
+    stageRecordIdsDesviaciones.length > 0
+      ? await supabase
+          .from("bache_stage_records")
+          .select("id, stage_template_id")
+          .in("id", stageRecordIdsDesviaciones)
+      : { data: [] as { id: string; stage_template_id: string }[] };
+  const stageTemplateIdByDesviacionRecordId = new Map(
+    (stageRecordsDesviaciones ?? []).map((r) => [r.id, r.stage_template_id]),
+  );
+  const stageNameByTemplateId = new Map((stageTemplatesAll ?? []).map((s) => [s.id, s.name]));
+  const desviacionesConEtapa = (desviaciones ?? []).map((d) => ({
+    ...d,
+    mes: d.created_at.slice(0, 7),
+    etapaNombre:
+      stageNameByTemplateId.get(
+        stageTemplateIdByDesviacionRecordId.get(d.stage_record_id) ?? "",
+      ) ?? "—",
+  }));
+  const desviacionesMesActual = desviacionesConEtapa.filter((d) => d.mes === mesRango.mes);
+  const desviacionesPorMesMap = new Map<string, number>();
+  for (const d of desviacionesConEtapa) {
+    desviacionesPorMesMap.set(d.mes, (desviacionesPorMesMap.get(d.mes) ?? 0) + 1);
+  }
+  const desviacionesHistorialChart = mesesEntre(HISTORIAL_INICIO_MES, mesActualStr).map(
+    (mesStr) => ({
+      label: format(new Date(`${mesStr}-01T00:00:00`), "MMM", { locale: es }),
+      value: desviacionesPorMesMap.get(mesStr) ?? 0,
+    }),
+  );
+  const desviacionesPorEtapa = Array.from(
+    desviacionesMesActual.reduce((map, d) => {
+      map.set(d.etapaNombre, (map.get(d.etapaNombre) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const desviacionesPorMotivo = Array.from(
+    desviacionesMesActual.reduce((map, d) => {
+      const label = DESVIACION_MOTIVO_LABELS[d.motivo];
+      map.set(label, (map.get(label) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const desviacionesPorOperario = Array.from(
+    desviacionesMesActual.reduce((map, d) => {
+      const label = operarioNames.get(d.created_by) ?? "—";
+      map.set(label, (map.get(label) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const desviacionesTiempoMesActual = desviacionesMesActual.filter((d) => d.tipo === "tiempo").length;
+  const desviacionesRecetaMesActual = desviacionesMesActual.filter((d) => d.tipo === "receta").length;
 
   // Baches cerrados antes de septiembre 2026 no existen en la app (ver
   // HISTORIAL_INICIO_MES arriba) -- se omiten esos meses en vez de mostrar
@@ -1994,6 +2072,66 @@ export default async function EstadisticasPage({
                 )}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-medium">Desviaciones ({mesRango.label})</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            icon={<AlertTriangle className="size-5" />}
+            label="Desviaciones del mes"
+            value={String(desviacionesMesActual.length)}
+            sublabel={`${desviacionesTiempoMesActual} de tiempo · ${desviacionesRecetaMesActual} de receta`}
+            data={desviacionesHistorialChart}
+            unit="desviaciones"
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ExpandableCard
+            title={`Desviaciones por etapa (${mesRango.label})`}
+            expanded={
+              desviacionesPorEtapa.length > 0 ? (
+                <ShareChart data={desviacionesPorEtapa} unit="desviaciones" height={420} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Sin desviaciones este mes.</p>
+              )
+            }
+          >
+            {desviacionesPorEtapa.length > 0 ? (
+              <ShareChart data={desviacionesPorEtapa} unit="desviaciones" />
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin desviaciones este mes.</p>
+            )}
+          </ExpandableCard>
+          <ExpandableCard
+            title={`Desviaciones por motivo (${mesRango.label})`}
+            expanded={
+              desviacionesPorMotivo.length > 0 ? (
+                <ShareChart data={desviacionesPorMotivo} unit="desviaciones" height={420} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Sin desviaciones este mes.</p>
+              )
+            }
+          >
+            {desviacionesPorMotivo.length > 0 ? (
+              <ShareChart data={desviacionesPorMotivo} unit="desviaciones" />
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin desviaciones este mes.</p>
+            )}
+          </ExpandableCard>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Desviaciones por operario ({mesRango.label})</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {desviacionesPorOperario.length > 0 ? (
+              <OperarioBarChart data={desviacionesPorOperario} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin desviaciones este mes.</p>
+            )}
           </CardContent>
         </Card>
       </div>

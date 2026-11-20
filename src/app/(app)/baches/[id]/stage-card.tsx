@@ -33,7 +33,14 @@ import { Plus, X } from "lucide-react";
 import { OptionPicker } from "@/components/option-picker";
 import { formatTime } from "@/lib/format-date";
 import { ReabrirEtapaButton } from "./reabrir-etapa-button";
-import type { Database, StageParameterDef, StageReading } from "@/lib/supabase/types";
+import { DuracionAlarmaBadge } from "@/components/duracion-alarma-badge";
+import { estandarEfectivo, limitesDuracion, minutosDesde } from "@/lib/duracion-estandar";
+import type {
+  Database,
+  DesviacionMotivo,
+  StageParameterDef,
+  StageReading,
+} from "@/lib/supabase/types";
 
 type StageTemplate =
   Database["public"]["Tables"]["process_stage_templates"]["Row"];
@@ -122,6 +129,10 @@ interface RecipeInsumo {
   lote?: string;
   peso?: number;
   marca?: string;
+  cantidadEsperadaKg?: number | null;
+  toleranciaInferiorPct?: number | null;
+  toleranciaSuperiorPct?: number | null;
+  obligatorio?: boolean;
 }
 
 interface InsumoDraft {
@@ -135,6 +146,27 @@ interface InsumoDraft {
   // anterior (encadenada): acá solo hace falta marcar el checkbox, no
   // volver a tipearlos.
   prefilled: boolean;
+  cantidadEsperadaKg: number | null;
+  toleranciaInferiorPct: number | null;
+  toleranciaSuperiorPct: number | null;
+  obligatorio: boolean;
+}
+
+// Rango [esperado×(1-tolInf%), esperado×(1+tolSup%)] -- null si falta
+// cantidad esperada o alguna de las dos tolerancias (sin dato, no hay
+// rango para comparar).
+function rangoInsumo(insumo: InsumoDraft) {
+  if (
+    insumo.cantidadEsperadaKg == null ||
+    insumo.toleranciaInferiorPct == null ||
+    insumo.toleranciaSuperiorPct == null
+  ) {
+    return null;
+  }
+  return {
+    min: insumo.cantidadEsperadaKg * (1 - insumo.toleranciaInferiorPct / 100),
+    max: insumo.cantidadEsperadaKg * (1 + insumo.toleranciaSuperiorPct / 100),
+  };
 }
 
 interface BacheConBaseOption {
@@ -158,6 +190,77 @@ function durationLabel(startedAt: string, endedAt: string) {
     (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000,
   );
   return `${minutes} min`;
+}
+
+// ---------------------------------------------------------------------------
+// Justificación de desviación (tiempo de etapa o receta de insumos) -- se
+// pide al finalizar la etapa cuando algo quedó fuera de rango, nunca antes;
+// sin ella no se habilita "Confirmar finalización", pero la etapa cierra
+// igual apenas se completa.
+// ---------------------------------------------------------------------------
+const MOTIVO_OPTIONS: { value: DesviacionMotivo; label: string }[] = [
+  { value: "falla_equipo", label: "Falla de equipo" },
+  { value: "espera_insumos", label: "Espera de insumos" },
+  { value: "espera_leche", label: "Espera de leche" },
+  { value: "ajuste_proceso", label: "Ajuste de proceso" },
+  { value: "error_registro", label: "Error de registro" },
+  { value: "otro", label: "Otro" },
+];
+
+interface DesviacionPayload {
+  tipo: "tiempo" | "receta";
+  insumo_id?: string;
+  valor_real: number;
+  valor_esperado: number | null;
+  limite_inferior: number | null;
+  limite_superior: number | null;
+  motivo: DesviacionMotivo | "";
+  descripcion: string;
+}
+
+function desviacionOk(d: DesviacionPayload) {
+  return Boolean(d.motivo) && d.descripcion.trim().length >= 10;
+}
+
+function DesviacionJustificacionForm({
+  aviso,
+  desviacion,
+  onChange,
+}: {
+  aviso: string;
+  desviacion: DesviacionPayload;
+  onChange: (desviacion: DesviacionPayload) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+      <p className="text-sm font-medium text-amber-800 dark:text-amber-400">{aviso}</p>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Motivo</Label>
+        <select
+          value={desviacion.motivo}
+          onChange={(e) =>
+            onChange({ ...desviacion, motivo: e.target.value as DesviacionMotivo })
+          }
+          className={SELECT_CLASSNAME}
+        >
+          <option value="">Elegí un motivo</option>
+          {MOTIVO_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Descripción</Label>
+        <Input
+          value={desviacion.descripcion}
+          onChange={(e) => onChange({ ...desviacion, descripcion: e.target.value })}
+          placeholder="Mínimo 10 caracteres"
+        />
+      </div>
+    </div>
+  );
 }
 
 
@@ -395,7 +498,17 @@ function InsumosChecklist({
               onChange={(e) => updateAt(index, { checked: e.target.checked })}
             />
             {draft.nombre}
+            {draft.obligatorio && <span className="text-xs text-muted-foreground">(obligatorio)</span>}
           </label>
+          {draft.cantidadEsperadaKg != null && (
+            <p className="pl-6 text-xs text-muted-foreground">
+              Esperado: {draft.cantidadEsperadaKg.toFixed(1)} kg
+              {(() => {
+                const rango = rangoInsumo(draft);
+                return rango ? ` (${rango.min.toFixed(1)}–${rango.max.toFixed(1)})` : "";
+              })()}
+            </p>
+          )}
           {draft.checked &&
             (draft.prefilled ? (
               <p className="pl-6 text-sm text-muted-foreground">
@@ -417,7 +530,13 @@ function InsumosChecklist({
                   min="0"
                   value={draft.peso}
                   onChange={(e) => updateAt(index, { peso: e.target.value })}
-                  className="w-24"
+                  className={(() => {
+                    const rango = rangoInsumo(draft);
+                    if (!rango || !draft.peso.trim()) return "w-24";
+                    const peso = Number(draft.peso);
+                    const enRango = peso >= rango.min && peso <= rango.max;
+                    return `w-24 ${enRango ? "border-emerald-500/60" : "border-destructive"}`;
+                  })()}
                 />
                 <Input
                   placeholder="Marca"
@@ -679,6 +798,7 @@ function ConfirmFinishForm({
   capturesInsumos,
   baseOtroBache,
   opciones,
+  desviaciones,
   onSuccess,
 }: {
   recordId: string;
@@ -690,6 +810,7 @@ function ConfirmFinishForm({
   capturesInsumos: boolean;
   baseOtroBache: BaseOtroBacheDraft[];
   opciones: BacheConBaseOption[];
+  desviaciones: DesviacionPayload[];
   onSuccess: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -742,13 +863,16 @@ function ConfirmFinishForm({
           )}
         />
       )}
+      {desviaciones.length > 0 && (
+        <input type="hidden" name="desviaciones" value={JSON.stringify(desviaciones)} />
+      )}
       {state.error && (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
         </p>
       )}
       <DialogFooter>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || !desviaciones.every(desviacionOk)}>
           {pending ? "Guardando..." : "Confirmar finalización"}
         </Button>
       </DialogFooter>
@@ -763,6 +887,7 @@ function FinishStageForm({
   recipeInsumos,
   tanques,
   otrosBachesConBase,
+  standardMin,
 }: {
   bacheId: string;
   stage: StageTemplate;
@@ -770,6 +895,7 @@ function FinishStageForm({
   recipeInsumos: RecipeInsumo[];
   tanques: Tanque[];
   otrosBachesConBase: BacheConBaseOption[];
+  standardMin: number | null;
 }) {
   const capturesInsumos = stage.captures_insumos;
   const capturesReadings = stage.captures_readings;
@@ -783,11 +909,31 @@ function FinishStageForm({
       peso: r.peso !== undefined ? String(r.peso) : "",
       marca: r.marca ?? "",
       prefilled: r.lote !== undefined,
+      cantidadEsperadaKg: r.cantidadEsperadaKg ?? null,
+      toleranciaInferiorPct: r.toleranciaInferiorPct ?? null,
+      toleranciaSuperiorPct: r.toleranciaSuperiorPct ?? null,
+      obligatorio: r.obligatorio ?? false,
     })),
   );
   const [baseOtroBache, setBaseOtroBache] = useState<BaseOtroBacheDraft[]>([]);
   const [notes, setNotes] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [motivoDescripcionTiempo, setMotivoDescripcionTiempo] = useState<{
+    motivo: DesviacionMotivo | "";
+    descripcion: string;
+  }>({ motivo: "", descripcion: "" });
+  const [motivoDescripcionReceta, setMotivoDescripcionReceta] = useState<
+    Record<string, { motivo: DesviacionMotivo | ""; descripcion: string }>
+  >({});
+  function updateMotivoReceta(
+    insumoId: string,
+    patch: Partial<{ motivo: DesviacionMotivo | ""; descripcion: string }>,
+  ) {
+    setMotivoDescripcionReceta((prev) => ({
+      ...prev,
+      [insumoId]: { ...(prev[insumoId] ?? { motivo: "", descripcion: "" }), ...patch },
+    }));
+  }
 
   const checkedInsumos = insumos.filter((i) => i.checked);
   const baseOtroBacheValida = baseOtroBache.filter(
@@ -812,6 +958,67 @@ function FinishStageForm({
   const requiredParams = stage.parameter_schema.filter((p) => p.required);
   const requiredParamsOk = requiredParams.every((p) => (values[p.key] ?? "").trim() !== "");
   const canSubmit = insumosOk && readingsOk && requiredParamsOk && !baseOtroBacheExcede;
+
+  const elapsedMinNow = minutosDesde(record.started_at);
+  const limites =
+    standardMin != null
+      ? limitesDuracion({
+          standardMin,
+          toleranceLowPct: stage.duration_tolerance_low_pct,
+          toleranceHighPct: stage.duration_tolerance_high_pct,
+        })
+      : null;
+  const requiereJustificacionTiempo =
+    stage.duration_alarm_enabled &&
+    limites != null &&
+    (elapsedMinNow < limites.limiteInferior || elapsedMinNow > limites.limiteSuperior);
+  const desviacionTiempo: DesviacionPayload | null = requiereJustificacionTiempo
+    ? {
+        tipo: "tiempo",
+        valor_real: elapsedMinNow,
+        valor_esperado: standardMin,
+        limite_inferior: limites!.limiteInferior,
+        limite_superior: limites!.limiteSuperior,
+        motivo: motivoDescripcionTiempo.motivo,
+        descripcion: motivoDescripcionTiempo.descripcion,
+      }
+    : null;
+  const insumosFueraDeRango = checkedInsumos.filter((i) => {
+    const rango = rangoInsumo(i);
+    if (!rango || !i.peso.trim()) return false;
+    const peso = Number(i.peso);
+    return peso < rango.min || peso > rango.max;
+  });
+  const insumosObligatoriosFaltantes = insumos.filter((i) => i.obligatorio && !i.checked);
+  const desviacionesReceta: DesviacionPayload[] = [
+    ...insumosFueraDeRango.map((i): DesviacionPayload => {
+      const rango = rangoInsumo(i)!;
+      return {
+        tipo: "receta",
+        insumo_id: i.insumo_id,
+        valor_real: Number(i.peso),
+        valor_esperado: i.cantidadEsperadaKg,
+        limite_inferior: rango.min,
+        limite_superior: rango.max,
+        motivo: motivoDescripcionReceta[i.insumo_id]?.motivo ?? "",
+        descripcion: motivoDescripcionReceta[i.insumo_id]?.descripcion ?? "",
+      };
+    }),
+    ...insumosObligatoriosFaltantes.map((i): DesviacionPayload => {
+      const rango = rangoInsumo(i);
+      return {
+        tipo: "receta",
+        insumo_id: i.insumo_id,
+        valor_real: 0,
+        valor_esperado: i.cantidadEsperadaKg,
+        limite_inferior: rango?.min ?? null,
+        limite_superior: rango?.max ?? null,
+        motivo: motivoDescripcionReceta[i.insumo_id]?.motivo ?? "",
+        descripcion: motivoDescripcionReceta[i.insumo_id]?.descripcion ?? "",
+      };
+    }),
+  ];
+  const desviaciones = [...(desviacionTiempo ? [desviacionTiempo] : []), ...desviacionesReceta];
 
   return (
     <div className="flex flex-col gap-3">
@@ -931,6 +1138,39 @@ function FinishStageForm({
             )}
             {notes && <p>Notas: {notes}</p>}
           </div>
+          {desviacionTiempo && (
+            <DesviacionJustificacionForm
+              aviso={`Esta etapa duró ${Math.round(elapsedMinNow)} min; el estándar es ${Math.round(standardMin!)} min (rango ${Math.round(limites!.limiteInferior)}–${Math.round(limites!.limiteSuperior)}).`}
+              desviacion={desviacionTiempo}
+              onChange={(d) =>
+                setMotivoDescripcionTiempo({ motivo: d.motivo, descripcion: d.descripcion })
+              }
+            />
+          )}
+          {desviacionesReceta.map((d) => {
+            const nombre = insumos.find((i) => i.insumo_id === d.insumo_id)?.nombre ?? "—";
+            const aviso =
+              d.valor_real === 0
+                ? `Falta el insumo obligatorio ${nombre}${d.valor_esperado != null ? ` (esperado ${d.valor_esperado.toFixed(1)} kg)` : ""}.`
+                : `${nombre}: ${d.valor_real.toFixed(1)} kg fuera del rango esperado${
+                    d.limite_inferior != null && d.limite_superior != null
+                      ? ` (${d.limite_inferior.toFixed(1)}–${d.limite_superior.toFixed(1)})`
+                      : ""
+                  }.`;
+            return (
+              <DesviacionJustificacionForm
+                key={d.insumo_id}
+                aviso={aviso}
+                desviacion={d}
+                onChange={(upd) =>
+                  updateMotivoReceta(d.insumo_id!, {
+                    motivo: upd.motivo,
+                    descripcion: upd.descripcion,
+                  })
+                }
+              />
+            );
+          })}
           <ConfirmFinishForm
             recordId={record.id}
             bacheId={bacheId}
@@ -941,6 +1181,7 @@ function FinishStageForm({
             capturesInsumos={capturesInsumos}
             baseOtroBache={baseOtroBacheValida}
             opciones={otrosBachesConBase}
+            desviaciones={desviaciones}
             onSuccess={() => setConfirmOpen(false)}
           />
         </DialogContent>
@@ -1098,6 +1339,7 @@ export function StageCard({
   equiposOcupadosIds,
   firma,
   canFirmar,
+  calculatedStandardMin,
 }: {
   bacheId: string;
   stage: StageTemplate;
@@ -1114,7 +1356,12 @@ export function StageCard({
   equiposOcupadosIds: Set<string>;
   firma?: FirmaDisplay | null;
   canFirmar?: boolean;
+  calculatedStandardMin: number | null;
 }) {
+  const standardMin = estandarEfectivo({
+    manualOverrideMin: stage.standard_duration_min,
+    calculadoMin: calculatedStandardMin,
+  });
   const status = !record ? "not_started" : record.ended_at ? "done" : "in_progress";
   const operarioName = record
     ? operarios.find((o) => o.id === record.operario_id)?.full_name
@@ -1238,10 +1485,19 @@ export function StageCard({
 
         {status === "in_progress" && (
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">
-              Iniciada por {operarioName ?? "—"} a las {formatTime(record!.started_at)}
-              {equipoNames.length > 0 ? ` · ${equipoNames.join(", ")}` : ""}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                Iniciada por {operarioName ?? "—"} a las {formatTime(record!.started_at)}
+                {equipoNames.length > 0 ? ` · ${equipoNames.join(", ")}` : ""}
+              </p>
+              <DuracionAlarmaBadge
+                elapsedMin={minutosDesde(record!.started_at)}
+                standardMin={standardMin}
+                toleranceLowPct={stage.duration_tolerance_low_pct}
+                toleranceHighPct={stage.duration_tolerance_high_pct}
+                alarmEnabled={stage.duration_alarm_enabled}
+              />
+            </div>
             {canAct ? (
               <FinishStageForm
                 bacheId={bacheId}
@@ -1250,6 +1506,7 @@ export function StageCard({
                 recipeInsumos={recipeInsumos}
                 tanques={tanques}
                 otrosBachesConBase={otrosBachesConBase}
+                standardMin={standardMin}
               />
             ) : (
               <p className="text-sm text-muted-foreground">

@@ -6,6 +6,12 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { NO_ORDER_VALUE } from "./constants";
+import { registrarDesviacion } from "./desviaciones";
+import {
+  medianaMinutosPorProductoEtapa,
+  estandarEfectivo,
+  limitesDuracion,
+} from "@/lib/duracion-estandar";
 import type { StageRecordParameters, StageReading } from "@/lib/supabase/types";
 
 export interface ActionState {
@@ -404,6 +410,25 @@ const BaseOtroBacheSchema = z.array(
   }),
 );
 
+const DesviacionInputSchema = z.object({
+  tipo: z.enum(["tiempo", "receta"]),
+  insumo_id: z.string().uuid().optional(),
+  valor_real: z.coerce.number(),
+  valor_esperado: z.coerce.number().nullable(),
+  limite_inferior: z.coerce.number().nullable(),
+  limite_superior: z.coerce.number().nullable(),
+  motivo: z.enum([
+    "falla_equipo",
+    "espera_insumos",
+    "espera_leche",
+    "ajuste_proceso",
+    "error_registro",
+    "otro",
+  ]),
+  descripcion: z.string().trim().min(10, "La descripción de la desviación es muy corta."),
+});
+const DesviacionesSchema = z.array(DesviacionInputSchema);
+
 export async function finishStage(
   _prevState: ActionState,
   formData: FormData,
@@ -420,23 +445,99 @@ export async function finishStage(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  const desviacionesParsed = DesviacionesSchema.safeParse(
+    JSON.parse(String(formData.get("desviaciones") || "[]")),
+  );
+  if (!desviacionesParsed.success) {
+    return { error: "Justificación de desviación inválida." };
+  }
+
   const supabase = await createClient();
 
   // El esquema de parámetros (y si incluye checklist de insumos) es la
   // fuente de verdad server-side: evita confiar en datos arbitrarios
-  // enviados desde el cliente.
-  const [{ data: template }, { data: existingRecord }] = await Promise.all([
+  // enviados desde el cliente. Lo mismo para la alarma de tiempo: se
+  // recalcula acá, no se confía en lo que mande el formulario.
+  const [{ data: template }, { data: existingRecord }, { data: bache }] = await Promise.all([
     supabase
       .from("process_stage_templates")
-      .select("parameter_schema, captures_insumos")
+      .select(
+        "name, parameter_schema, captures_insumos, standard_duration_min, duration_tolerance_low_pct, duration_tolerance_high_pct, duration_alarm_enabled",
+      )
       .eq("id", parsed.data.stage_template_id)
       .single(),
     supabase
       .from("bache_stage_records")
-      .select("parameters")
+      .select("parameters, started_at")
       .eq("id", parsed.data.record_id)
       .single(),
+    supabase
+      .from("baches")
+      .select("batch_code, product_id, status, volumen_total_litros")
+      .eq("id", parsed.data.bache_id)
+      .single(),
   ]);
+
+  // Alarma de tiempo: ¿esta etapa quedó fuera de [estándar×(1-tolInf),
+  // estándar×(1+tolSup)]? Si sí y la alarma está activa, hace falta una
+  // justificación de tipo "tiempo" en lo que mandó el cliente -- sin ella
+  // no se cierra la etapa. Nunca al revés: con la justificación presente,
+  // esto no vuelve a bloquear nada.
+  let elapsedMin: number | null = null;
+  let standardMin: number | null = null;
+  let limites: { limiteInferior: number; limiteSuperior: number } | null = null;
+  if (existingRecord && template && bache) {
+    elapsedMin = (Date.now() - new Date(existingRecord.started_at).getTime()) / 60000;
+
+    let calculadoMin: number | null = null;
+    const { data: productBaches } = await supabase
+      .from("baches")
+      .select("id")
+      .eq("product_id", bache.product_id);
+    const bacheIds = (productBaches ?? []).map((b) => b.id);
+    if (bacheIds.length > 0) {
+      const { data: recent } = await supabase
+        .from("bache_stage_records")
+        .select("started_at, ended_at")
+        .eq("stage_template_id", parsed.data.stage_template_id)
+        .in("bache_id", bacheIds)
+        .not("ended_at", "is", null)
+        .gte("ended_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
+      const registros = (recent ?? []).map((r) => ({
+        product_id: bache.product_id,
+        stage_template_id: parsed.data.stage_template_id,
+        started_at: r.started_at,
+        ended_at: r.ended_at!,
+      }));
+      calculadoMin =
+        medianaMinutosPorProductoEtapa(registros).get(
+          `${bache.product_id}:${parsed.data.stage_template_id}`,
+        )?.medianaMin ?? null;
+    }
+    standardMin = estandarEfectivo({
+      manualOverrideMin: template.standard_duration_min,
+      calculadoMin,
+    });
+    limites =
+      standardMin != null
+        ? limitesDuracion({
+            standardMin,
+            toleranceLowPct: template.duration_tolerance_low_pct,
+            toleranceHighPct: template.duration_tolerance_high_pct,
+          })
+        : null;
+  }
+  const requiereJustificacionTiempo =
+    Boolean(template?.duration_alarm_enabled) &&
+    limites != null &&
+    elapsedMin != null &&
+    (elapsedMin < limites.limiteInferior || elapsedMin > limites.limiteSuperior);
+  const desviacionTiempo = desviacionesParsed.data.find((d) => d.tipo === "tiempo");
+  if (requiereJustificacionTiempo && !desviacionTiempo) {
+    return {
+      error: "Esta etapa quedó fuera del tiempo estándar: hace falta justificar la desviación.",
+    };
+  }
 
   // Se parte de lo que ya había (preserva "lecturas" si la etapa las usa,
   // ya que esas se van agregando aparte con addReading mientras está en
@@ -456,6 +557,19 @@ export async function finishStage(
         : String(raw);
   }
 
+  // Desviaciones de receta: cuánto se esperaba de cada insumo (escalado al
+  // volumen real del bache) y si alguno quedó fuera de su rango o si un
+  // insumo obligatorio no se marcó -- cada caso necesita su propia
+  // justificación en lo que mandó el cliente.
+  const desviacionesReceta: {
+    insumo_id: string;
+    insumo_nombre: string;
+    valor_real: number;
+    valor_esperado: number | null;
+    limite_inferior: number | null;
+    limite_superior: number | null;
+  }[] = [];
+
   if (template?.captures_insumos) {
     const insumosParsed = InsumosSchema.safeParse(
       JSON.parse(String(formData.get("insumos") || "[]")),
@@ -466,6 +580,76 @@ export async function finishStage(
       };
     }
     parameters.insumos = insumosParsed.data;
+
+    if (bache) {
+      const { data: receta } = await supabase
+        .from("product_insumos")
+        .select(
+          "insumo_id, cantidad_kg_por_1000l, tolerancia_inferior_pct, tolerancia_superior_pct, obligatorio",
+        )
+        .eq("product_id", bache.product_id);
+      const pesadosById = new Map(insumosParsed.data.map((i) => [i.insumo_id, i]));
+      const { data: insumoRows } = (receta ?? []).length
+        ? await supabase
+            .from("insumos")
+            .select("id, name")
+            .in("id", (receta ?? []).map((r) => r.insumo_id))
+        : { data: [] };
+      const insumoNameById = new Map((insumoRows ?? []).map((i) => [i.id, i.name]));
+
+      for (const item of receta ?? []) {
+        const esperado =
+          item.cantidad_kg_por_1000l != null && bache.volumen_total_litros != null
+            ? (item.cantidad_kg_por_1000l * bache.volumen_total_litros) / 1000
+            : null;
+        const rango =
+          esperado != null &&
+          item.tolerancia_inferior_pct != null &&
+          item.tolerancia_superior_pct != null
+            ? {
+                min: esperado * (1 - item.tolerancia_inferior_pct / 100),
+                max: esperado * (1 + item.tolerancia_superior_pct / 100),
+              }
+            : null;
+        const pesado = pesadosById.get(item.insumo_id);
+
+        if (!pesado) {
+          if (item.obligatorio) {
+            desviacionesReceta.push({
+              insumo_id: item.insumo_id,
+              insumo_nombre: insumoNameById.get(item.insumo_id) ?? "—",
+              valor_real: 0,
+              valor_esperado: esperado,
+              limite_inferior: rango?.min ?? null,
+              limite_superior: rango?.max ?? null,
+            });
+          }
+          continue;
+        }
+        if (rango && (pesado.peso < rango.min || pesado.peso > rango.max)) {
+          desviacionesReceta.push({
+            insumo_id: item.insumo_id,
+            insumo_nombre: pesado.nombre,
+            valor_real: pesado.peso,
+            valor_esperado: esperado,
+            limite_inferior: rango.min,
+            limite_superior: rango.max,
+          });
+        }
+      }
+    }
+  }
+
+  const desviacionesRecetaFaltantes = desviacionesReceta.filter(
+    (d) =>
+      !desviacionesParsed.data.some(
+        (sub) => sub.tipo === "receta" && sub.insumo_id === d.insumo_id,
+      ),
+  );
+  if (desviacionesRecetaFaltantes.length > 0) {
+    return {
+      error: `Hace falta justificar la desviación de receta de: ${desviacionesRecetaFaltantes.map((d) => d.insumo_nombre).join(", ")}.`,
+    };
   }
 
   // "Base de otro bache": suma al balance de masa de este bache un volumen
@@ -516,6 +700,49 @@ export async function finishStage(
     return { error: "No se pudo finalizar la etapa." };
   }
 
+  // La etapa ya quedó cerrada arriba -- si esto falla, no revierte nada
+  // (la justificación y la nota en Bitácora son un registro aparte).
+  if (desviacionTiempo) {
+    await registrarDesviacion(supabase, {
+      bacheId: parsed.data.bache_id,
+      batchCode: bache?.batch_code ?? "—",
+      stageRecordId: parsed.data.record_id,
+      stageName: template?.name ?? "—",
+      tipo: "tiempo",
+      unidad: "min",
+      valorReal: elapsedMin ?? desviacionTiempo.valor_real,
+      valorEsperado: standardMin,
+      limiteInferior: limites?.limiteInferior ?? null,
+      limiteSuperior: limites?.limiteSuperior ?? null,
+      motivo: desviacionTiempo.motivo,
+      descripcion: desviacionTiempo.descripcion,
+      createdBy: profile.id,
+    });
+  }
+  for (const d of desviacionesReceta) {
+    const justificacion = desviacionesParsed.data.find(
+      (sub) => sub.tipo === "receta" && sub.insumo_id === d.insumo_id,
+    );
+    if (!justificacion) continue; // ya se validó arriba que siempre existe
+    await registrarDesviacion(supabase, {
+      bacheId: parsed.data.bache_id,
+      batchCode: bache?.batch_code ?? "—",
+      stageRecordId: parsed.data.record_id,
+      stageName: template?.name ?? "—",
+      tipo: "receta",
+      insumoId: d.insumo_id,
+      insumoNombre: d.insumo_nombre,
+      unidad: "kg",
+      valorReal: d.valor_real,
+      valorEsperado: d.valor_esperado,
+      limiteInferior: d.limite_inferior,
+      limiteSuperior: d.limite_superior,
+      motivo: justificacion.motivo,
+      descripcion: justificacion.descripcion,
+      createdBy: profile.id,
+    });
+  }
+
   // Se descuenta del bache de origen lo que se tomó (contra el valor ya
   // verificado arriba), para que no quede contado dos veces -- una vez en
   // su propio balance y otra en el de este bache -- y para que el
@@ -533,17 +760,14 @@ export async function finishStage(
     );
   }
 
-  // Bache y etapa recién cerrada: hacen falta para dos cosas -- el consumo
-  // automático de insumos y saber si esta era la ÚLTIMA etapa del proceso
-  // (para cerrar el bache solo).
-  const [{ data: bache }, { data: currentStage }] = await Promise.all([
-    supabase.from("baches").select("product_id, status").eq("id", parsed.data.bache_id).single(),
-    supabase
-      .from("process_stage_templates")
-      .select("sequence_order")
-      .eq("id", parsed.data.stage_template_id)
-      .single(),
-  ]);
+  // Etapa recién cerrada: hace falta para dos cosas -- el consumo automático
+  // de insumos y saber si esta era la ÚLTIMA etapa del proceso (para cerrar
+  // el bache solo). "bache" ya se trajo arriba, antes del cierre.
+  const { data: currentStage } = await supabase
+    .from("process_stage_templates")
+    .select("sequence_order")
+    .eq("id", parsed.data.stage_template_id)
+    .single();
 
   if (bache && currentStage) {
     const { data: ownStages } = await supabase
@@ -782,6 +1006,52 @@ export async function firmarEtapaBache(
       firmado_por: profile.id,
     },
     { onConflict: "stage_record_id" },
+  );
+
+  if (error) {
+    return { error: "No se pudo guardar la firma." };
+  }
+
+  revalidatePath(`/baches/${parsed.data.bache_id}`);
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Firma de calidad sobre una desviación -- mismo esquema que la firma de
+// etapa, nunca bloquea ni condiciona nada ya registrado.
+// ---------------------------------------------------------------------------
+const FirmarDesviacionSchema = z.object({
+  desviacion_id: z.string().uuid(),
+  bache_id: z.string().uuid(),
+  aprobado: z.enum(["true", "false"]).transform((v) => v === "true"),
+  observaciones: z.string().trim().optional(),
+});
+
+export async function firmarDesviacion(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta", "calidad"]);
+
+  const parsed = FirmarDesviacionSchema.safeParse({
+    desviacion_id: formData.get("desviacion_id"),
+    bache_id: formData.get("bache_id"),
+    aprobado: formData.get("aprobado"),
+    observaciones: formData.get("observaciones"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("desviacion_firmas").upsert(
+    {
+      desviacion_id: parsed.data.desviacion_id,
+      aprobado: parsed.data.aprobado,
+      observaciones: parsed.data.observaciones || null,
+      firmado_por: profile.id,
+    },
+    { onConflict: "desviacion_id" },
   );
 
   if (error) {
