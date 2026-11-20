@@ -1831,3 +1831,38 @@ export async function importInventarioCatalogo(
   revalidatePath("/inventario");
   return { success: true, imported, warnings };
 }
+
+// ---------------------------------------------------------------------------
+// Configuración del destinatario de Pedido de insumos
+// ---------------------------------------------------------------------------
+const PedidoInsumosDestinatarioSchema = z.object({
+  destinatario_email: z.string().trim().email("Ingresá un correo válido."),
+});
+
+export async function setPedidoInsumosDestinatario(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(["jefe_planta"]);
+
+  const parsed = PedidoInsumosDestinatarioSchema.safeParse({
+    destinatario_email: formData.get("destinatario_email"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("pedido_insumos_config").upsert({
+    id: true,
+    destinatario_email: parsed.data.destinatario_email,
+    updated_by: profile.id,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) {
+    return { error: "No se pudo guardar el destinatario." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}

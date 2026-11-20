@@ -6,9 +6,9 @@ import { es } from "date-fns/locale";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { sendMailWithAttachment } from "@/lib/email/send-mail";
 import { calcularPedidoInsumos } from "@/lib/pedido-insumos-calculo";
-import { generarExcelPedidoInsumos, type PedidoExcelOrden, type PedidoExcelLinea } from "./excel-pedido";
+import type { PedidoExcelOrden, PedidoExcelLinea } from "./excel-pedido";
+import { enviarCorreoPedido } from "./correo-pedido";
 import type { UserRole } from "@/lib/supabase/types";
 
 export interface ActionState {
@@ -254,49 +254,21 @@ export async function crearPedidoInsumos(
     };
   });
 
-  const excelBuffer = await generarExcelPedidoInsumos({ ordenes: ordenesExcel, lineas: lineasExcel });
-
   const semanaLabel = program
     ? format(new Date(`${program.week_start_date}T00:00:00`), "d 'de' MMMM, yyyy", { locale: es })
     : "—";
 
-  const filasHtml = lineasExcel
-    .map(
-      (l) =>
-        `<tr><td>${l.categoria}</td><td>${l.codigo}</td><td>${l.nombre}</td><td>${l.unidad}</td><td>${l.cantidadPedida}</td></tr>`,
-    )
-    .join("");
-  const ordenesHtml = ordenesExcel
-    .map((o) => `<li>${o.tipo === "bache" ? "Bache" : "Envasado"} ${o.codigo} — ${o.producto} (${o.fecha})</li>`)
-    .join("");
-
-  const html = `
-    <p>Hola,</p>
-    <p>Te comparto el pedido de insumos de la semana del ${semanaLabel}, planta Tocancipá.</p>
-    <p><strong>Órdenes incluidas:</strong></p>
-    <ul>${ordenesHtml}</ul>
-    <p><strong>Insumos a pedir:</strong></p>
-    <table border="1" cellpadding="4" cellspacing="0">
-      <tr><th>Categoría</th><th>Código</th><th>Insumo</th><th>Unidad</th><th>Cantidad a pedir</th></tr>
-      ${filasHtml}
-    </table>
-    ${data.fecha_requerida ? `<p><strong>Fecha requerida de entrega:</strong> ${formatFecha(data.fecha_requerida)}</p>` : ""}
-    ${data.observaciones ? `<p><strong>Observaciones:</strong> ${data.observaciones}</p>` : ""}
-    <p>Solicita: ${profile.full_name}</p>
-  `;
-  const text = `Pedido de insumos N.º ${pedido.folio} -- semana del ${semanaLabel}. Detalle en el Excel adjunto. Solicita: ${profile.full_name}.`;
-
   try {
-    await sendMailWithAttachment({
-      to: config.destinatario_email,
+    await enviarCorreoPedido({
+      folio: pedido.folio,
+      semanaLabel,
+      fechaRequeridaLabel: data.fecha_requerida ? formatFecha(data.fecha_requerida) : null,
+      observaciones: data.observaciones,
+      solicitanteNombre: profile.full_name,
+      destinatario: config.destinatario_email,
       cc: profile.email ?? undefined,
-      subject: `Pedido de insumos N.º ${pedido.folio} – Semana del ${semanaLabel} – Planta Tocancipá`,
-      text,
-      html,
-      attachment: {
-        filename: `pedido-insumos-${pedido.folio}.xlsx`,
-        content: excelBuffer,
-      },
+      ordenes: ordenesExcel,
+      lineas: lineasExcel,
     });
   } catch {
     return {
@@ -306,5 +278,192 @@ export async function crearPedidoInsumos(
   }
 
   revalidatePath("/pedidos-insumos");
+  return { success: true };
+}
+
+const SetPedidoEstadoSchema = z.object({
+  id: z.string().uuid(),
+  estado: z.enum(["enviado", "recibido_parcial", "recibido"]),
+});
+
+export async function setPedidoEstado(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(ROLES);
+
+  const parsed = SetPedidoEstadoSchema.safeParse({
+    id: formData.get("id"),
+    estado: formData.get("estado"),
+  });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pedidos_insumos")
+    .update({ estado: parsed.data.estado })
+    .eq("id", parsed.data.id);
+  if (error) {
+    return { error: "No se pudo actualizar el estado." };
+  }
+
+  revalidatePath("/pedidos-insumos");
+  return { success: true };
+}
+
+const ReenviarPedidoSchema = z.object({ id: z.string().uuid() });
+
+export async function reenviarPedidoInsumos(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireRole(ROLES);
+
+  const parsed = ReenviarPedidoSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+
+  const [{ data: pedido }, { data: config }] = await Promise.all([
+    supabase
+      .from("pedidos_insumos")
+      .select("id, folio, program_id, fecha_requerida, observaciones")
+      .eq("id", parsed.data.id)
+      .single(),
+    supabase.from("pedido_insumos_config").select("destinatario_email").maybeSingle(),
+  ]);
+  if (!pedido) {
+    return { error: "No se encontró el pedido." };
+  }
+  if (!config?.destinatario_email) {
+    return { error: "No hay un destinatario configurado en Administración todavía." };
+  }
+
+  const [{ data: ordenesGuardadas }, { data: lineasGuardadas }, { data: program }] =
+    await Promise.all([
+      supabase
+        .from("pedidos_insumos_ordenes")
+        .select("tipo, production_order_id, envasado_order_id")
+        .eq("pedido_id", pedido.id),
+      supabase
+        .from("pedidos_insumos_lineas")
+        .select("insumo_tipo, insumo_id, cantidad_requerida, cantidad_pedida")
+        .eq("pedido_id", pedido.id),
+      supabase
+        .from("production_programs")
+        .select("week_start_date")
+        .eq("id", pedido.program_id)
+        .single(),
+    ]);
+
+  const ordenBacheIds = (ordenesGuardadas ?? [])
+    .filter((o) => o.tipo === "bache" && o.production_order_id)
+    .map((o) => o.production_order_id as string);
+  const ordenEnvasadoIds = (ordenesGuardadas ?? [])
+    .filter((o) => o.tipo === "envasado" && o.envasado_order_id)
+    .map((o) => o.envasado_order_id as string);
+  const materiaPrimaIds = (lineasGuardadas ?? [])
+    .filter((l) => l.insumo_tipo === "materia_prima")
+    .map((l) => l.insumo_id);
+  const empaqueIds = (lineasGuardadas ?? [])
+    .filter((l) => l.insumo_tipo === "empaque")
+    .map((l) => l.insumo_id);
+
+  const [
+    { data: ordenesBache },
+    { data: ordenesEnvasado },
+    { data: materiaPrimaInsumos },
+    { data: empaqueInsumos },
+  ] = await Promise.all([
+    ordenBacheIds.length > 0
+      ? supabase
+          .from("production_orders")
+          .select("id, product_id, scheduled_date, orden_codigo")
+          .in("id", ordenBacheIds)
+      : Promise.resolve({ data: [] as { id: string; product_id: string; scheduled_date: string; orden_codigo: string | null }[] }),
+    ordenEnvasadoIds.length > 0
+      ? supabase
+          .from("envasado_orders")
+          .select("id, referencia_id, scheduled_date")
+          .in("id", ordenEnvasadoIds)
+      : Promise.resolve({ data: [] as { id: string; referencia_id: string; scheduled_date: string }[] }),
+    materiaPrimaIds.length > 0
+      ? supabase.from("insumos").select("id, name, unit, codigo").in("id", materiaPrimaIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; unit: string; codigo: string | null }[] }),
+    empaqueIds.length > 0
+      ? supabase.from("envasado_insumos").select("id, name, unit, codigo").in("id", empaqueIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; unit: string; codigo: string | null }[] }),
+  ]);
+
+  const productIds = (ordenesBache ?? []).map((o) => o.product_id);
+  const referenciaIds = (ordenesEnvasado ?? []).map((o) => o.referencia_id);
+  const [{ data: products }, { data: referencias }] = await Promise.all([
+    productIds.length > 0
+      ? supabase.from("products").select("id, name").in("id", productIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    referenciaIds.length > 0
+      ? supabase.from("envasado_referencias").select("id, sku, name").in("id", referenciaIds)
+      : Promise.resolve({ data: [] as { id: string; sku: string; name: string }[] }),
+  ]);
+
+  const productNames = new Map((products ?? []).map((p) => [p.id, p.name]));
+  const referenciasById = new Map((referencias ?? []).map((r) => [r.id, r]));
+  const materiaPrimaById = new Map((materiaPrimaInsumos ?? []).map((i) => [i.id, i]));
+  const empaqueById = new Map((empaqueInsumos ?? []).map((i) => [i.id, i]));
+
+  const ordenesExcel: PedidoExcelOrden[] = [
+    ...(ordenesBache ?? []).map((o) => ({
+      tipo: "bache" as const,
+      codigo: o.orden_codigo ?? "—",
+      producto: productNames.get(o.product_id) ?? "—",
+      fecha: formatFecha(o.scheduled_date),
+    })),
+    ...(ordenesEnvasado ?? []).map((o) => {
+      const ref = referenciasById.get(o.referencia_id);
+      return {
+        tipo: "envasado" as const,
+        codigo: ref ? `${ref.sku} — ${ref.name}` : "—",
+        producto: ref?.name ?? "—",
+        fecha: formatFecha(o.scheduled_date),
+      };
+    }),
+  ];
+
+  const lineasExcel: PedidoExcelLinea[] = (lineasGuardadas ?? []).map((l) => {
+    const info = l.insumo_tipo === "materia_prima" ? materiaPrimaById.get(l.insumo_id) : empaqueById.get(l.insumo_id);
+    return {
+      categoria: l.insumo_tipo === "materia_prima" ? "Materia prima" : "Material de empaque",
+      codigo: info?.codigo ?? "—",
+      nombre: info?.name ?? "—",
+      unidad: info?.unit ?? "—",
+      cantidadRequerida: Math.round(l.cantidad_requerida * 100) / 100,
+      cantidadPedida: l.cantidad_pedida,
+    };
+  });
+
+  const semanaLabel = program
+    ? format(new Date(`${program.week_start_date}T00:00:00`), "d 'de' MMMM, yyyy", { locale: es })
+    : "—";
+
+  try {
+    await enviarCorreoPedido({
+      folio: pedido.folio,
+      semanaLabel,
+      fechaRequeridaLabel: pedido.fecha_requerida ? formatFecha(pedido.fecha_requerida) : null,
+      observaciones: pedido.observaciones,
+      solicitanteNombre: profile.full_name,
+      destinatario: config.destinatario_email,
+      cc: profile.email ?? undefined,
+      ordenes: ordenesExcel,
+      lineas: lineasExcel,
+    });
+  } catch {
+    return { error: "No se pudo reenviar el correo." };
+  }
+
   return { success: true };
 }

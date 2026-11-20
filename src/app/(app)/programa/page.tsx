@@ -164,9 +164,14 @@ export default async function ProgramaPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canPedirInsumos && (
-            <Link href="/pedidos-insumos/nuevo" className={buttonVariants({ variant: "outline" })}>
-              Pedir insumos
-            </Link>
+            <>
+              <Link href="/pedidos-insumos/nuevo" className={buttonVariants({ variant: "outline" })}>
+                Pedir insumos
+              </Link>
+              <Link href="/pedidos-insumos" className={buttonVariants({ variant: "ghost" })}>
+                Historial de pedidos
+              </Link>
+            </>
           )}
           {canWrite && (
             <>

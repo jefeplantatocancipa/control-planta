@@ -13,6 +13,7 @@ import { EnvasadoInsumosPanel } from "./envasado-insumos-panel";
 import { TurnosPanel } from "./turnos-panel";
 import { InventarioCategoriasPanel } from "./inventario-categorias-panel";
 import { ImportInventarioCatalogoDialog } from "./import-inventario-catalogo-dialog";
+import { PedidoInsumosConfigPanel } from "./pedido-insumos-config-panel";
 import { medianaMinutosPorProductoEtapa, fechaHaceNDiasISO } from "@/lib/duracion-estandar";
 
 export default async function AdminPage() {
@@ -36,6 +37,7 @@ export default async function AdminPage() {
     { data: inventarioCategorias },
     { data: baches90d },
     { data: stageRecords90d },
+    { data: pedidoInsumosConfig },
   ] = await Promise.all([
     supabase.from("products").select("*").order("name"),
     supabase
@@ -59,6 +61,7 @@ export default async function AdminPage() {
       .select("bache_id, stage_template_id, started_at, ended_at")
       .not("ended_at", "is", null)
       .gte("ended_at", fechaHaceNDiasISO(90)),
+    supabase.from("pedido_insumos_config").select("destinatario_email").maybeSingle(),
   ]);
 
   // Estándar de tiempo por producto+etapa (mediana de los últimos 90 días,
@@ -136,6 +139,11 @@ export default async function AdminPage() {
             />
             <Separator />
             <EquiposPanel equipos={equipos ?? []} canWrite={canWrite} />
+            <Separator />
+            <PedidoInsumosConfigPanel
+              destinatarioEmail={pedidoInsumosConfig?.destinatario_email ?? null}
+              canWrite={canWrite}
+            />
           </div>
         </TabsContent>
         <TabsContent value="envasado">
