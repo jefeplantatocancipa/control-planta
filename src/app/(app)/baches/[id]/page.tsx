@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { StageCard } from "./stage-card";
 import { BacheStatusActions } from "./bache-status-actions";
 import { FinalizarBacheBanner } from "./finalizar-bache-banner";
+import { DesviacionesSection, type DesviacionDisplay } from "./desviaciones-section";
 import { usosDeEquipos } from "@/lib/equipo-ocupacion";
 import { medianaMinutosPorProductoEtapa, fechaHaceNDiasISO } from "@/lib/duracion-estandar";
 import type { BacheStatus } from "@/lib/supabase/types";
@@ -68,6 +69,11 @@ export default async function BacheDetailPage({
     supabase.from("equipos").select("*").eq("active", true).order("name"),
     supabase.from("bache_stage_firmas").select("*"),
     supabase.from("profiles").select("id, full_name"),
+  ]);
+
+  const [{ data: desviaciones }, { data: desviacionFirmas }] = await Promise.all([
+    supabase.from("desviaciones").select("*").eq("bache_id", bache.id).order("created_at"),
+    supabase.from("desviacion_firmas").select("*"),
   ]);
 
   // Baches candidatos para "agregar base de otro bache": mismo producto,
@@ -207,6 +213,38 @@ export default async function BacheDetailPage({
     return [];
   }
 
+  const stageTemplateIdByRecordId = new Map((records ?? []).map((r) => [r.id, r.stage_template_id]));
+  const stageNameById = new Map(stages.map((s) => [s.id, s.name]));
+  const desviacionFirmaByDesviacionId = new Map(
+    (desviacionFirmas ?? []).map((f) => [f.desviacion_id, f]),
+  );
+  const desviacionesDisplay: DesviacionDisplay[] = (desviaciones ?? []).map((d) => {
+    const firma = desviacionFirmaByDesviacionId.get(d.id);
+    const stageTemplateId = stageTemplateIdByRecordId.get(d.stage_record_id);
+    return {
+      id: d.id,
+      tipo: d.tipo,
+      stageName: (stageTemplateId && stageNameById.get(stageTemplateId)) ?? "—",
+      insumoNombre: d.insumo_id ? (insumoNames.get(d.insumo_id) ?? "—") : null,
+      valorReal: d.valor_real,
+      valorEsperado: d.valor_esperado,
+      limiteInferior: d.limite_inferior,
+      limiteSuperior: d.limite_superior,
+      motivo: d.motivo,
+      descripcion: d.descripcion,
+      creadoPorNombre: profileNames.get(d.created_by) ?? "—",
+      createdAt: d.created_at,
+      firma: firma
+        ? {
+            aprobado: firma.aprobado,
+            observaciones: firma.observaciones,
+            firmadoPorNombre: profileNames.get(firma.firmado_por) ?? "—",
+            firmadoAt: firma.firmado_at,
+          }
+        : null,
+    };
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
@@ -297,6 +335,12 @@ export default async function BacheDetailPage({
           </p>
         )}
       </div>
+
+      <DesviacionesSection
+        bacheId={bache.id}
+        desviaciones={desviacionesDisplay}
+        canFirmar={canFirmar}
+      />
     </div>
   );
 }

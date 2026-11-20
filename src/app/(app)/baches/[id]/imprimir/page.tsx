@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FasalactWordmark } from "@/components/fasalact-wordmark";
 import { formatTime, formatDate, formatDateTime } from "@/lib/format-date";
 import { PrintButton } from "@/components/print-button";
+import { DESVIACION_MOTIVO_LABELS } from "@/lib/desviacion-labels";
 import type { BacheStatus, Database, StageReading } from "@/lib/supabase/types";
 
 const STATUS_LABELS: Record<BacheStatus, string> = {
@@ -228,6 +229,19 @@ export default async function BacheReportPage({
       ? await supabase.from("bache_stage_firmas").select("*").in("stage_record_id", recordIds)
       : { data: [] as Database["public"]["Tables"]["bache_stage_firmas"]["Row"][] };
   const firmasByRecord = new Map((firmas ?? []).map((f) => [f.stage_record_id, f]));
+
+  const [{ data: desviaciones }, { data: desviacionFirmas }, { data: insumosNombres }] =
+    await Promise.all([
+      supabase.from("desviaciones").select("*").eq("bache_id", bache.id).order("created_at"),
+      supabase.from("desviacion_firmas").select("*"),
+      supabase.from("insumos").select("id, name"),
+    ]);
+  const desviacionFirmaById = new Map(
+    (desviacionFirmas ?? []).map((f) => [f.desviacion_id, f]),
+  );
+  const insumoNameById = new Map((insumosNombres ?? []).map((i) => [i.id, i.name]));
+  const stageTemplateIdByRecordId = new Map((records ?? []).map((r) => [r.id, r.stage_template_id]));
+  const stageNameById = new Map(stages.map((s) => [s.id, s.name]));
   const calidadSignatures = Array.from(
     new Set((firmas ?? []).map((f) => operarioNames.get(f.firmado_por) ?? "—")),
   ).join(", ");
@@ -668,6 +682,62 @@ export default async function BacheReportPage({
           );
         })}
       </div>
+
+      {(desviaciones ?? []).length > 0 && (
+        <div className="break-inside-avoid-page border-t pt-2">
+          <h2 className="font-semibold">Desviaciones</h2>
+          <table className="mt-1 w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b">
+                <th className="py-1 pr-2">Etapa</th>
+                <th className="py-1 pr-2">Tipo</th>
+                <th className="py-1 pr-2">Real vs. esperado</th>
+                <th className="py-1 pr-2">Motivo</th>
+                <th className="py-1 pr-2">Descripción</th>
+                <th className="py-1">Firma de calidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(desviaciones ?? []).map((d) => {
+                const firma = desviacionFirmaById.get(d.id);
+                const stageTemplateId = stageTemplateIdByRecordId.get(d.stage_record_id);
+                const stageName = (stageTemplateId && stageNameById.get(stageTemplateId)) ?? "—";
+                const unidad = d.tipo === "tiempo" ? "min" : "kg";
+                return (
+                  <tr key={d.id} className="border-b align-top">
+                    <td className="py-1 pr-2">
+                      {stageName}
+                      {d.insumo_id ? ` (${insumoNameById.get(d.insumo_id) ?? "—"})` : ""}
+                    </td>
+                    <td className="py-1 pr-2">{d.tipo === "tiempo" ? "Tiempo" : "Receta"}</td>
+                    <td className="py-1 pr-2">
+                      {d.valor_real} {unidad}
+                      {d.valor_esperado != null ? ` (esp. ${d.valor_esperado.toFixed(1)})` : ""}
+                    </td>
+                    <td className="py-1 pr-2">{DESVIACION_MOTIVO_LABELS[d.motivo]}</td>
+                    <td className="py-1 pr-2">{d.descripcion}</td>
+                    <td className="py-1">
+                      {firma ? (
+                        <span
+                          className={
+                            firma.aprobado ? "font-medium text-primary" : "font-medium text-destructive"
+                          }
+                        >
+                          {firma.aprobado ? "Aprobada" : "Rechazada"} por{" "}
+                          {operarioNames.get(firma.firmado_por) ?? "—"} —{" "}
+                          {formatDateTime(firma.firmado_at)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Pendiente</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="mt-4 border-t pt-2 text-[10px] text-muted-foreground">
         <div className="grid grid-cols-2 gap-x-6 gap-y-2">
