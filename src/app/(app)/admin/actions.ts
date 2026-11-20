@@ -879,7 +879,7 @@ export async function deleteEquipo(
 
 const RecipeItemSchema = z.object({
   insumo_id: z.string().uuid(),
-  cantidad_kg_por_1000l: z.coerce.number().positive().nullable(),
+  cantidad_kg_por_bache: z.coerce.number().positive().nullable(),
   tolerancia_inferior_pct: z.coerce.number().min(0).nullable(),
   tolerancia_superior_pct: z.coerce.number().min(0).nullable(),
   obligatorio: z.boolean(),
@@ -979,7 +979,7 @@ export async function importRecetaProducto(
     return { error: 'No se encontraron las columnas "Producto" e "Insumo". Revisá el archivo.' };
   }
 
-  const colCantidad = findColumn(columns, ["cantidad kg/1000l", "cantidad", "kg/1000l"]);
+  const colCantidad = findColumn(columns, ["cantidad kg/bache", "cantidad", "kg/bache"]);
   const colTolInf = findColumn(columns, ["tolerancia inferior", "tolerancia inf"]);
   const colTolSup = findColumn(columns, ["tolerancia superior", "tolerancia sup"]);
   const colObligatorio = findColumn(columns, ["obligatorio"]);
@@ -1023,7 +1023,7 @@ export async function importRecetaProducto(
       {
         product_id: productId,
         insumo_id: insumoId,
-        cantidad_kg_por_1000l: cantidadTexto.trim() ? Number(cantidadTexto) : null,
+        cantidad_kg_por_bache: cantidadTexto.trim() ? Number(cantidadTexto) : null,
         tolerancia_inferior_pct: tolInfTexto.trim() ? Number(tolInfTexto) : null,
         tolerancia_superior_pct: tolSupTexto.trim() ? Number(tolSupTexto) : null,
         obligatorio: obligatorioTexto === "si",

@@ -138,15 +138,20 @@ export default async function BacheDetailPage({
 
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
   // Cantidad esperada escalada al volumen real de este bache (la receta
-  // guarda kg por cada 1.000 L) -- sin volumen o sin cantidad cargada, no
-  // hay esperado para mostrar (y por lo tanto tampoco alarma).
+  // guarda kg por bache estándar del producto, configurado en
+  // Administración → Productos) -- sin volumen estándar, volumen real del
+  // bache, o sin cantidad cargada, no hay esperado para mostrar (y por lo
+  // tanto tampoco alarma).
   const productRecipeInsumos = (productInsumos ?? [])
     .map((row) => ({
       id: row.insumo_id,
       name: insumoNames.get(row.insumo_id),
       cantidadEsperadaKg:
-        row.cantidad_kg_por_1000l != null && bache.volumen_total_litros != null
-          ? (row.cantidad_kg_por_1000l * bache.volumen_total_litros) / 1000
+        row.cantidad_kg_por_bache != null &&
+        bache.volumen_total_litros != null &&
+        product?.volumen_por_bache
+          ? (row.cantidad_kg_por_bache * bache.volumen_total_litros) /
+            product.volumen_por_bache
           : null,
       toleranciaInferiorPct: row.tolerancia_inferior_pct,
       toleranciaSuperiorPct: row.tolerancia_superior_pct,

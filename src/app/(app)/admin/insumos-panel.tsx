@@ -43,7 +43,7 @@ type Insumo = Database["public"]["Tables"]["insumos"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
 interface RecipeConfig {
-  cantidad_kg_por_1000l: number | null;
+  cantidad_kg_por_bache: number | null;
   tolerancia_inferior_pct: number | null;
   tolerancia_superior_pct: number | null;
   obligatorio: boolean;
@@ -132,7 +132,7 @@ function InsumoForm({
 function emptyDraft(cfg?: RecipeConfig): RecipeRowDraft {
   return {
     checked: Boolean(cfg),
-    cantidad: cfg?.cantidad_kg_por_1000l != null ? String(cfg.cantidad_kg_por_1000l) : "",
+    cantidad: cfg?.cantidad_kg_por_bache != null ? String(cfg.cantidad_kg_por_bache) : "",
     tolInf: cfg?.tolerancia_inferior_pct != null ? String(cfg.tolerancia_inferior_pct) : "",
     tolSup: cfg?.tolerancia_superior_pct != null ? String(cfg.tolerancia_superior_pct) : "",
     obligatorio: cfg?.obligatorio ?? false,
@@ -157,6 +157,7 @@ function RecipeEditor({
   canWrite: boolean;
 }) {
   const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const selectedProduct = products.find((p) => p.id === productId);
   const [drafts, setDrafts] = useState<Map<string, RecipeRowDraft>>(
     draftsFor(insumos, recipeByProduct.get(products[0]?.id ?? "") ?? new Map()),
   );
@@ -182,7 +183,7 @@ function RecipeEditor({
     .filter(([, d]) => d.checked)
     .map(([insumo_id, d]) => ({
       insumo_id,
-      cantidad_kg_por_1000l: d.cantidad.trim() ? Number(d.cantidad) : null,
+      cantidad_kg_por_bache: d.cantidad.trim() ? Number(d.cantidad) : null,
       tolerancia_inferior_pct: d.tolInf.trim() ? Number(d.tolInf) : null,
       tolerancia_superior_pct: d.tolSup.trim() ? Number(d.tolSup) : null,
       obligatorio: d.obligatorio,
@@ -214,6 +215,11 @@ function RecipeEditor({
             ))}
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground">
+          {selectedProduct?.volumen_por_bache
+            ? `Volumen estándar por bache de este producto: ${selectedProduct.volumen_por_bache} L (se edita en Administración → Productos).`
+            : "Este producto no tiene volumen por bache configurado en Administración → Productos: la cantidad esperada no se podrá escalar."}
+        </p>
       </div>
 
       <div className="flex flex-col gap-3">
@@ -235,7 +241,7 @@ function RecipeEditor({
                 <div className="grid grid-cols-2 gap-2 pl-6 sm:grid-cols-4">
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs font-normal text-muted-foreground">
-                      kg / 1.000 L
+                      kg / bache
                     </Label>
                     <Input
                       type="number"
@@ -340,7 +346,7 @@ export function InsumosPanel({
   for (const row of productInsumos) {
     const map = recipeByProduct.get(row.product_id) ?? new Map<string, RecipeConfig>();
     map.set(row.insumo_id, {
-      cantidad_kg_por_1000l: row.cantidad_kg_por_1000l,
+      cantidad_kg_por_bache: row.cantidad_kg_por_bache,
       tolerancia_inferior_pct: row.tolerancia_inferior_pct,
       tolerancia_superior_pct: row.tolerancia_superior_pct,
       obligatorio: row.obligatorio,

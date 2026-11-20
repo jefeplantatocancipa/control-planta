@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/dal";
 const HEADERS = [
   "Producto",
   "Insumo",
-  "Cantidad kg/1000L",
+  "Cantidad kg/bache",
   "Tolerancia inferior %",
   "Tolerancia superior %",
   "Obligatorio (Si/No)",

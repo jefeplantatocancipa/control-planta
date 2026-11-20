@@ -477,6 +477,13 @@ export async function finishStage(
       .eq("id", parsed.data.bache_id)
       .single(),
   ]);
+  const { data: bacheProduct } = bache
+    ? await supabase
+        .from("products")
+        .select("volumen_por_bache")
+        .eq("id", bache.product_id)
+        .single()
+    : { data: null };
 
   // Alarma de tiempo: ¿esta etapa quedó fuera de [estándar×(1-tolInf),
   // estándar×(1+tolSup)]? Si sí y la alarma está activa, hace falta una
@@ -585,7 +592,7 @@ export async function finishStage(
       const { data: receta } = await supabase
         .from("product_insumos")
         .select(
-          "insumo_id, cantidad_kg_por_1000l, tolerancia_inferior_pct, tolerancia_superior_pct, obligatorio",
+          "insumo_id, cantidad_kg_por_bache, tolerancia_inferior_pct, tolerancia_superior_pct, obligatorio",
         )
         .eq("product_id", bache.product_id);
       const pesadosById = new Map(insumosParsed.data.map((i) => [i.insumo_id, i]));
@@ -599,8 +606,11 @@ export async function finishStage(
 
       for (const item of receta ?? []) {
         const esperado =
-          item.cantidad_kg_por_1000l != null && bache.volumen_total_litros != null
-            ? (item.cantidad_kg_por_1000l * bache.volumen_total_litros) / 1000
+          item.cantidad_kg_por_bache != null &&
+          bache.volumen_total_litros != null &&
+          bacheProduct?.volumen_por_bache
+            ? (item.cantidad_kg_por_bache * bache.volumen_total_litros) /
+              bacheProduct.volumen_por_bache
             : null;
         const rango =
           esperado != null &&
