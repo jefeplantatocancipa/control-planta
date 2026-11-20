@@ -877,9 +877,25 @@ export async function deleteEquipo(
   return { success: true };
 }
 
+const RecipeItemSchema = z.object({
+  insumo_id: z.string().uuid(),
+  cantidad_kg_por_1000l: z.coerce.number().positive().nullable(),
+  tolerancia_inferior_pct: z.coerce.number().min(0).nullable(),
+  tolerancia_superior_pct: z.coerce.number().min(0).nullable(),
+  obligatorio: z.boolean(),
+});
 const RecipeSchema = z.object({
   product_id: z.string().uuid({ message: "Elegí un producto." }),
-  insumo_ids: z.array(z.string().uuid()),
+  recipe: z
+    .string()
+    .transform((raw, ctx) => {
+      try {
+        return z.array(RecipeItemSchema).parse(JSON.parse(raw));
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Receta inválida." });
+        return z.NEVER;
+      }
+    }),
 });
 
 export async function saveProductRecipe(
@@ -890,7 +906,7 @@ export async function saveProductRecipe(
 
   const parsed = RecipeSchema.safeParse({
     product_id: formData.get("product_id"),
-    insumo_ids: formData.getAll("insumo_ids"),
+    recipe: formData.get("recipe") || "[]",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -906,11 +922,11 @@ export async function saveProductRecipe(
     return { error: "No se pudo guardar la receta." };
   }
 
-  if (parsed.data.insumo_ids.length > 0) {
+  if (parsed.data.recipe.length > 0) {
     const { error: insertError } = await supabase.from("product_insumos").insert(
-      parsed.data.insumo_ids.map((insumo_id) => ({
+      parsed.data.recipe.map((item) => ({
         product_id: parsed.data.product_id,
-        insumo_id,
+        ...item,
       })),
     );
     if (insertError) {
@@ -920,6 +936,113 @@ export async function saveProductRecipe(
 
   revalidatePath("/admin");
   return { success: true };
+}
+
+export async function importRecetaProducto(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  await requireRole(["jefe_planta"]);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Elegí un archivo de Excel (.xlsx)." };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer as never);
+  } catch {
+    return { error: "No se pudo leer el archivo. ¿Es un .xlsx válido?" };
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { error: "El archivo no tiene hojas." };
+
+  let headerRowNumber = -1;
+  let columns: Record<string, number> = {};
+  for (let r = 1; r <= Math.min(sheet.rowCount, 20); r++) {
+    const row = sheet.getRow(r);
+    const map: Record<string, number> = {};
+    row.eachCell((cell, colNumber) => {
+      const key = normalize(cellText(cell));
+      if (key) map[key] = colNumber;
+    });
+    if ("producto" in map && "insumo" in map) {
+      headerRowNumber = r;
+      columns = map;
+      break;
+    }
+  }
+  if (headerRowNumber === -1) {
+    return { error: 'No se encontraron las columnas "Producto" e "Insumo". Revisá el archivo.' };
+  }
+
+  const colCantidad = findColumn(columns, ["cantidad kg/1000l", "cantidad", "kg/1000l"]);
+  const colTolInf = findColumn(columns, ["tolerancia inferior", "tolerancia inf"]);
+  const colTolSup = findColumn(columns, ["tolerancia superior", "tolerancia sup"]);
+  const colObligatorio = findColumn(columns, ["obligatorio"]);
+
+  const supabase = await createClient();
+  const [{ data: products }, { data: insumos }] = await Promise.all([
+    supabase.from("products").select("id, name"),
+    supabase.from("insumos").select("id, name"),
+  ]);
+  const productIdByName = new Map((products ?? []).map((p) => [normalize(p.name), p.id]));
+  const insumoIdByName = new Map((insumos ?? []).map((i) => [normalize(i.name), i.id]));
+
+  const warnings: string[] = [];
+  let imported = 0;
+
+  for (let r = headerRowNumber + 1; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const productoNombre = cellText(row.getCell(columns["producto"]));
+    const insumoNombre = cellText(row.getCell(columns["insumo"]));
+    if (!productoNombre && !insumoNombre) continue; // fila vacía: fin de la tabla
+
+    const productId = productIdByName.get(normalize(productoNombre));
+    if (!productId) {
+      warnings.push(`Fila ${r}: no se encontró el producto "${productoNombre}".`);
+      continue;
+    }
+    const insumoId = insumoIdByName.get(normalize(insumoNombre));
+    if (!insumoId) {
+      warnings.push(`Fila ${r}: no se encontró el insumo "${insumoNombre}".`);
+      continue;
+    }
+
+    const cantidadTexto = colCantidad ? cellText(row.getCell(colCantidad)) : "";
+    const tolInfTexto = colTolInf ? cellText(row.getCell(colTolInf)) : "";
+    const tolSupTexto = colTolSup ? cellText(row.getCell(colTolSup)) : "";
+    const obligatorioTexto = colObligatorio
+      ? normalize(cellText(row.getCell(colObligatorio)))
+      : "";
+
+    const { error } = await supabase.from("product_insumos").upsert(
+      {
+        product_id: productId,
+        insumo_id: insumoId,
+        cantidad_kg_por_1000l: cantidadTexto.trim() ? Number(cantidadTexto) : null,
+        tolerancia_inferior_pct: tolInfTexto.trim() ? Number(tolInfTexto) : null,
+        tolerancia_superior_pct: tolSupTexto.trim() ? Number(tolSupTexto) : null,
+        obligatorio: obligatorioTexto === "si",
+      },
+      { onConflict: "product_id,insumo_id" },
+    );
+    if (error) {
+      warnings.push(`Fila ${r} (${productoNombre} — ${insumoNombre}): no se pudo guardar.`);
+      continue;
+    }
+    imported++;
+  }
+
+  revalidatePath("/admin");
+  return {
+    success: true,
+    imported,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -129,6 +129,10 @@ interface RecipeInsumo {
   lote?: string;
   peso?: number;
   marca?: string;
+  cantidadEsperadaKg?: number | null;
+  toleranciaInferiorPct?: number | null;
+  toleranciaSuperiorPct?: number | null;
+  obligatorio?: boolean;
 }
 
 interface InsumoDraft {
@@ -142,6 +146,27 @@ interface InsumoDraft {
   // anterior (encadenada): acá solo hace falta marcar el checkbox, no
   // volver a tipearlos.
   prefilled: boolean;
+  cantidadEsperadaKg: number | null;
+  toleranciaInferiorPct: number | null;
+  toleranciaSuperiorPct: number | null;
+  obligatorio: boolean;
+}
+
+// Rango [esperado×(1-tolInf%), esperado×(1+tolSup%)] -- null si falta
+// cantidad esperada o alguna de las dos tolerancias (sin dato, no hay
+// rango para comparar).
+function rangoInsumo(insumo: InsumoDraft) {
+  if (
+    insumo.cantidadEsperadaKg == null ||
+    insumo.toleranciaInferiorPct == null ||
+    insumo.toleranciaSuperiorPct == null
+  ) {
+    return null;
+  }
+  return {
+    min: insumo.cantidadEsperadaKg * (1 - insumo.toleranciaInferiorPct / 100),
+    max: insumo.cantidadEsperadaKg * (1 + insumo.toleranciaSuperiorPct / 100),
+  };
 }
 
 interface BacheConBaseOption {
@@ -473,7 +498,17 @@ function InsumosChecklist({
               onChange={(e) => updateAt(index, { checked: e.target.checked })}
             />
             {draft.nombre}
+            {draft.obligatorio && <span className="text-xs text-muted-foreground">(obligatorio)</span>}
           </label>
+          {draft.cantidadEsperadaKg != null && (
+            <p className="pl-6 text-xs text-muted-foreground">
+              Esperado: {draft.cantidadEsperadaKg.toFixed(1)} kg
+              {(() => {
+                const rango = rangoInsumo(draft);
+                return rango ? ` (${rango.min.toFixed(1)}–${rango.max.toFixed(1)})` : "";
+              })()}
+            </p>
+          )}
           {draft.checked &&
             (draft.prefilled ? (
               <p className="pl-6 text-sm text-muted-foreground">
@@ -495,7 +530,13 @@ function InsumosChecklist({
                   min="0"
                   value={draft.peso}
                   onChange={(e) => updateAt(index, { peso: e.target.value })}
-                  className="w-24"
+                  className={(() => {
+                    const rango = rangoInsumo(draft);
+                    if (!rango || !draft.peso.trim()) return "w-24";
+                    const peso = Number(draft.peso);
+                    const enRango = peso >= rango.min && peso <= rango.max;
+                    return `w-24 ${enRango ? "border-emerald-500/60" : "border-destructive"}`;
+                  })()}
                 />
                 <Input
                   placeholder="Marca"
@@ -868,6 +909,10 @@ function FinishStageForm({
       peso: r.peso !== undefined ? String(r.peso) : "",
       marca: r.marca ?? "",
       prefilled: r.lote !== undefined,
+      cantidadEsperadaKg: r.cantidadEsperadaKg ?? null,
+      toleranciaInferiorPct: r.toleranciaInferiorPct ?? null,
+      toleranciaSuperiorPct: r.toleranciaSuperiorPct ?? null,
+      obligatorio: r.obligatorio ?? false,
     })),
   );
   const [baseOtroBache, setBaseOtroBache] = useState<BaseOtroBacheDraft[]>([]);
@@ -877,6 +922,18 @@ function FinishStageForm({
     motivo: DesviacionMotivo | "";
     descripcion: string;
   }>({ motivo: "", descripcion: "" });
+  const [motivoDescripcionReceta, setMotivoDescripcionReceta] = useState<
+    Record<string, { motivo: DesviacionMotivo | ""; descripcion: string }>
+  >({});
+  function updateMotivoReceta(
+    insumoId: string,
+    patch: Partial<{ motivo: DesviacionMotivo | ""; descripcion: string }>,
+  ) {
+    setMotivoDescripcionReceta((prev) => ({
+      ...prev,
+      [insumoId]: { ...(prev[insumoId] ?? { motivo: "", descripcion: "" }), ...patch },
+    }));
+  }
 
   const checkedInsumos = insumos.filter((i) => i.checked);
   const baseOtroBacheValida = baseOtroBache.filter(
@@ -926,7 +983,42 @@ function FinishStageForm({
         descripcion: motivoDescripcionTiempo.descripcion,
       }
     : null;
-  const desviaciones = desviacionTiempo ? [desviacionTiempo] : [];
+  const insumosFueraDeRango = checkedInsumos.filter((i) => {
+    const rango = rangoInsumo(i);
+    if (!rango || !i.peso.trim()) return false;
+    const peso = Number(i.peso);
+    return peso < rango.min || peso > rango.max;
+  });
+  const insumosObligatoriosFaltantes = insumos.filter((i) => i.obligatorio && !i.checked);
+  const desviacionesReceta: DesviacionPayload[] = [
+    ...insumosFueraDeRango.map((i): DesviacionPayload => {
+      const rango = rangoInsumo(i)!;
+      return {
+        tipo: "receta",
+        insumo_id: i.insumo_id,
+        valor_real: Number(i.peso),
+        valor_esperado: i.cantidadEsperadaKg,
+        limite_inferior: rango.min,
+        limite_superior: rango.max,
+        motivo: motivoDescripcionReceta[i.insumo_id]?.motivo ?? "",
+        descripcion: motivoDescripcionReceta[i.insumo_id]?.descripcion ?? "",
+      };
+    }),
+    ...insumosObligatoriosFaltantes.map((i): DesviacionPayload => {
+      const rango = rangoInsumo(i);
+      return {
+        tipo: "receta",
+        insumo_id: i.insumo_id,
+        valor_real: 0,
+        valor_esperado: i.cantidadEsperadaKg,
+        limite_inferior: rango?.min ?? null,
+        limite_superior: rango?.max ?? null,
+        motivo: motivoDescripcionReceta[i.insumo_id]?.motivo ?? "",
+        descripcion: motivoDescripcionReceta[i.insumo_id]?.descripcion ?? "",
+      };
+    }),
+  ];
+  const desviaciones = [...(desviacionTiempo ? [desviacionTiempo] : []), ...desviacionesReceta];
 
   return (
     <div className="flex flex-col gap-3">
@@ -1055,6 +1147,30 @@ function FinishStageForm({
               }
             />
           )}
+          {desviacionesReceta.map((d) => {
+            const nombre = insumos.find((i) => i.insumo_id === d.insumo_id)?.nombre ?? "—";
+            const aviso =
+              d.valor_real === 0
+                ? `Falta el insumo obligatorio ${nombre}${d.valor_esperado != null ? ` (esperado ${d.valor_esperado.toFixed(1)} kg)` : ""}.`
+                : `${nombre}: ${d.valor_real.toFixed(1)} kg fuera del rango esperado${
+                    d.limite_inferior != null && d.limite_superior != null
+                      ? ` (${d.limite_inferior.toFixed(1)}–${d.limite_superior.toFixed(1)})`
+                      : ""
+                  }.`;
+            return (
+              <DesviacionJustificacionForm
+                key={d.insumo_id}
+                aviso={aviso}
+                desviacion={d}
+                onChange={(upd) =>
+                  updateMotivoReceta(d.insumo_id!, {
+                    motivo: upd.motivo,
+                    descripcion: upd.descripcion,
+                  })
+                }
+              />
+            );
+          })}
           <ConfirmFinishForm
             recordId={record.id}
             bacheId={bacheId}

@@ -229,10 +229,18 @@ export interface Database {
         Row: {
           product_id: string;
           insumo_id: string;
+          cantidad_kg_por_1000l: number | null;
+          tolerancia_inferior_pct: number | null;
+          tolerancia_superior_pct: number | null;
+          obligatorio: boolean;
         };
         Insert: {
           product_id: string;
           insumo_id: string;
+          cantidad_kg_por_1000l?: number | null;
+          tolerancia_inferior_pct?: number | null;
+          tolerancia_superior_pct?: number | null;
+          obligatorio?: boolean;
         };
         Update: Partial<
           Database["public"]["Tables"]["product_insumos"]["Insert"]

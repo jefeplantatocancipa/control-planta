@@ -131,9 +131,24 @@ export default async function BacheDetailPage({
   const profileNames = new Map((allProfiles ?? []).map((p) => [p.id, p.full_name]));
 
   const insumoNames = new Map((insumos ?? []).map((i) => [i.id, i.name]));
+  // Cantidad esperada escalada al volumen real de este bache (la receta
+  // guarda kg por cada 1.000 L) -- sin volumen o sin cantidad cargada, no
+  // hay esperado para mostrar (y por lo tanto tampoco alarma).
   const productRecipeInsumos = (productInsumos ?? [])
-    .map((row) => ({ id: row.insumo_id, name: insumoNames.get(row.insumo_id) }))
-    .filter((insumo): insumo is { id: string; name: string } => Boolean(insumo.name));
+    .map((row) => ({
+      id: row.insumo_id,
+      name: insumoNames.get(row.insumo_id),
+      cantidadEsperadaKg:
+        row.cantidad_kg_por_1000l != null && bache.volumen_total_litros != null
+          ? (row.cantidad_kg_por_1000l * bache.volumen_total_litros) / 1000
+          : null,
+      toleranciaInferiorPct: row.tolerancia_inferior_pct,
+      toleranciaSuperiorPct: row.tolerancia_superior_pct,
+      obligatorio: row.obligatorio,
+    }))
+    .filter(
+      (insumo): insumo is typeof insumo & { name: string } => Boolean(insumo.name),
+    );
 
   let stages = ownTemplates.data ?? [];
   if (stages.length === 0) {
@@ -162,6 +177,7 @@ export default async function BacheDetailPage({
   // anterior ya completada en este mismo bache, parte de lo que se confirmó
   // ahí (para "arrastrar" solo lo realmente prealistado, no toda la receta).
   const insumosStages = stages.filter((stage) => stage.captures_insumos);
+  const recipeMetaById = new Map(productRecipeInsumos.map((r) => [r.id, r]));
   function recipeInsumosFor(stage: (typeof stages)[number]) {
     if (!stage.captures_insumos) return [];
     const priorStage = insumosStages
@@ -172,13 +188,21 @@ export default async function BacheDetailPage({
     if (priorRecord?.ended_at && Array.isArray(priorRecord.parameters.insumos)) {
       // Se arrastran lote/peso/marca ya confirmados en la etapa anterior:
       // acá solo hace falta marcar cuáles se usan, no volver a tipearlos.
-      return priorRecord.parameters.insumos.map((insumo) => ({
-        id: insumo.insumo_id,
-        name: insumo.nombre,
-        lote: insumo.lote,
-        peso: insumo.peso,
-        marca: insumo.marca,
-      }));
+      // La cantidad esperada/tolerancias siguen viniendo de la receta.
+      return priorRecord.parameters.insumos.map((insumo) => {
+        const meta = recipeMetaById.get(insumo.insumo_id);
+        return {
+          id: insumo.insumo_id,
+          name: insumo.nombre,
+          lote: insumo.lote,
+          peso: insumo.peso,
+          marca: insumo.marca,
+          cantidadEsperadaKg: meta?.cantidadEsperadaKg ?? null,
+          toleranciaInferiorPct: meta?.toleranciaInferiorPct ?? null,
+          toleranciaSuperiorPct: meta?.toleranciaSuperiorPct ?? null,
+          obligatorio: meta?.obligatorio ?? false,
+        };
+      });
     }
     return [];
   }

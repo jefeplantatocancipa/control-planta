@@ -473,7 +473,7 @@ export async function finishStage(
       .single(),
     supabase
       .from("baches")
-      .select("batch_code, product_id, status")
+      .select("batch_code, product_id, status, volumen_total_litros")
       .eq("id", parsed.data.bache_id)
       .single(),
   ]);
@@ -557,6 +557,19 @@ export async function finishStage(
         : String(raw);
   }
 
+  // Desviaciones de receta: cuánto se esperaba de cada insumo (escalado al
+  // volumen real del bache) y si alguno quedó fuera de su rango o si un
+  // insumo obligatorio no se marcó -- cada caso necesita su propia
+  // justificación en lo que mandó el cliente.
+  const desviacionesReceta: {
+    insumo_id: string;
+    insumo_nombre: string;
+    valor_real: number;
+    valor_esperado: number | null;
+    limite_inferior: number | null;
+    limite_superior: number | null;
+  }[] = [];
+
   if (template?.captures_insumos) {
     const insumosParsed = InsumosSchema.safeParse(
       JSON.parse(String(formData.get("insumos") || "[]")),
@@ -567,6 +580,76 @@ export async function finishStage(
       };
     }
     parameters.insumos = insumosParsed.data;
+
+    if (bache) {
+      const { data: receta } = await supabase
+        .from("product_insumos")
+        .select(
+          "insumo_id, cantidad_kg_por_1000l, tolerancia_inferior_pct, tolerancia_superior_pct, obligatorio",
+        )
+        .eq("product_id", bache.product_id);
+      const pesadosById = new Map(insumosParsed.data.map((i) => [i.insumo_id, i]));
+      const { data: insumoRows } = (receta ?? []).length
+        ? await supabase
+            .from("insumos")
+            .select("id, name")
+            .in("id", (receta ?? []).map((r) => r.insumo_id))
+        : { data: [] };
+      const insumoNameById = new Map((insumoRows ?? []).map((i) => [i.id, i.name]));
+
+      for (const item of receta ?? []) {
+        const esperado =
+          item.cantidad_kg_por_1000l != null && bache.volumen_total_litros != null
+            ? (item.cantidad_kg_por_1000l * bache.volumen_total_litros) / 1000
+            : null;
+        const rango =
+          esperado != null &&
+          item.tolerancia_inferior_pct != null &&
+          item.tolerancia_superior_pct != null
+            ? {
+                min: esperado * (1 - item.tolerancia_inferior_pct / 100),
+                max: esperado * (1 + item.tolerancia_superior_pct / 100),
+              }
+            : null;
+        const pesado = pesadosById.get(item.insumo_id);
+
+        if (!pesado) {
+          if (item.obligatorio) {
+            desviacionesReceta.push({
+              insumo_id: item.insumo_id,
+              insumo_nombre: insumoNameById.get(item.insumo_id) ?? "—",
+              valor_real: 0,
+              valor_esperado: esperado,
+              limite_inferior: rango?.min ?? null,
+              limite_superior: rango?.max ?? null,
+            });
+          }
+          continue;
+        }
+        if (rango && (pesado.peso < rango.min || pesado.peso > rango.max)) {
+          desviacionesReceta.push({
+            insumo_id: item.insumo_id,
+            insumo_nombre: pesado.nombre,
+            valor_real: pesado.peso,
+            valor_esperado: esperado,
+            limite_inferior: rango.min,
+            limite_superior: rango.max,
+          });
+        }
+      }
+    }
+  }
+
+  const desviacionesRecetaFaltantes = desviacionesReceta.filter(
+    (d) =>
+      !desviacionesParsed.data.some(
+        (sub) => sub.tipo === "receta" && sub.insumo_id === d.insumo_id,
+      ),
+  );
+  if (desviacionesRecetaFaltantes.length > 0) {
+    return {
+      error: `Hace falta justificar la desviación de receta de: ${desviacionesRecetaFaltantes.map((d) => d.insumo_nombre).join(", ")}.`,
+    };
   }
 
   // "Base de otro bache": suma al balance de masa de este bache un volumen
@@ -633,6 +716,29 @@ export async function finishStage(
       limiteSuperior: limites?.limiteSuperior ?? null,
       motivo: desviacionTiempo.motivo,
       descripcion: desviacionTiempo.descripcion,
+      createdBy: profile.id,
+    });
+  }
+  for (const d of desviacionesReceta) {
+    const justificacion = desviacionesParsed.data.find(
+      (sub) => sub.tipo === "receta" && sub.insumo_id === d.insumo_id,
+    );
+    if (!justificacion) continue; // ya se validó arriba que siempre existe
+    await registrarDesviacion(supabase, {
+      bacheId: parsed.data.bache_id,
+      batchCode: bache?.batch_code ?? "—",
+      stageRecordId: parsed.data.record_id,
+      stageName: template?.name ?? "—",
+      tipo: "receta",
+      insumoId: d.insumo_id,
+      insumoNombre: d.insumo_nombre,
+      unidad: "kg",
+      valorReal: d.valor_real,
+      valorEsperado: d.valor_esperado,
+      limiteInferior: d.limite_inferior,
+      limiteSuperior: d.limite_superior,
+      motivo: justificacion.motivo,
+      descripcion: justificacion.descripcion,
       createdBy: profile.id,
     });
   }
